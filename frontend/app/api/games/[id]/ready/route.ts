@@ -36,12 +36,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         let updates: any = { players: game.players };
 
         if (allReady && isLobbyFull && game.status === 'waiting') {
-            updates.status = 'starting';
-            updates.startTime = Date.now() + 10000; // 10 seconds from now
-        } else if ((!allReady || !isLobbyFull) && game.status === 'starting') {
-            // Cancel countdown if someone un-readies
-            updates.status = 'waiting';
-            updates.startTime = undefined;
+            updates.status = 'playing';
+            updates.startTime = Date.now();
         }
 
         const updatedGame = gameService.update(params.id, updates);

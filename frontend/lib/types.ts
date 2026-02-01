@@ -23,8 +23,9 @@ export interface GameTransaction {
 
 export interface Game {
     id: string; // Game Hash
+    displayId?: string; // Sequential ID (e.g. 001)
     roomId: string; // Readable name
-    status: 'waiting' | 'starting' | 'playing' | 'finished';
+    status: 'waiting' | 'playing' | 'finished';
     isPrivate: boolean;
     createdAt: number;
     players: Player[];

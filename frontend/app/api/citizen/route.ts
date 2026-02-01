@@ -13,6 +13,8 @@ interface Citizen {
     citizenId: string;
     joinedAt: string;
     avatar?: string;
+    isOnline: boolean;
+    lastActive: string;
 }
 
 // Helper to ensure DB exists
@@ -90,13 +92,43 @@ export async function POST(request: NextRequest) {
             name,
             citizenId: newId,
             joinedAt: new Date().toISOString(),
-            avatar: "/avatars/golden_avatar.png"
+            avatar: "/avatars/golden_avatar.png",
+            isOnline: true,
+            lastActive: new Date().toISOString()
         };
 
         citizens.push(newCitizen);
         writeDB(citizens);
 
         return NextResponse.json(newCitizen);
+    } catch (e) {
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
+}
+
+// PUT: Update citizen status (online/offline)
+export async function PUT(request: NextRequest) {
+    try {
+        const body = await request.json();
+        const { address, status } = body;
+
+        if (!address) {
+            return NextResponse.json({ error: 'Address required' }, { status: 400 });
+        }
+
+        const citizens = readDB();
+        const index = citizens.findIndex(c => c.address.toLowerCase() === address.toLowerCase());
+
+        if (index === -1) {
+            return NextResponse.json({ error: 'Citizen not found' }, { status: 404 });
+        }
+
+        citizens[index].isOnline = status === 'online';
+        citizens[index].lastActive = new Date().toISOString();
+
+        writeDB(citizens);
+
+        return NextResponse.json(citizens[index]);
     } catch (e) {
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }

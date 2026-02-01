@@ -88,11 +88,14 @@ export const LOCATIONS = [
 ];
 
 export const ACTION_CARDS = [
-    { id: "teleport", title: "Teleportation", icon: "/events/event_ocean_platform.jpg", count: 1, type: "action", flavor: "Keep limbs inside.", desc: "Teleport to another location." },
-    { id: "change", title: "Change Resource", icon: "/actions/action_card_exchange.png", count: 2, type: "action", flavor: "Forced exchange.", desc: "Swap intangible resources." },
-    // Phase 3 Stops
-    { id: "student_strikes", title: "Student Strikes", icon: "/events/event_revolution.png", count: 0, type: "event", disables: "university", flavor: "No research today.", desc: "Disables University." },
-    { id: "charity", title: "Charity Event", icon: "/actions/action_nonmat_priestess.png", count: 0, type: "event", disables: "theatre", flavor: "Private event.", desc: "Disables Theatre." },
+    { id: "under_construction", title: "Under Construction", icon: "/actions/action_mat_red_monolith.png", type: "location", disables: "square", desc: "Disables The Square. No conflict or resources." },
+    { id: "charity", title: "Charity Event", icon: "/actions/action_nonmat_priestess.png", type: "location", disables: "theatre", desc: "Disables The Theatre. No conflict or resources." },
+    { id: "student_strikes", title: "Student Strikes", icon: "/events/event_revolution.png", type: "location", disables: "university", desc: "Disables University. No conflict or resources." },
+    { id: "sabotage", title: "Sabotage", icon: "/actions/action_mat_cyber_spy.jpg", type: "location", disables: "factory", desc: "Disables Factory. No conflict or resources." },
+    { id: "blackout", title: "Blackout", icon: "/events/event_ocean_platform.jpg", type: "location", disables: "energy", desc: "Disables Energy Station. No conflict or resources." },
+    { id: "eco_protest", title: "Ecological Protest", icon: "/actions/action_mat_overgrowth.png", type: "location", disables: "dump", desc: "Disables Dump. No conflict or resources." },
+    { id: "relocation", title: "Relocation", icon: "/actions/action_nonmat_sky_city.png", type: "action", desc: "Teleport an actor along with its RSP and bet." },
+    { id: "change_values", title: "Change of Values", icon: "/actions/action_card_exchange.png", type: "action", desc: "Exchange an intangible resource with another player." },
 ];
 
 // Helper to check for conflicts

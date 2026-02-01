@@ -3,7 +3,7 @@
 import ProfileWidget from "@/components/ProfileWidget";
 import MetarchyButton from "@/components/MetarchyButton";
 import Link from "next/link";
-import { Copy, ChevronDown, Check, User, Loader2 } from "lucide-react";
+import { Copy, ChevronDown, Check, User, Loader2, RefreshCw } from "lucide-react";
 import Image from "next/image";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -11,9 +11,25 @@ import { useGameState } from "@/context/GameStateContext";
 import citizens from "@/data/citizens.json";
 import { v4 as uuidv4 } from 'uuid';
 
+const FUTURISTIC_ADJECTIVES = [
+    "Neon", "Cyber", "Neural", "Quantum", "Void", "Zenith", "Plasma", "Aura", "Nova", "Vector",
+    "Synth", "Orbital", "Hyper", "Solar", "Logic", "Meta", "Prism", "Glitch", "Echo", "Core"
+];
+
+const FUTURISTIC_NOUNS = [
+    "Nexus", "Spire", "Vortex", "Matrix", "Vault", "Harbor", "Gate", "Pulse", "Shell", "Bridge",
+    "Grid", "Node", "Station", "Bastion", "Summit", "Point", "Link", "Zone", "Flow", "Drift"
+];
+
+const getRandomRoomName = () => {
+    const adj = FUTURISTIC_ADJECTIVES[Math.floor(Math.random() * FUTURISTIC_ADJECTIVES.length)];
+    const noun = FUTURISTIC_NOUNS[Math.floor(Math.random() * FUTURISTIC_NOUNS.length)];
+    return `${adj}_${noun}`;
+};
+
 export default function CreateGamePage() {
     const { player, lobby, createRoom, joinRoom } = useGameState();
-    const [roomName, setRoomName] = useState("Metarchy_Genesis");
+    const [roomName, setRoomName] = useState("");
     const [playerCount, setPlayerCount] = useState(3);
     const [isCreating, setIsCreating] = useState(false);
     const [isPrivate, setIsPrivate] = useState(false);
@@ -21,9 +37,10 @@ export default function CreateGamePage() {
     const [preGeneratedId, setPreGeneratedId] = useState("");
     const router = useRouter();
 
-    // Initialize pre-generated ID on mount
+    // Initialize pre-generated ID and random Room Name on mount
     useEffect(() => {
         setPreGeneratedId(uuidv4());
+        setRoomName(getRandomRoomName());
     }, []);
 
     const handleCreate = async () => {
@@ -90,14 +107,22 @@ export default function CreateGamePage() {
                         <div className="space-y-6 relative z-10">
                             <div className="grid grid-cols-3 items-center gap-4">
                                 <label className="text-gray-400 text-sm font-medium uppercase tracking-wider font-rajdhani">Name of room</label>
-                                <div className="col-span-2">
+                                <div className="col-span-2 relative">
                                     <input
                                         type="text"
                                         value={roomName}
                                         onChange={(e) => setRoomName(e.target.value)}
                                         disabled={isCreating}
-                                        className="w-full bg-black/50 border border-white/10 rounded px-4 py-3 text-white focus:outline-none focus:border-[#d4af37] transition-colors disabled:opacity-50"
+                                        className="w-full bg-black/50 border border-white/10 rounded px-4 py-3 pr-12 text-white focus:outline-none focus:border-[#d4af37] transition-colors disabled:opacity-50"
                                     />
+                                    <button
+                                        onClick={() => !isCreating && setRoomName(getRandomRoomName())}
+                                        disabled={isCreating}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-[#d4af37] transition-colors disabled:opacity-30"
+                                        title="Regenerate Name"
+                                    >
+                                        <RefreshCw size={18} />
+                                    </button>
                                 </div>
                             </div>
 

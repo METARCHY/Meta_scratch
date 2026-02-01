@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { gameService } from '@/lib/gameService';
 import { Game } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
+import { formatLog } from '@/lib/logUtils';
 
 export async function GET() {
     try {
@@ -21,8 +22,13 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
+        const allGames = gameService.getAll();
+        const displayId = (allGames.length + 1).toString().padStart(3, '0');
+
+        const gameId = id || uuidv4();
         const newGame: Game = {
-            id: id || uuidv4(),
+            id: gameId,
+            displayId,
             roomId: roomName,
             status: 'waiting',
             isPrivate: !!isPrivate,
@@ -32,7 +38,7 @@ export async function POST(request: NextRequest) {
             ],
             maxPlayers: maxPlayers || 4,
             bidAmount: 0,
-            logs: [`Game created by ${hostPlayer.name}`],
+            logs: [formatLog(displayId, `GAME CREATED BY ${hostPlayer.name}`)],
             transactions: [],
             messages: []
         };

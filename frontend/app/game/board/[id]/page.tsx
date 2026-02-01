@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Image from 'next/image';
-import { ChevronUp, ChevronDown, Check, X, Box, Zap, Recycle } from "lucide-react";
+import { ChevronUp, ChevronDown, Check, X } from "lucide-react";
 import { useGameState } from "@/context/GameStateContext";
 import { TooltipProvider } from "@/context/TooltipContext";
 import CursorTooltip from "@/components/ui/CursorTooltip";
@@ -15,6 +15,9 @@ import MapContainer from "@/components/game/MapContainer";
 import GameHeader from "@/components/game/GameHeader";
 import GameResources from "@/components/game/GameResources";
 import RSPRadialMenu from "@/components/game/RSPRadialMenu";
+import ActionCardsPanel from "@/components/game/ActionCardsPanel";
+import ExchangeModal from "@/components/game/ExchangeModal";
+import { formatLog } from '@/lib/logUtils';
 
 // Constants
 import { EVENTS, LOCATIONS, ACTION_CARDS, getConflicts, ALLOWED_MOVES } from '@/data/gameConstants';
@@ -40,6 +43,19 @@ const PLAYERS = [
     { id: 'p4', name: 'Union', avatar: '/avatars/avatar_union.png', color: '#4444ff' },
 ];
 
+const AUTO_PLACEMENTS = [
+    // Viper (p2)
+    { actorId: "v1", playerId: "p2", locId: "square", type: "rock", isOpponent: true, name: "Politician", actorType: "politician", avatar: "/actors/actor_scientist.png", bid: "product" },
+    { actorId: "v2", playerId: "p2", locId: "factory", type: "paper", isOpponent: true, name: "Robot", actorType: "robot", avatar: "/actors/actor_politician.png", bid: "energy" },
+    { actorId: "v3", playerId: "p2", locId: "university", type: "scissors", isOpponent: true, name: "Scientist", actorType: "scientist", avatar: "/actors/actor_robot.png" },
+    { actorId: "v4", playerId: "p2", locId: "theatre", type: "rock", isOpponent: true, name: "Artist", actorType: "artist", avatar: "/actors/actor_artist.png" },
+    // Ghost (p3)
+    { actorId: "g1", playerId: "p3", locId: "university", type: "scissors", isOpponent: true, name: "Politician", actorType: "politician", avatar: "/actors/actor_scientist.png", bid: "recycle" },
+    { actorId: "g2", playerId: "p3", locId: "dump", type: "rock", isOpponent: true, name: "Robot", actorType: "robot", avatar: "/actors/actor_politician.png" },
+    { actorId: "g3", playerId: "p3", locId: "theatre", type: "paper", isOpponent: true, name: "Scientist", actorType: "scientist", avatar: "/actors/actor_robot.png" },
+    { actorId: "g4", playerId: "p3", locId: "square", type: "scissors", isOpponent: true, name: "Artist", actorType: "artist", avatar: "/actors/actor_artist.png" },
+];
+
 export default function GameBoardPage() {
     const { id } = useParams();
     // --- State Management ---
@@ -47,6 +63,7 @@ export default function GameBoardPage() {
     const [game, setGame] = useState<any>(null);
     const [phase, setPhase] = useState(2); // Game starts at T1P2
     const [turn, setTurn] = useState(1);
+    const [opponentsReady, setOpponentsReady] = useState(false);
 
     // Fetch Specific Game Data
     useEffect(() => {
@@ -70,6 +87,59 @@ export default function GameBoardPage() {
         return () => clearInterval(interval);
     }, [id]);
 
+    // --- Opponent Emulation ---
+    useEffect(() => {
+        if (phase === 2 && !opponentsReady && game) {
+            triggerOpponentPlacements();
+        }
+    }, [phase, game, opponentsReady]);
+
+    const triggerOpponentPlacements = async () => {
+        if (!game) return;
+        setOpponentsReady(true);
+
+        await new Promise(r => setTimeout(r, 1500));
+
+        const opponentActions = AUTO_PLACEMENTS;
+
+        for (const action of opponentActions) {
+            setPlacedActors(prev => {
+                if (prev.some(p => p.actorId === action.actorId)) return prev;
+                return [...prev, action];
+            });
+
+            const playerName = PLAYERS.find(p => p.id === action.playerId)?.name || action.playerId;
+            await addLog(`${playerName} placed ${action.name} with ${action.type.toUpperCase()} to ${action.locId}`);
+
+            await new Promise(r => setTimeout(r, 600)); // Increased delay for stability
+        }
+
+        await addLog("Viper (p2) ready");
+        await new Promise(r => setTimeout(r, 600));
+        await addLog("Ghost (p3) ready");
+    };
+
+    const addLog = async (msg: string) => {
+        if (!id || !game) return;
+
+        // Optimistically update local state with a functional update to avoid stale closures
+        const formattedMsg = formatLog(game.displayId || game.id as string, msg);
+        setGame((prev: any) => ({
+            ...prev,
+            logs: [...(prev?.logs || []), formattedMsg]
+        }));
+
+        try {
+            await fetch(`/api/games/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'add-log', message: msg })
+            });
+        } catch (e) {
+            console.error("Failed to sync log", e);
+        }
+    };
+
     console.log("GameBoardPage Rendering, Phase:", phase, "Turn:", turn);
 
     // Phase 1: Events
@@ -91,6 +161,28 @@ export default function GameBoardPage() {
     const [disabledLocations, setDisabledLocations] = useState<string[]>([]);
     const [exchangeTarget, setExchangeTarget] = useState<{ id: string, x: number, y: number } | null>(null);
     const [teleportSource, setTeleportSource] = useState<string | null>(null);
+    const [biddingActorId, setBiddingActorId] = useState<string | null>(null);
+    const [p3Step, setP3Step] = useState<1 | 2 | 3 | 4>(1); // 1: Bidding, 2: Stop, 3: Teleport, 4: Exchange
+    const [actionHand, setActionHand] = useState<any[]>([]);
+
+    const filteredActionHand = useMemo(() => {
+        if (p3Step === 1) return [];
+        if (p3Step === 2) return actionHand.filter(c => c.type === 'location');
+        if (p3Step === 3) return actionHand.filter(c => c.id.includes('relocation') || c.id.includes('teleport'));
+        if (p3Step === 4) return actionHand.filter(c => c.id.includes('change_values') || c.id.includes('exchange'));
+        return [];
+    }, [p3Step, actionHand]);
+
+    // Count available teleport cards
+    const teleportCardsCount = useMemo(() => {
+        return actionHand.filter(c => c.id.includes('relocation') || c.id.includes('teleport')).length;
+    }, [actionHand]);
+
+    // Count available exchange cards
+    const exchangeCardsCount = useMemo(() => {
+        return actionHand.filter(c => c.id.includes('change_values') || c.id.includes('exchange')).length;
+    }, [actionHand]);
+
 
     // Phase 4: Conflicts
     const [activeConflictId, setActiveConflictId] = useState<string | null>(null);
@@ -138,6 +230,13 @@ export default function GameBoardPage() {
         // Hydration matching for random event
         const randomEvent = EVENTS[Math.floor(Math.random() * EVENTS.length)];
         setCurrentEvent(randomEvent);
+
+        // DEBUG: Seed action cards for testing
+        setActionHand([
+            { id: 'relocation_1', type: 'special', title: 'Relocation', desc: 'Teleport an actor' },
+            { id: 'relocation_2', type: 'special', title: 'Relocation', desc: 'Teleport an actor' },
+            { id: 'exchange_1', type: 'special', title: 'Exchange', desc: 'Swap resources' }
+        ]);
     }, []);
 
 
@@ -172,6 +271,7 @@ export default function GameBoardPage() {
 
         if (win && currentEvent.reward === "glory") updateResource('glory', resources.glory + 1);
         setEventResult({ msg, win });
+        addLog(`Event Result: ${msg}`);
     };
 
     const closeEvent = () => {
@@ -186,15 +286,67 @@ export default function GameBoardPage() {
         setPendingPlacement(null);
     };
 
-    const handleHexClick = (locId: string) => {
+    // Generic Card Action Handler
+    const handleCardAction = (cardId: string, locId: string) => {
+        // Implement "Stopping Locations" logic (Phase 3 Step 2)
+        if (p3Step === 2) {
+            setDisabledLocations(prev => [...prev, locId]);
+            addLog(`${player.name || '080'} disabled ${locId}`);
+            // Decrement card... (Assuming unlimited for now or need similar logic to teleport)
+
+            // Simple card consumption from hand simulation
+            const cardIndex = actionHand.findIndex(c => c.type === 'location'); // roughly
+            if (cardIndex !== -1) {
+                setActionHand(prev => {
+                    const newHand = [...prev];
+                    newHand.splice(cardIndex, 1);
+                    return newHand;
+                });
+            }
+        }
+    }
+
+    const handleHexClick = async (locId: string) => {
         if (disabledLocations.includes(locId)) return;
 
         // Teleport overrides
-        if (phase === 3 && activeCardId === 'teleport' && teleportSource) {
-            setPlacedActors(prev => prev.map(p => p.actorId === teleportSource ? { ...p, locId } : p));
-            setActivatedCards(prev => [...prev, 'teleport']);
+        // Phase 3 Step 2: Stopping Locations
+        if (phase === 3 && p3Step === 2 && activeCardId) {
+            handleCardAction(activeCardId, locId);
             setActiveCardId(null);
+            return;
+        }
+
+        // Phase 3 Step 3: Teleportation
+        if (phase === 3 && p3Step === 3 && teleportSource) {
+            const actor = placedActors.find(p => p.actorId === teleportSource);
+            if (!actor) return;
+
+            // Validate Move - Robot Requirement or general proximity if needed
+            // For now, if robot, we can strictly enforce ALLOWED_MOVES again as a "hint"
+            if (actor.type === 'robot') {
+                const validTargets = ALLOWED_MOVES[actor.type];
+                if (!validTargets?.includes(locId)) {
+                    addLog(`Invalid move for Robot! Must move to ${validTargets?.join(', ')}`);
+                    return;
+                }
+            }
+
+            // Execute Teleport
+            setPlacedActors(prev => prev.map(p => p.actorId === teleportSource ? { ...p, locId } : p));
             setTeleportSource(null);
+
+            // Consume Card
+            const cardIndex = actionHand.findIndex(c => c.id.includes('relocation') || c.id.includes('teleport'));
+            if (cardIndex !== -1) {
+                setActionHand(prev => {
+                    const newHand = [...prev];
+                    newHand.splice(cardIndex, 1);
+                    return newHand;
+                });
+            }
+
+            await addLog(`${player.name || '080'} teleported ${actor.type} to ${locId}`);
             return;
         }
 
@@ -227,8 +379,51 @@ export default function GameBoardPage() {
             setPendingPlacement(null);
             setSelectedActorId(null);
 
-            // Auto-advance if all placed? Logic for now: user manually clicks Done or we check length
+            const actor = MY_ACTORS.find(a => a.id === pendingPlacement.actorId);
+            addLog(`${player.name || '080'} placed ${actor?.name} with ${type.toUpperCase()} to ${pendingPlacement.locId}`);
         }
+    };
+
+    const handleBid = (resourceType: 'product' | 'energy' | 'recycle' | null) => {
+        if (!biddingActorId) return;
+
+        const actorEntry = placedActors.find(p => p.actorId === biddingActorId);
+        const oldBid = actorEntry?.bid as 'product' | 'energy' | 'recycle' | undefined;
+
+        // 1. Clear/Detach Logic: If resourceType is null OR same as oldBid
+        if (resourceType === null || oldBid === resourceType) {
+            if (oldBid) {
+                updateResource(oldBid, (resources[oldBid] || 0) + 1);
+                setPlacedActors(prev => prev.map(p =>
+                    p.actorId === biddingActorId ? { ...p, bid: undefined } : p
+                ));
+                addLog(`${player.name || '080'} removed bet from actor`);
+            }
+            setBiddingActorId(null);
+            return;
+        }
+
+        // 2. Check if new resource is available
+        const newAmount = (resources as any)[resourceType] || 0;
+        if (newAmount <= 0) return;
+
+        // 3. Swap Logic: Return old resource if it exists
+        if (oldBid) {
+            updateResource(oldBid, (resources[oldBid] || 0) + 1);
+        }
+
+        // 4. Deduct new resource
+        updateResource(resourceType, newAmount - 1);
+
+        // 5. Update placed actor
+        setPlacedActors(prev => prev.map(p =>
+            p.actorId === biddingActorId ? { ...p, bid: resourceType } : p
+        ));
+
+        const actor = MY_ACTORS.find(a => a.id === biddingActorId);
+        const betType = resourceType === 'product' ? 'WIN' : resourceType === 'energy' ? 'LOSE' : 'DRAW';
+        addLog(`${player.name || '080'} BET ON ${betType} with ${actor?.name}`);
+        setBiddingActorId(null);
     };
 
     const handleActorRecall = (actor: any) => {
@@ -236,11 +431,33 @@ export default function GameBoardPage() {
         if (actor.playerId !== 'p1') return;
 
         console.log("Recalling actor:", actor.actorId);
+        addLog(`Recalled ${actor.type} from map`);
         setPlacedActors(prev => prev.filter(p => p.actorId !== actor.actorId));
 
         // Reset any pending states to prevent UI ghosting
         setSelectedActorId(null);
         setPendingPlacement(null);
+    };
+
+    // Phase 3 Step 4: Exchange Logic
+    const handleExchangeConfirm = (resource: 'authority' | 'influence' | 'media') => {
+        if (!exchangeTarget) return;
+
+        // In a real game, this would swap resources between players.
+        // For MVP/Demo: Just log it and consume card to simulate the transaction.
+        addLog(`${player.name || '080'} exchanged ${resource.toUpperCase()} with ${exchangeTarget.id === 'p2' ? 'Viper' : 'Ghost'}`);
+
+        // Consume Card
+        const cardIndex = actionHand.findIndex(c => c.id.includes('change_values') || c.id.includes('exchange'));
+        if (cardIndex !== -1) {
+            setActionHand(prev => {
+                const newHand = [...prev];
+                newHand.splice(cardIndex, 1);
+                return newHand;
+            });
+        }
+
+        setExchangeTarget(null);
     };
 
     // --- Phase Advancement ---
@@ -250,11 +467,29 @@ export default function GameBoardPage() {
             return;
         }
 
+        // Phase 3 Sub-step Logic
+        if (phase === 3) {
+            if (p3Step < 4) {
+                const nextStep = (p3Step + 1) as 1 | 2 | 3 | 4;
+                setP3Step(nextStep);
+                const stepNames = ["", "BIDDING", "STOPPING LOCATIONS", "RELOCATION", "EXCHANGE"];
+                addLog(`${player.name || '080'} advanced to ${stepNames[nextStep]}`);
+                return;
+            }
+        }
+
         if (phase < 5) {
-            setPhase(phase + 1);
+            const nextPhase = phase + 1;
+            setPhase(nextPhase);
+            // Reset P3 step when leaving P3
+            if (nextPhase !== 3) setP3Step(1);
+            addLog(`${player.name || '080'} ready`);
+            addLog(`PHASE ${nextPhase}`);
         } else {
             setPhase(1);
+            setP3Step(1);
             setTurn(t => t + 1);
+            addLog(`TURN ${turn + 1} BEGINS`);
         }
     };
 
@@ -267,6 +502,7 @@ export default function GameBoardPage() {
                 {/* 1. Map Layer (Background / Center) */}
                 <MapContainer
                     phase={phase}
+                    p3Step={p3Step}
                     placedActors={placedActors}
                     selectedActorId={selectedActorId}
                     hoveredActorId={hoveredActorId}
@@ -275,9 +511,25 @@ export default function GameBoardPage() {
                     selectedHex={selectedHex}
                     playerActorsV2={MY_ACTORS}
                     players={PLAYERS}
+                    availableTeleportCards={teleportCardsCount}
                     onHexClick={handleHexClick}
                     onPlayerClick={(actor, e) => {
-                        handleActorRecall(actor);
+                        if (phase === 2) handleActorRecall(actor);
+                        if (phase === 3 && p3Step === 1 && actor.playerId === 'p1') {
+                            // Toggle menu
+                            setBiddingActorId(prev => prev === actor.actorId ? null : actor.actorId);
+                        }
+                        if (phase === 3 && p3Step === 3 && actor.playerId === 'p1') {
+                            // Start Teleport if cards available
+                            if (teleportCardsCount > 0) {
+                                setTeleportSource(prev => prev === actor.actorId ? null : actor.actorId);
+                                if (teleportSource !== actor.actorId) {
+                                    addLog(`Selected ${actor.type} for teleport... choose a destination.`);
+                                }
+                            } else {
+                                addLog("No Relocation cards available.");
+                            }
+                        }
                     }}
                 />
 
@@ -290,7 +542,11 @@ export default function GameBoardPage() {
                         phaseName={
                             phase === 1 ? "EVENT STAGE" :
                                 phase === 2 ? "DISTRIBUTION" :
-                                    phase === 3 ? "ACTION PHASE" :
+                                    phase === 3 ? (
+                                        p3Step === 1 ? "ACTION: BIDDING" :
+                                            p3Step === 2 ? "ACTION: STOP LOCATIONS" :
+                                                p3Step === 3 ? "ACTION: RELOCATION" : "ACTION: EXCHANGE"
+                                    ) :
                                         phase === 4 ? "CONFLICTS" : "RESOLUTION"
                         }
                     />
@@ -299,7 +555,12 @@ export default function GameBoardPage() {
                     <GameResources resources={resources} vp={vp} />
 
                     {/* Top Left: New Players Panel (SVG) */}
-                    <NewPlayersPanel players={dynamicPlayers} />
+                    <NewPlayersPanel
+                        players={dynamicPlayers}
+                        p3Step={p3Step}
+                        availableExchangeCards={exchangeCardsCount}
+                        onExchangeClick={(id, name) => setExchangeTarget({ id, x: 0, y: 0 })} // x/y not needed for modal
+                    />
 
                     {/* Left Sidebar: Actors / Hand */}
                     <div className="pointer-events-auto">
@@ -312,8 +573,20 @@ export default function GameBoardPage() {
                                 onLeave={() => setHoveredActorId(null)}
                             />
                         )}
+                        {phase === 3 && p3Step > 1 && (
+                            <ActionCardsPanel
+                                cards={filteredActionHand}
+                                onSelect={setActiveCardId}
+                                activeCardId={activeCardId}
+                                emptyMessage="NO ACTION CARDS"
+                                compact={p3Step >= 3}
+                            />
+                        )}
                     </div>
 
+
+
+                    {/* Bottom Right: Next Phase Button */}
                     {/* Bottom Right: Next Phase Button */}
                     {/* Bottom Right: Next Phase Button */}
                     <div className="absolute bottom-10 right-10 pointer-events-auto">
@@ -321,9 +594,14 @@ export default function GameBoardPage() {
                         {(phase !== 2 || availableActors.length === 0) && (
                             <button
                                 onClick={handleNextPhase}
-                                className="px-8 py-3 bg-[#d4af37] text-black font-bold rounded-lg shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:bg-[#ffe066] transition-all transform hover:scale-105 active:scale-95 uppercase tracking-widest"
+                                className="px-8 py-3 bg-[#d4af37] text-black font-bold rounded-lg shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:bg-[#ffe066] transition-all transform hover:scale-105 active:scale-95 uppercase tracking-widest text-xs"
                             >
-                                Next Phase
+                                {phase === 3 ? (
+                                    p3Step === 1 ? "Start Disabling" :
+                                        p3Step === 2 ? "Start Teleport" :
+                                            p3Step === 3 ? "Start Exchange" :
+                                                "Start Conflicts"
+                                ) : "Next Phase"}
                             </button>
                         )}
                     </div>
@@ -340,39 +618,102 @@ export default function GameBoardPage() {
                         </div>
                     )}
 
-                    {/* --- Phase 1: Event Modal --- */}
-                    {phase === 1 && (
-                        <div className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm pointer-events-auto">
-                            <div className="relative w-[600px] bg-[#0d0d12] border border-[#d4af37]/30 rounded-xl shadow-2xl p-6 flex flex-col items-center">
-                                <h2 className="text-xl font-bold text-[#d4af37] mb-2">{currentEvent.title}</h2>
-                                <div className="relative w-full h-[200px] mb-4 border border-white/10 rounded overflow-hidden">
-                                    <Image src={currentEvent.image} layout="fill" objectFit="cover" alt="event" />
-                                </div>
-                                <p className="italic text-gray-400 text-center mb-4">"{currentEvent.flavor}"</p>
-                                <p className="text-white text-center mb-6">{currentEvent.desc}</p>
-
-                                {!eventResult ? (
-                                    <div className="flex gap-4">
-                                        {currentEvent.type === "discard" && (
-                                            <div className="flex items-center gap-2">
-                                                <button onClick={() => setDiscardAmount(d => Math.max(0, d - 1))} className="p-2 border rounded hover:bg-white/10">-</button>
-                                                <span className="font-bold text-xl">{discardAmount}</span>
-                                                <button onClick={() => setDiscardAmount(d => d + 1)} className="p-2 border rounded hover:bg-white/10">+</button>
+                    {/* --- Bidding Menu for Phase 3 --- */}
+                    {phase === 3 && biddingActorId && (
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-auto">
+                            <div className="bg-[#0d0d12]/90 backdrop-blur-md border border-[#d4af37]/40 rounded-2xl p-6 shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in duration-300">
+                                <h3 className="text-[#d4af37] font-rajdhani font-bold uppercase tracking-widest text-sm">Make a Bid...</h3>
+                                <div className="flex gap-6">
+                                    {[
+                                        { type: 'product', label: 'bet on win', icon: '/resources/resource_box.png', color: 'bg-red-500/10' },
+                                        { type: 'energy', label: 'bet on lose', icon: '/resources/resource_energy.png', color: 'bg-blue-500/10' },
+                                        { type: 'recycle', label: 'bet on draw', icon: '/resources/resource_bio.png', color: 'bg-green-500/10' }
+                                    ].map((res) => (
+                                        <button
+                                            key={res.type}
+                                            onClick={() => handleBid(res.type as any)}
+                                            disabled={resources[res.type as keyof typeof resources] <= 0}
+                                            className="group flex flex-col items-center gap-2 p-4 rounded-xl border border-white/5 hover:border-[#d4af37]/50 hover:bg-white/5 transition-all disabled:opacity-30 disabled:grayscale"
+                                        >
+                                            <div className={`relative w-12 h-12 p-2 rounded-full ${res.color} border border-white/5 group-hover:border-[#d4af37]/30 transition-colors`}>
+                                                <Image
+                                                    src={res.icon}
+                                                    fill
+                                                    className="object-contain p-1"
+                                                    alt={res.type}
+                                                />
                                             </div>
-                                        )}
-                                        <button onClick={handleEventConfirm} className="px-6 py-2 bg-[#d4af37] text-black font-bold rounded hover:bg-[#ffe066]">CONFIRM</button>
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-col items-center gap-4">
-                                        <p className={`font-bold ${eventResult.win ? 'text-green-400' : 'text-red-400'}`}>{eventResult.msg}</p>
-                                        <button onClick={closeEvent} className="px-6 py-2 border border-white/30 rounded hover:bg-white/10">CONTINUE</button>
-                                    </div>
-                                )}
+                                            <span className="text-[10px] uppercase font-bold tracking-tighter text-gray-400 group-hover:text-white">{res.label}</span>
+                                            <span className="text-xs font-mono text-white/50">{resources[res.type as keyof typeof resources]}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex flex-col gap-2 w-full">
+                                    <button
+                                        onClick={() => handleBid(null)}
+                                        className="w-full py-2 text-[10px] text-red-400 hover:text-red-300 uppercase tracking-widest font-bold border border-red-500/20 rounded hover:bg-red-500/10 transition-all mb-2"
+                                    >
+                                        Undo / Clear Bet
+                                    </button>
+                                    <button
+                                        onClick={() => setBiddingActorId(null)}
+                                        className="w-full text-[10px] text-gray-500 hover:text-white uppercase tracking-[0.2em] font-bold"
+                                    >
+                                        Close
+                                    </button>
+                                </div>
                             </div>
+                        </div >
+                    )
+                    }
+
+                    {/* --- Exchange Modal --- */}
+                    {exchangeTarget && (
+                        <div className="absolute inset-0 z-[60] pointer-events-auto">
+                            <ExchangeModal
+                                isOpen={true}
+                                onClose={() => setExchangeTarget(null)}
+                                onConfirm={handleExchangeConfirm}
+                                targetName={exchangeTarget.id === 'p2' ? 'Viper' : 'Ghost'}
+                            />
                         </div>
                     )}
-                </div>
-            </main>
-        </TooltipProvider>
+
+                    {/* --- Phase 1: Event Modal --- */}
+                    {
+                        phase === 1 && (
+                            <div className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm pointer-events-auto">
+                                <div className="relative w-[600px] bg-[#0d0d12] border border-[#d4af37]/30 rounded-xl shadow-2xl p-6 flex flex-col items-center">
+                                    <h2 className="text-xl font-bold text-[#d4af37] mb-2">{currentEvent.title}</h2>
+                                    <div className="relative w-full h-[200px] mb-4 border border-white/10 rounded overflow-hidden">
+                                        <Image src={currentEvent.image} layout="fill" objectFit="cover" alt="event" />
+                                    </div>
+                                    <p className="italic text-gray-400 text-center mb-4">"{currentEvent.flavor}"</p>
+                                    <p className="text-white text-center mb-6">{currentEvent.desc}</p>
+
+                                    {!eventResult ? (
+                                        <div className="flex gap-4">
+                                            {currentEvent.type === "discard" && (
+                                                <div className="flex items-center gap-2">
+                                                    <button onClick={() => setDiscardAmount(d => Math.max(0, d - 1))} className="p-2 border rounded hover:bg-white/10">-</button>
+                                                    <span className="font-bold text-xl">{discardAmount}</span>
+                                                    <button onClick={() => setDiscardAmount(d => d + 1)} className="p-2 border rounded hover:bg-white/10">+</button>
+                                                </div>
+                                            )}
+                                            <button onClick={handleEventConfirm} className="px-6 py-2 bg-[#d4af37] text-black font-bold rounded hover:bg-[#ffe066]">CONFIRM</button>
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col items-center gap-4">
+                                            <p className={`font-bold ${eventResult.win ? 'text-green-400' : 'text-red-400'}`}>{eventResult.msg}</p>
+                                            <button onClick={closeEvent} className="px-6 py-2 border border-white/30 rounded hover:bg-white/10">CONTINUE</button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )
+                    }
+                </div >
+            </main >
+        </TooltipProvider >
     );
 }

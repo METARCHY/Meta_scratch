@@ -25,6 +25,8 @@ export default function AdminCitizensPage() {
 
     useEffect(() => {
         fetchCitizens();
+        const interval = setInterval(fetchCitizens, 5000);
+        return () => clearInterval(interval);
     }, []);
 
     const handleDelete = async (id: string) => {
@@ -74,9 +76,15 @@ export default function AdminCitizensPage() {
                     <h2 className="text-4xl font-bold font-rajdhani text-[#d4af37] uppercase tracking-wider">Citizen Management</h2>
                     <p className="text-gray-400 font-medium tracking-widest mt-2 uppercase text-[10px]">Manage registered network participants</p>
                 </div>
-                <div className="text-right">
-                    <span className="text-gray-500 text-[10px] uppercase tracking-widest block">Authorized Residents</span>
-                    <span className="text-3xl font-bold font-rajdhani text-white">{citizens.length}</span>
+                <div className="flex items-center gap-8">
+                    <div className="flex items-center gap-2 bg-[#d4af37]/5 border border-[#d4af37]/20 px-3 py-1.5 rounded-lg shadow-[0_0_15px_rgba(212,175,55,0.05)]">
+                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        <span className="text-[10px] text-green-400 font-bold uppercase tracking-[0.2em] font-rajdhani">Resident Uplink Live</span>
+                    </div>
+                    <div className="text-right">
+                        <span className="text-gray-500 text-[10px] uppercase tracking-widest block font-rajdhani">Authorized Residents</span>
+                        <span className="text-3xl font-bold font-rajdhani text-white">{citizens.length}</span>
+                    </div>
                 </div>
             </header>
 

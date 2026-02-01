@@ -1,13 +1,5 @@
 [
   {
-    "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-    "name": "080",
-    "citizenId": "3444",
-    "joinedAt": "2026-01-31T05:54:41.274Z",
-    "avatar": "/avatars/golden_avatar.png",
-    "role": "admin"
-  },
-  {
     "address": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
     "name": "Viper",
     "citizenId": "1001",
@@ -20,5 +12,14 @@
     "citizenId": "1002",
     "joinedAt": "2026-01-31T14:45:05.000Z",
     "avatar": "/avatars/ghost.png"
+  },
+  {
+    "address": "0x4bfd988bf4b24ccf0788d20c99b89fef040809dd",
+    "name": "080",
+    "citizenId": "808546",
+    "joinedAt": "2026-02-01T16:21:33.104Z",
+    "avatar": "/avatars/golden_avatar.png",
+    "isOnline": true,
+    "lastActive": "2026-02-01T19:32:15.069Z"
   }
 ]

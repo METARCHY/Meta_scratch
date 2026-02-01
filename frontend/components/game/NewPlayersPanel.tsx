@@ -3,17 +3,24 @@ import Image from 'next/image';
 
 interface NewPlayersPanelProps {
     players?: any[];
+    p3Step?: number;
+    availableExchangeCards?: number;
+    onExchangeClick?: (playerId: string, playerName: string) => void;
 }
 
-export default function NewPlayersPanel({ players = [] }: NewPlayersPanelProps) {
+export default function NewPlayersPanel({ players = [], p3Step, availableExchangeCards, onExchangeClick }: NewPlayersPanelProps) {
     // Data unpacking: p1 is Index 0 (User), p2/p3 are Index 1/2 (Opponents)
     const userPlayer = players[0] || { name: 'Citizen', avatar: '/avatars/golden_avatar.png' };
-    const p2 = players[1] || { name: 'Viper', avatar: '/avatars/viper.png' };
-    const p3 = players[2] || { name: 'Ghost', avatar: '/avatars/ghost.png' };
+    const p2 = players[1] || { id: 'p2', name: 'Viper', avatar: '/avatars/viper.png' };
+    const p3 = players[2] || { id: 'p3', name: 'Ghost', avatar: '/avatars/ghost.png' };
+
+    const showExchange = p3Step === 4 && availableExchangeCards && availableExchangeCards > 0;
 
     // Helper for circular avatar
-    const AvatarCircle = ({ x, y, r, img, alt, hasOuterRing }: { x: number, y: number, r: number, img: string, alt: string, hasOuterRing?: boolean }) => {
+    const AvatarCircle = ({ x, y, r, img, alt, player, hasOuterRing }: { x: number, y: number, r: number, img: string, alt: string, player?: any, hasOuterRing?: boolean }) => {
         const size = r * 2;
+        const isOpponent = !hasOuterRing && player;
+
         return (
             <>
                 {hasOuterRing && (
@@ -39,15 +46,34 @@ export default function NewPlayersPanel({ players = [] }: NewPlayersPanelProps) 
                     </>
                 )}
                 <div
-                    className="absolute rounded-full overflow-hidden border-2 border-[#A08C5C] bg-black shadow-lg"
+                    className={`absolute rounded-full overflow-hidden border-2 bg-black shadow-lg transition-all
+                        ${isOpponent && showExchange ? 'cursor-pointer hover:border-[#00f0ff] hover:scale-110 z-50' : 'border-[#A08C5C]'}
+                    `}
                     style={{
                         left: `${x - r}px`,
                         top: `${y - r}px`,
                         width: `${size}px`,
                         height: `${size}px`
                     }}
+                    onClick={() => {
+                        if (isOpponent && showExchange && onExchangeClick) {
+                            onExchangeClick(player.id, player.name);
+                        }
+                    }}
                 >
                     <Image src={img} layout="fill" objectFit="cover" alt={alt} />
+
+                    {/* Interaction Overlay */}
+                    {isOpponent && showExchange && (
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center animate-in fade-in">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00f0ff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="m16 3 4 4-4 4" />
+                                <path d="M20 7H4" />
+                                <path d="m8 21-4-4 4-4" />
+                                <path d="M4 17h16" />
+                            </svg>
+                        </div>
+                    )}
                 </div>
             </>
         );
@@ -63,7 +89,7 @@ export default function NewPlayersPanel({ players = [] }: NewPlayersPanelProps) 
                     <path d="M96.0596 35.7102H683.53" stroke="url(#paint2_linear_82_266)" strokeMiterlimit="10" />
 
                     {/* Gold Separator Line */}
-                    <path d="M165 42 H700" stroke="#d4af37" strokeWidth="1" strokeOpacity="1" />
+                    <path d="M99 37 H634" stroke="#d4af37" strokeWidth="1" strokeOpacity="1" />
 
                     {/* Outline / Decor paths */}
                     <path d="M151 105.844C168.121 105.844 182 92.1076 182 75.1624C182 58.2171 168.121 44.4802 151 44.4802C133.879 44.4802 120 58.2171 120 75.1624C120 92.1076 133.879 105.844 151 105.844Z" fill="#23262D" />
@@ -107,10 +133,14 @@ export default function NewPlayersPanel({ players = [] }: NewPlayersPanelProps) 
                 </div>
 
                 {/* 4. Player 2 (Viper) */}
-                <AvatarCircle x={151} y={75.16} r={21.7} img={p2.avatar} alt="Viper" />
+                <div className="pointer-events-auto">
+                    <AvatarCircle x={151} y={75.16} r={21.7} img={p2.avatar} alt="Viper" player={p2} />
+                </div>
 
                 {/* 5. Player 3 (Ghost) */}
-                <AvatarCircle x={232.2} y={73.4} r={22} img={p3.avatar} alt="Ghost" />
+                <div className="pointer-events-auto">
+                    <AvatarCircle x={232.2} y={73.4} r={22} img={p3.avatar} alt="Ghost" player={p3} />
+                </div>
 
             </div>
         </div>
