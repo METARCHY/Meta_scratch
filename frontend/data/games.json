@@ -1,0 +1,486 @@
+[
+  {
+    "id": "d8463916-f1bd-484c-ab4b-46fe50419786",
+    "roomId": "Metarchy_Genesis",
+    "status": "finished",
+    "createdAt": 1769944937182,
+    "players": [
+      {
+        "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "name": "080",
+        "citizenId": "3444",
+        "avatar": "/avatars/golden_avatar.png",
+        "joinedAt": 1769944937182
+      }
+    ],
+    "maxPlayers": 3,
+    "bidAmount": 0,
+    "logs": [
+      "Game created by 080"
+    ],
+    "transactions": []
+  },
+  {
+    "id": "4775d978-e127-4787-aea0-224a9b7ff78e",
+    "roomId": "Metarchy_Genesis",
+    "status": "finished",
+    "createdAt": 1769945342956,
+    "players": [
+      {
+        "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "name": "080",
+        "citizenId": "3444",
+        "avatar": "/avatars/golden_avatar.png",
+        "joinedAt": 1769945342956,
+        "isReady": true
+      }
+    ],
+    "maxPlayers": 3,
+    "bidAmount": 0,
+    "logs": [
+      "Game created by 080"
+    ],
+    "transactions": [],
+    "messages": [
+      {
+        "sender": "080",
+        "avatar": "/avatars/golden_avatar.png",
+        "content": "fsdfsd",
+        "timestamp": 1769945356994
+      }
+    ]
+  },
+  {
+    "id": "70ea30ac-6a74-4d84-9e4a-52e3e12f632e",
+    "roomId": "Metarchy_Genesis",
+    "status": "finished",
+    "createdAt": 1769945693172,
+    "players": [
+      {
+        "name": "",
+        "address": "",
+        "citizenId": "0000",
+        "avatar": "",
+        "joinedAt": 1769945693172,
+        "isReady": true
+      },
+      {
+        "name": "Ghost",
+        "citizenId": "1002",
+        "avatar": "/avatars/ghost.png",
+        "address": "0x3C44...93BC",
+        "joinedAt": 1769945695365,
+        "isReady": true
+      },
+      {
+        "name": "Viper",
+        "citizenId": "1001",
+        "avatar": "/avatars/viper.png",
+        "address": "0x7099...79C8",
+        "joinedAt": 1769945700596,
+        "isReady": true
+      }
+    ],
+    "maxPlayers": 3,
+    "bidAmount": 0,
+    "logs": [
+      "Game created by "
+    ],
+    "transactions": [],
+    "messages": [
+      {
+        "sender": "Ghost",
+        "avatar": "/avatars/ghost.png",
+        "content": "Hello world!",
+        "timestamp": 1769945696979
+      },
+      {
+        "sender": "Viper",
+        "avatar": "/avatars/viper.png",
+        "content": "Hello world!",
+        "timestamp": 1769945702136
+      }
+    ],
+    "startTime": 1769945715534
+  },
+  {
+    "id": "b83c39bb-c34b-45ec-8b79-74a0289d8975",
+    "roomId": "Metarchy_Genesis",
+    "status": "finished",
+    "isPrivate": true,
+    "createdAt": 1769946739643,
+    "players": [
+      {
+        "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "name": "080",
+        "citizenId": "3444",
+        "avatar": "/avatars/golden_avatar.png",
+        "joinedAt": 1769946739643,
+        "isReady": true
+      },
+      {
+        "name": "Ghost",
+        "citizenId": "1002",
+        "avatar": "/avatars/ghost.png",
+        "address": "0x3C44...93BC",
+        "joinedAt": 1769946742000,
+        "isReady": true
+      },
+      {
+        "name": "Viper",
+        "citizenId": "1001",
+        "avatar": "/avatars/viper.png",
+        "address": "0x7099...79C8",
+        "joinedAt": 1769946748985,
+        "isReady": true
+      }
+    ],
+    "maxPlayers": 3,
+    "bidAmount": 0,
+    "logs": [
+      "Game created by 080"
+    ],
+    "transactions": [],
+    "messages": [
+      {
+        "sender": "Ghost",
+        "avatar": "/avatars/ghost.png",
+        "content": "Hello world!",
+        "timestamp": 1769946744097
+      },
+      {
+        "sender": "Viper",
+        "avatar": "/avatars/viper.png",
+        "content": "Hello world!",
+        "timestamp": 1769946750993
+      }
+    ],
+    "startTime": 1769946806394
+  },
+  {
+    "id": "a5c63a41-06f5-40dc-9867-b1142c0dc78a",
+    "roomId": "Metarchy_Genesis2",
+    "status": "finished",
+    "isPrivate": false,
+    "createdAt": 1769947392779,
+    "players": [
+      {
+        "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "name": "080",
+        "citizenId": "3444",
+        "avatar": "/avatars/golden_avatar.png",
+        "joinedAt": 1769947392779,
+        "isReady": true
+      },
+      {
+        "name": "Ghost",
+        "citizenId": "1002",
+        "avatar": "/avatars/ghost.png",
+        "address": "0x3C44...93BC",
+        "joinedAt": 1769947395003,
+        "isReady": true
+      },
+      {
+        "name": "Viper",
+        "citizenId": "1001",
+        "avatar": "/avatars/viper.png",
+        "address": "0x7099...79C8",
+        "joinedAt": 1769947400252,
+        "isReady": true
+      }
+    ],
+    "maxPlayers": 3,
+    "bidAmount": 0,
+    "logs": [
+      "Game created by 080"
+    ],
+    "transactions": [],
+    "messages": [
+      {
+        "sender": "Ghost",
+        "avatar": "/avatars/ghost.png",
+        "content": "Hello world!",
+        "timestamp": 1769947396608
+      },
+      {
+        "sender": "Viper",
+        "avatar": "/avatars/viper.png",
+        "content": "Hello world!",
+        "timestamp": 1769947401785
+      }
+    ],
+    "startTime": 1769947413318
+  },
+  {
+    "id": "0012a406-8741-46f0-a14b-0f366e1546bb",
+    "roomId": "Metarchy_Genesis",
+    "status": "finished",
+    "isPrivate": false,
+    "createdAt": 1769949872744,
+    "players": [
+      {
+        "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "name": "080",
+        "citizenId": "3444",
+        "avatar": "/avatars/golden_avatar.png",
+        "joinedAt": 1769949872744,
+        "isReady": true
+      },
+      {
+        "name": "Ghost",
+        "citizenId": "1002",
+        "avatar": "/avatars/ghost.png",
+        "address": "0x3C44...93BC",
+        "joinedAt": 1769949874922,
+        "isReady": true
+      },
+      {
+        "name": "Viper",
+        "citizenId": "1001",
+        "avatar": "/avatars/viper.png",
+        "address": "0x7099...79C8",
+        "joinedAt": 1769949880209,
+        "isReady": true
+      }
+    ],
+    "maxPlayers": 3,
+    "bidAmount": 0,
+    "logs": [
+      "Game created by 080"
+    ],
+    "transactions": [],
+    "messages": [
+      {
+        "sender": "Ghost",
+        "avatar": "/avatars/ghost.png",
+        "content": "Hello world!",
+        "timestamp": 1769949876553
+      },
+      {
+        "sender": "Viper",
+        "avatar": "/avatars/viper.png",
+        "content": "Hello world!",
+        "timestamp": 1769949881734
+      },
+      {
+        "sender": "080",
+        "avatar": "/avatars/golden_avatar.png",
+        "content": "Hiiiii",
+        "timestamp": 1769949882780
+      }
+    ],
+    "startTime": 1769949897622
+  },
+  {
+    "id": "8c7ea8a2-bb6e-4720-a5bc-2d7a99a902e7",
+    "roomId": "Metarchy_Genesis",
+    "status": "finished",
+    "isPrivate": false,
+    "createdAt": 1769955067150,
+    "players": [
+      {
+        "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "name": "080",
+        "citizenId": "3444",
+        "avatar": "/avatars/golden_avatar.png",
+        "joinedAt": 1769955067150,
+        "isReady": true
+      },
+      {
+        "name": "Ghost",
+        "citizenId": "1002",
+        "avatar": "/avatars/ghost.png",
+        "address": "0x3C44...93BC",
+        "joinedAt": 1769955069497,
+        "isReady": true
+      },
+      {
+        "name": "Viper",
+        "citizenId": "1001",
+        "avatar": "/avatars/viper.png",
+        "address": "0x7099...79C8",
+        "joinedAt": 1769955074739,
+        "isReady": true
+      }
+    ],
+    "maxPlayers": 3,
+    "bidAmount": 0,
+    "logs": [
+      "Game created by 080"
+    ],
+    "transactions": [],
+    "messages": [
+      {
+        "sender": "Ghost",
+        "avatar": "/avatars/ghost.png",
+        "content": "Hello world!",
+        "timestamp": 1769955071175
+      },
+      {
+        "sender": "Viper",
+        "avatar": "/avatars/viper.png",
+        "content": "Hello world!",
+        "timestamp": 1769955076256
+      }
+    ],
+    "startTime": 1769955082713
+  },
+  {
+    "id": "03f28d00-c9c1-4b6b-8d42-a71764f922e3",
+    "roomId": "Metarchy_Genesis",
+    "status": "waiting",
+    "isPrivate": false,
+    "createdAt": 1769955815056,
+    "players": [
+      {
+        "name": "",
+        "address": "",
+        "citizenId": "0000",
+        "avatar": "",
+        "joinedAt": 1769955815056
+      },
+      {
+        "name": "Ghost",
+        "citizenId": "1002",
+        "avatar": "/avatars/ghost.png",
+        "address": "0x3C44...93BC",
+        "joinedAt": 1769955818036,
+        "isReady": true
+      },
+      {
+        "name": "Viper",
+        "citizenId": "1001",
+        "avatar": "/avatars/viper.png",
+        "address": "0x7099...79C8",
+        "joinedAt": 1769955823289,
+        "isReady": true
+      }
+    ],
+    "maxPlayers": 3,
+    "bidAmount": 0,
+    "logs": [
+      "Game created by "
+    ],
+    "transactions": [],
+    "messages": [
+      {
+        "sender": "Ghost",
+        "avatar": "/avatars/ghost.png",
+        "content": "Hello world!",
+        "timestamp": 1769955819664
+      },
+      {
+        "sender": "Viper",
+        "avatar": "/avatars/viper.png",
+        "content": "Hello world!",
+        "timestamp": 1769955824805
+      }
+    ]
+  },
+  {
+    "id": "eff98ff4-305e-4f52-934a-b2ec10050c53",
+    "roomId": "Metarchy_Genesis",
+    "status": "waiting",
+    "isPrivate": false,
+    "createdAt": 1769955868649,
+    "players": [
+      {
+        "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "name": "080",
+        "citizenId": "3444",
+        "avatar": "/avatars/golden_avatar.png",
+        "joinedAt": 1769955868649
+      },
+      {
+        "name": "Ghost",
+        "citizenId": "1002",
+        "avatar": "/avatars/ghost.png",
+        "address": "0x3C44...93BC",
+        "joinedAt": 1769955871557,
+        "isReady": true
+      },
+      {
+        "name": "Viper",
+        "citizenId": "1001",
+        "avatar": "/avatars/viper.png",
+        "address": "0x7099...79C8",
+        "joinedAt": 1769955878982,
+        "isReady": true
+      }
+    ],
+    "maxPlayers": 3,
+    "bidAmount": 0,
+    "logs": [
+      "Game created by 080"
+    ],
+    "transactions": [],
+    "messages": [
+      {
+        "sender": "Ghost",
+        "avatar": "/avatars/ghost.png",
+        "content": "Hello world!",
+        "timestamp": 1769955873993
+      },
+      {
+        "sender": "Viper",
+        "avatar": "/avatars/viper.png",
+        "content": "Hello world!",
+        "timestamp": 1769955881008
+      }
+    ]
+  },
+  {
+    "id": "1a3bcb39-576b-4b71-b9c9-57af2176c715",
+    "roomId": "Metarchy_Genesis",
+    "status": "starting",
+    "isPrivate": false,
+    "createdAt": 1769956379858,
+    "players": [
+      {
+        "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        "name": "080",
+        "citizenId": "3444",
+        "avatar": "/avatars/golden_avatar.png",
+        "joinedAt": 1769956379858,
+        "isReady": true
+      },
+      {
+        "name": "Ghost",
+        "citizenId": "1002",
+        "avatar": "/avatars/ghost.png",
+        "address": "0x3C44...93BC",
+        "joinedAt": 1769956382047,
+        "isReady": true
+      },
+      {
+        "name": "Viper",
+        "citizenId": "1001",
+        "avatar": "/avatars/viper.png",
+        "address": "0x7099...79C8",
+        "joinedAt": 1769956387364,
+        "isReady": true
+      }
+    ],
+    "maxPlayers": 3,
+    "bidAmount": 0,
+    "logs": [
+      "Game created by 080"
+    ],
+    "transactions": [],
+    "messages": [
+      {
+        "sender": "Ghost",
+        "avatar": "/avatars/ghost.png",
+        "content": "Hello world!",
+        "timestamp": 1769956383777
+      },
+      {
+        "sender": "Viper",
+        "avatar": "/avatars/viper.png",
+        "content": "Hello world!",
+        "timestamp": 1769956388885
+      }
+    ],
+    "startTime": 1769956400405
+  }
+]

@@ -1,0 +1,118 @@
+import React from 'react';
+import Image from 'next/image';
+
+interface NewPlayersPanelProps {
+    players?: any[];
+}
+
+export default function NewPlayersPanel({ players = [] }: NewPlayersPanelProps) {
+    // Data unpacking: p1 is Index 0 (User), p2/p3 are Index 1/2 (Opponents)
+    const userPlayer = players[0] || { name: 'Citizen', avatar: '/avatars/golden_avatar.png' };
+    const p2 = players[1] || { name: 'Viper', avatar: '/avatars/viper.png' };
+    const p3 = players[2] || { name: 'Ghost', avatar: '/avatars/ghost.png' };
+
+    // Helper for circular avatar
+    const AvatarCircle = ({ x, y, r, img, alt, hasOuterRing }: { x: number, y: number, r: number, img: string, alt: string, hasOuterRing?: boolean }) => {
+        const size = r * 2;
+        return (
+            <>
+                {hasOuterRing && (
+                    <>
+                        <div
+                            className="absolute rounded-full border border-[#d4af37] opacity-60 pointer-events-none"
+                            style={{
+                                left: `${x - r - 6}px`, // 6px padding
+                                top: `${y - r - 6}px`,
+                                width: `${size + 12}px`,
+                                height: `${size + 12}px`
+                            }}
+                        />
+                        <div
+                            className="absolute rounded-full border border-[#d4af37] opacity-40 pointer-events-none"
+                            style={{
+                                left: `${x - r - 12}px`, // 12px padding
+                                top: `${y - r - 12}px`,
+                                width: `${size + 24}px`,
+                                height: `${size + 24}px`
+                            }}
+                        />
+                    </>
+                )}
+                <div
+                    className="absolute rounded-full overflow-hidden border-2 border-[#A08C5C] bg-black shadow-lg"
+                    style={{
+                        left: `${x - r}px`,
+                        top: `${y - r}px`,
+                        width: `${size}px`,
+                        height: `${size}px`
+                    }}
+                >
+                    <Image src={img} layout="fill" objectFit="cover" alt={alt} />
+                </div>
+            </>
+        );
+    };
+
+    return (
+        <div className="absolute top-[28px] left-0 z-50 pointer-events-none">
+            <div className="relative w-[756px] h-[107px]">
+                {/* SVG Background Layer */}
+                <svg width="756" height="107" viewBox="0 0 756 107" fill="none" xmlns="http://www.w3.org/2000/svg" className="absolute top-0 left-0 w-full h-full">
+                    <path d="M52.9004 0C57.1228 3.03916e-05 61.2295 0.496023 65.166 1.43066H561.4L473.5 73.3799H101.689C93.6853 92.4256 74.8549 105.8 52.9004 105.8C25.1711 105.8 2.42555 84.4649 0.182617 57.3145C0.122441 57.0748 0.0601665 56.8272 0 56.5703V1.43066H40.6338C44.5705 0.495965 48.6778 0 52.9004 0Z" fill="url(#paint0_linear_82_266)" />
+                    <path d="M706.13 35.7102H0V1.43018H755.73L706.13 35.7102Z" fill="url(#paint1_linear_82_266)" />
+                    <path d="M96.0596 35.7102H683.53" stroke="url(#paint2_linear_82_266)" strokeMiterlimit="10" />
+
+                    {/* Gold Separator Line */}
+                    <path d="M165 42 H700" stroke="#d4af37" strokeWidth="1" strokeOpacity="1" />
+
+                    {/* Outline / Decor paths */}
+                    <path d="M151 105.844C168.121 105.844 182 92.1076 182 75.1624C182 58.2171 168.121 44.4802 151 44.4802C133.879 44.4802 120 58.2171 120 75.1624C120 92.1076 133.879 105.844 151 105.844Z" fill="#23262D" />
+                    <path d="M151 100.071C164.899 100.071 176.167 88.919 176.167 75.1622C176.167 61.4055 164.899 50.2534 151 50.2534C137.101 50.2534 125.833 61.4055 125.833 75.1622C125.833 88.919 137.101 100.071 151 100.071Z" stroke="#A08C5C" strokeMiterlimit="10" />
+                    <path d="M232.21 104.42C248.823 104.42 262.29 90.541 262.29 73.4202C262.29 56.2993 248.823 42.4202 232.21 42.4202C215.597 42.4202 202.13 56.2993 202.13 73.4202C202.13 90.541 215.597 104.42 232.21 104.42Z" fill="#23262D" />
+                    <path d="M232.21 98.5869C245.697 98.5869 256.63 87.3193 256.63 73.4201C256.63 59.5208 245.697 48.2532 232.21 48.2532C218.723 48.2532 207.79 59.5208 207.79 73.4201C207.79 87.3193 218.723 98.5869 232.21 98.5869Z" stroke="#A08C5C" strokeMiterlimit="10" />
+
+                    <defs>
+                        <linearGradient id="paint0_linear_82_266" x1="-2.07" y1="48.1702" x2="791.91" y2="116.53" gradientUnits="userSpaceOnUse">
+                            <stop stopColor="#23262D" />
+                            <stop offset="1" stopColor="#23262D" stopOpacity="0" />
+                        </linearGradient>
+                        <linearGradient id="paint1_linear_82_266" x1="2.21" y1="-13.7698" x2="714.13" y2="47.5302" gradientUnits="userSpaceOnUse">
+                            <stop stopColor="#23262D" />
+                            <stop offset="0.29" stopColor="#23262D" stopOpacity="0.9" />
+                            <stop offset="0.61" stopColor="#23262D" stopOpacity="0.6" />
+                            <stop offset="0.94" stopColor="#23262D" stopOpacity="0.1" />
+                            <stop offset="1" stopColor="#23262D" stopOpacity="0" />
+                        </linearGradient>
+                        <linearGradient id="paint2_linear_82_266" x1="0" y1="0" x2="1" y2="1" gradientUnits="userSpaceOnUse">
+                            <stop offset="0.72" stopColor="#A08C5C" />
+                            <stop offset="1" stopColor="#A08C5C" stopOpacity="0" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+
+                {/* --- Dynamic Content Layer --- */}
+
+                {/* 1. Main Avatar (User) */}
+                <AvatarCircle x={52.9} y={52.9} r={35} img={userPlayer.avatar} alt="Me" hasOuterRing={true} />
+
+                {/* 2. Badge Placeholder */}
+                <div className="absolute border border-red-500/0" style={{ left: '113.5px', top: '8.37px', width: '19px', height: '19px' }}>
+                    {/* Assuming we can put a small rank icon here, likely coming from player data later */}
+                    <div className="w-full h-full bg-[#A08C5C] rounded-sm"></div>
+                </div>
+
+                {/* 3. Account Name */}
+                <div className="absolute flex items-center" style={{ left: '147.5px', top: '8.37px', width: '344px', height: '19px' }}>
+                    <span className="text-[#A08C5C] font-bold text-sm uppercase tracking-widest">{userPlayer.name}</span>
+                </div>
+
+                {/* 4. Player 2 (Viper) */}
+                <AvatarCircle x={151} y={75.16} r={21.7} img={p2.avatar} alt="Viper" />
+
+                {/* 5. Player 3 (Ghost) */}
+                <AvatarCircle x={232.2} y={73.4} r={22} img={p3.avatar} alt="Ghost" />
+
+            </div>
+        </div>
+    );
+}
