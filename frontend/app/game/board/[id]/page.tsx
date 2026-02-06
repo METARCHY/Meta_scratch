@@ -17,6 +17,8 @@ import GameResources from "@/components/game/GameResources";
 import RSPRadialMenu from "@/components/game/RSPRadialMenu";
 import ActionCardsPanel from "@/components/game/ActionCardsPanel";
 import ExchangeModal from "@/components/game/ExchangeModal";
+import ConflictsSidebar from "@/components/game/ConflictsSidebar";
+import ConflictResolutionView, { ConflictResult } from "@/components/game/ConflictResolutionView";
 import { formatLog } from '@/lib/logUtils';
 
 // Constants
@@ -24,10 +26,10 @@ import { EVENTS, LOCATIONS, ACTION_CARDS, getConflicts, ALLOWED_MOVES } from '@/
 
 // --- MOCK DATA FOR ACTORS (Assuming these will come from State/Wallet later) ---
 const ACTOR_TYPES: { [key: string]: { name: string, avatar: string } } = {
-    "politician": { name: "Politician", avatar: "/actors/actor_scientist.png" },
-    "robot": { name: "Robot", avatar: "/actors/actor_politician.png" },
-    "scientist": { name: "Scientist", avatar: "/actors/actor_robot.png" },
-    "artist": { name: "Artist", avatar: "/actors/actor_artist.png" }
+    "politician": { name: "Politician", avatar: "/actors/Polotican.png" },
+    "robot": { name: "Robot", avatar: "/actors/Robot.png" },
+    "scientist": { name: "Scientist", avatar: "/actors/Scientist.png" },
+    "artist": { name: "Artist", avatar: "/actors/Artist.png" }
 };
 
 const MY_ACTORS = [
@@ -45,17 +47,22 @@ const PLAYERS = [
 
 const AUTO_PLACEMENTS = [
     // Viper (p2)
-    { actorId: "v1", playerId: "p2", locId: "square", type: "rock", isOpponent: true, name: "Politician", actorType: "politician", avatar: "/actors/actor_scientist.png", bid: "product" },
-    { actorId: "v2", playerId: "p2", locId: "factory", type: "paper", isOpponent: true, name: "Robot", actorType: "robot", avatar: "/actors/actor_politician.png", bid: "energy" },
-    { actorId: "v3", playerId: "p2", locId: "university", type: "scissors", isOpponent: true, name: "Scientist", actorType: "scientist", avatar: "/actors/actor_robot.png" },
-    { actorId: "v4", playerId: "p2", locId: "theatre", type: "rock", isOpponent: true, name: "Artist", actorType: "artist", avatar: "/actors/actor_artist.png" },
+    { actorId: "v1", playerId: "p2", locId: "square", type: "rock", isOpponent: true, name: "Politician", actorType: "politician", avatar: "/actors/Polotican.png", bid: "product" },
+    { actorId: "v2", playerId: "p2", locId: "factory", type: "paper", isOpponent: true, name: "Robot", actorType: "robot", avatar: "/actors/Robot.png", bid: "energy" },
+    { actorId: "v3", playerId: "p2", locId: "university", type: "scissors", isOpponent: true, name: "Scientist", actorType: "scientist", avatar: "/actors/Scientist.png" },
+    { actorId: "v4", playerId: "p2", locId: "theatre", type: "rock", isOpponent: true, name: "Artist", actorType: "artist", avatar: "/actors/Artist.png" },
     // Ghost (p3)
-    { actorId: "g1", playerId: "p3", locId: "university", type: "scissors", isOpponent: true, name: "Politician", actorType: "politician", avatar: "/actors/actor_scientist.png", bid: "recycle" },
-    { actorId: "g2", playerId: "p3", locId: "dump", type: "rock", isOpponent: true, name: "Robot", actorType: "robot", avatar: "/actors/actor_politician.png" },
-    { actorId: "g3", playerId: "p3", locId: "theatre", type: "paper", isOpponent: true, name: "Scientist", actorType: "scientist", avatar: "/actors/actor_robot.png" },
-    { actorId: "g4", playerId: "p3", locId: "square", type: "scissors", isOpponent: true, name: "Artist", actorType: "artist", avatar: "/actors/actor_artist.png" },
+    { actorId: "g1", playerId: "p3", locId: "university", type: "scissors", isOpponent: true, name: "Politician", actorType: "politician", avatar: "/actors/Polotican.png", bid: "recycle" },
+    { actorId: "g2", playerId: "p3", locId: "dump", type: "rock", isOpponent: true, name: "Robot", actorType: "robot", avatar: "/actors/Robot.png" },
+    { actorId: "g3", playerId: "p3", locId: "theatre", type: "paper", isOpponent: true, name: "Scientist", actorType: "scientist", avatar: "/actors/Scientist.png" },
+    { actorId: "g4", playerId: "p3", locId: "square", type: "scissors", isOpponent: true, name: "Artist", actorType: "artist", avatar: "/actors/Artist.png" },
 ];
 
+interface OpponentData {
+    id: string;
+    resources: Record<string, number>;
+    cards: Record<string, number>;
+}
 export default function GameBoardPage() {
     const { id } = useParams();
     // --- State Management ---
@@ -64,6 +71,24 @@ export default function GameBoardPage() {
     const [phase, setPhase] = useState(2); // Game starts at T1P2
     const [turn, setTurn] = useState(1);
     const [opponentsReady, setOpponentsReady] = useState(false);
+    const [opponentsData, setOpponentsData] = useState<Record<string, OpponentData>>({});
+
+    // Initialize opponents data dynamically
+    useEffect(() => {
+        const initialOpponents: Record<string, OpponentData> = {};
+        PLAYERS.forEach(opp => {
+            initialOpponents[opp.id] = {
+                id: opp.id,
+                resources: {
+                    gato: 1000,
+                    product: 1, energy: 1, recycle: 1,
+                    power: 0, art: 0, knowledge: 0, glory: 0, vp: 0
+                },
+                cards: {}
+            };
+        });
+        setOpponentsData(initialOpponents);
+    }, []);
 
     // Fetch Specific Game Data
     useEffect(() => {
@@ -108,6 +133,17 @@ export default function GameBoardPage() {
                 return [...prev, action];
             });
 
+            // Update opponent resources if bid is placed
+            if (action.bid) {
+                setOpponentsData(prev => {
+                    const next = { ...prev };
+                    if (!next[action.playerId]) return prev;
+                    const oppRes = { ...next[action.playerId].resources };
+                    oppRes[action.bid] = Math.max(0, (oppRes[action.bid] || 0) - 1);
+                    next[action.playerId] = { ...next[action.playerId], resources: oppRes };
+                    return next;
+                });
+            }
             const playerName = PLAYERS.find(p => p.id === action.playerId)?.name || action.playerId;
             await addLog(`${playerName} placed ${action.name} with ${action.type.toUpperCase()} to ${action.locId}`);
 
@@ -159,7 +195,7 @@ export default function GameBoardPage() {
     const [activeCardId, setActiveCardId] = useState<string | null>(null);
     const [activatedCards, setActivatedCards] = useState<string[]>([]);
     const [disabledLocations, setDisabledLocations] = useState<string[]>([]);
-    const [exchangeTarget, setExchangeTarget] = useState<{ id: string, x: number, y: number } | null>(null);
+    const [exchangeTarget, setExchangeTarget] = useState<{ id: string, name: string, x: number, y: number } | null>(null);
     const [teleportSource, setTeleportSource] = useState<string | null>(null);
     const [biddingActorId, setBiddingActorId] = useState<string | null>(null);
     const [p3Step, setP3Step] = useState<1 | 2 | 3 | 4>(1); // 1: Bidding, 2: Stop, 3: Teleport, 4: Exchange
@@ -185,8 +221,115 @@ export default function GameBoardPage() {
 
 
     // Phase 4: Conflicts
-    const [activeConflictId, setActiveConflictId] = useState<string | null>(null);
-    const [conflictState, setConflictState] = useState<'choose' | 'result'>('choose');
+    const [activeConflictLocId, setActiveConflictLocId] = useState<string | null>(null);
+    const [resolvedConflicts, setResolvedConflicts] = useState<string[]>([]);
+
+    // Conflict Detection Logic (Local override of gameConstants version)
+    const activeConflicts = useMemo(() => {
+        if (phase !== 4) return [];
+
+        const locsWithActors: { [key: string]: any[] } = {};
+        placedActors.forEach(p => {
+            if (!locsWithActors[p.locId]) locsWithActors[p.locId] = [];
+            locsWithActors[p.locId].push(p);
+        });
+
+        const conflicts: any[] = [];
+        Object.entries(locsWithActors).forEach(([locId, actors]) => {
+            // if (activeConflictLocId === locId) return; // Removed to allow all conflicts
+
+            // Conflict if > 1 actor AND location not disabled
+            // Conflict if > 1 actor AND location not disabled
+            if (actors.length > 1 && !disabledLocations.includes(locId)) {
+
+                // Find all player actors at this location
+                const myActorsAtLoc = actors.filter(a => a.playerId === 'p1');
+
+                myActorsAtLoc.forEach(playerActorRaw => {
+                    // Find opponents of the SAME ACTOR TYPE (Role vs Role)
+                    const sameTypeOpponents = actors.filter(a =>
+                        a.playerId !== 'p1' &&
+                        a.actorType === playerActorRaw.actorType
+                    );
+
+                    if (sameTypeOpponents.length > 0) {
+                        // Enhance playerActor with full details including avatar
+                        const playerActorSource = MY_ACTORS.find(p => p.id === playerActorRaw.actorId);
+                        const playerActor = {
+                            ...playerActorRaw,
+                            avatar: playerActorSource?.avatar || '',
+                            name: playerActorSource?.name || 'My Actor',
+                            type: playerActorSource?.type || playerActorRaw.type || 'unknown'
+                        };
+
+                        const locDef = LOCATIONS.find(l => l.id === locId);
+
+                        // Unique ID per conflict instance (Location + ActorType)
+                        const uniqueConflictId = `${locId}_${playerActor.type}`;
+
+                        // Don't duplicate if already added OR resolved
+                        if (conflicts.find(c => c.locId === uniqueConflictId)) return;
+                        if (resolvedConflicts.includes(uniqueConflictId)) return;
+
+                        conflicts.push({
+                            locId: uniqueConflictId,
+                            realLocId: locId,
+                            locationName: locDef?.name || locId,
+                            playerActor,
+                            opponents: sameTypeOpponents.map(o => ({
+                                ...o,
+                                name: PLAYERS.find(p => p.id === o.playerId)?.name || 'Unknown',
+                                playerAvatar: PLAYERS.find(p => p.id === o.playerId)?.avatar || '',
+                            })),
+                            resourceType: locDef?.resource || 'glory'
+                        });
+                    }
+                });
+            }
+        });
+        return conflicts;
+    }, [phase, placedActors, disabledLocations, resolvedConflicts]);
+
+    // Derived: Current Active Conflict Object
+    const currentConflict = useMemo(() => {
+        return activeConflicts.find(c => c.locId === activeConflictLocId);
+    }, [activeConflicts, activeConflictLocId]);
+
+    const handleConflictResolve = (result: ConflictResult) => {
+        if (!activeConflictLocId) return;
+
+        addLog(`Conflict at ${activeConflictLocId} complete.`);
+        result.logs.forEach(l => addLog(`> ${l}`));
+
+        if (result.restart) {
+            // Logic to restart: Close modal so user can click sidebar again
+            addLog("Conflict is restarting due to Lose Bid...");
+            setActiveConflictLocId(null);
+            return;
+        }
+
+        // Logic for Reward
+        if (result.winnerId === 'p1') {
+            const locDef = LOCATIONS.find(l => l.id === activeConflictLocId);
+            if (locDef) {
+                // Double prize check inside result logs? Or logic here?
+                // Modal logic pushed "Product Bid! DOUBLE PRIZE!" log.
+                // We should check the player's bid to trust the state.
+                const actor = placedActors.find(a => a.actorId === currentConflict?.playerActor.actorId);
+                const isDouble = actor?.bid === 'product';
+                const baseReward = 1;
+                const finalReward = isDouble ? 2 : baseReward;
+
+                updateResource(locDef.resource, (resources as any)[locDef.resource] + finalReward);
+                addLog(`You won ${finalReward} ${locDef.resource.toUpperCase()}!`);
+            }
+        }
+
+        // Mark as resolved
+        setResolvedConflicts(prev => [...prev, activeConflictLocId]);
+        setActiveConflictLocId(null);
+    };
+
 
     // --- Derived State ---
     const usedRSPs = placedActors.filter(p => p.playerId === "p1").map(p => p.type);
@@ -231,12 +374,8 @@ export default function GameBoardPage() {
         const randomEvent = EVENTS[Math.floor(Math.random() * EVENTS.length)];
         setCurrentEvent(randomEvent);
 
-        // DEBUG: Seed action cards for testing
-        setActionHand([
-            { id: 'relocation_1', type: 'special', title: 'Relocation', desc: 'Teleport an actor' },
-            { id: 'relocation_2', type: 'special', title: 'Relocation', desc: 'Teleport an actor' },
-            { id: 'exchange_1', type: 'special', title: 'Exchange', desc: 'Swap resources' }
-        ]);
+        // DEBUG: Hand is empty at start
+        setActionHand([]);
     }, []);
 
 
@@ -372,14 +511,22 @@ export default function GameBoardPage() {
 
     const handleRSPSelect = (type: string) => {
         if (pendingPlacement) {
+            const actor = MY_ACTORS.find(a => a.id === pendingPlacement.actorId);
             setPlacedActors(prev => [
                 ...prev,
-                { actorId: pendingPlacement.actorId, playerId: "p1", locId: pendingPlacement.locId, type, isOpponent: false }
+                {
+                    actorId: pendingPlacement.actorId,
+                    playerId: "p1",
+                    locId: pendingPlacement.locId,
+                    type,
+                    isOpponent: false,
+                    actorType: actor?.type || 'unknown' // Add actorType for conflict matching
+                }
             ]);
             setPendingPlacement(null);
             setSelectedActorId(null);
 
-            const actor = MY_ACTORS.find(a => a.id === pendingPlacement.actorId);
+
             addLog(`${player.name || '080'} placed ${actor?.name} with ${type.toUpperCase()} to ${pendingPlacement.locId}`);
         }
     };
@@ -440,12 +587,39 @@ export default function GameBoardPage() {
     };
 
     // Phase 3 Step 4: Exchange Logic
-    const handleExchangeConfirm = (resource: 'authority' | 'influence' | 'media') => {
+    const handleExchangeConfirm = (give: 'power' | 'art' | 'wisdom', take: 'power' | 'art' | 'wisdom') => {
         if (!exchangeTarget) return;
 
-        // In a real game, this would swap resources between players.
-        // For MVP/Demo: Just log it and consume card to simulate the transaction.
-        addLog(`${player.name || '080'} exchanged ${resource.toUpperCase()} with ${exchangeTarget.id === 'p2' ? 'Viper' : 'Ghost'}`);
+        const opponentId = exchangeTarget.id;
+        const opponentName = exchangeTarget.name;
+
+        // Functional updates for safety
+        setOpponentsData(prev => {
+            const next = { ...prev };
+            if (!next[opponentId]) return prev;
+
+            const oppRes = { ...next[opponentId].resources };
+
+            // Adjust opponent resources
+            const giveKey = give === 'wisdom' ? 'knowledge' : give;
+            const takeKey = take === 'wisdom' ? 'knowledge' : take;
+
+            oppRes[giveKey] = (oppRes[giveKey] || 0) + 1;
+            oppRes[takeKey] = Math.max(0, (oppRes[takeKey] || 0) - 1);
+
+            next[opponentId] = { ...next[opponentId], resources: oppRes };
+            return next;
+        });
+
+        // Update player resources
+        const playerGiveKey = give === 'wisdom' ? 'knowledge' : give;
+        const playerTakeKey = take === 'wisdom' ? 'knowledge' : take;
+
+        updateResource(playerGiveKey, (resources as any)[playerGiveKey] - 1);
+        updateResource(playerTakeKey, (resources as any)[playerTakeKey] + 1);
+
+        addLog(`${player.name || '080'} exchanged ${give.toUpperCase()} for ${take.toUpperCase()} with ${opponentName}`);
+
 
         // Consume Card
         const cardIndex = actionHand.findIndex(c => c.id.includes('change_values') || c.id.includes('exchange'));
@@ -534,7 +708,7 @@ export default function GameBoardPage() {
                 />
 
                 {/* 2. UI Overlay Layer (Z-Indexed) */}
-                <div className="absolute inset-0 z-10 pointer-events-none">
+                <div className="absolute inset-0 z-[200] pointer-events-none">
                     {/* Top Center: Header (Snapped) */}
                     <GameHeader
                         turn={turn}
@@ -547,9 +721,29 @@ export default function GameBoardPage() {
                                             p3Step === 2 ? "ACTION: STOP LOCATIONS" :
                                                 p3Step === 3 ? "ACTION: RELOCATION" : "ACTION: EXCHANGE"
                                     ) :
-                                        phase === 4 ? "CONFLICTS" : "RESOLUTION"
+                                        phase === 4 ? "CONFLICTS REVEAL" : "RESOLUTION"
                         }
                     />
+
+                    {/* Phase 4: Conflicts Sidebar */}
+                    {phase === 4 && (
+                        <ConflictsSidebar
+                            conflicts={activeConflicts.filter(c => !resolvedConflicts.includes(c.locId))}
+                            activeConflictLocId={activeConflictLocId}
+                            onSelectConflict={setActiveConflictLocId}
+                        />
+                    )}
+
+                    {/* Phase 4: Conflict Resolution Modal */}
+                    {phase === 4 && activeConflictLocId && currentConflict && (
+                        <div className="absolute inset-0 z-[60] pointer-events-auto">
+                            <ConflictResolutionView
+                                conflict={currentConflict}
+                                onResolve={handleConflictResolve}
+                                onClose={() => setActiveConflictLocId(null)}
+                            />
+                        </div>
+                    )}
 
                     {/* Top Center: Resources (Layered ABOVE Header) */}
                     <GameResources resources={resources} vp={vp} />
@@ -559,7 +753,11 @@ export default function GameBoardPage() {
                         players={dynamicPlayers}
                         p3Step={p3Step}
                         availableExchangeCards={exchangeCardsCount}
+<<<<<<< HEAD
                         onExchangeClick={(id, name) => setExchangeTarget({ id, x: 0, y: 0 })} // x/y not needed for modal
+=======
+                        onExchangeClick={(id, name) => setExchangeTarget({ id, name, x: 0, y: 0 })} // x/y not needed for modal
+>>>>>>> new-feature
                     />
 
                     {/* Left Sidebar: Actors / Hand */}
@@ -674,7 +872,13 @@ export default function GameBoardPage() {
                                 isOpen={true}
                                 onClose={() => setExchangeTarget(null)}
                                 onConfirm={handleExchangeConfirm}
+<<<<<<< HEAD
                                 targetName={exchangeTarget.id === 'p2' ? 'Viper' : 'Ghost'}
+=======
+                                targetName={exchangeTarget.name}
+                                playerResources={resources}
+                                opponentResources={opponentsData[exchangeTarget.id]?.resources || {}}
+>>>>>>> new-feature
                             />
                         </div>
                     )}

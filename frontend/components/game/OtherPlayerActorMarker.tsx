@@ -21,14 +21,14 @@ const FACE_Offsets: { [key: string]: string } = {
 };
 
 const Resource_Icons: { [key: string]: string } = {
-    'product': '/resources/resource_box.png',
+    'product': '/resources/resource_product.png',
     'energy': '/resources/resource_energy.png',
-    'recycle': '/resources/resource_bio.png'
+    'recycle': '/resources/resource_Recycle.png'
 };
 
 export default function OtherPlayerActorMarker({ actor, playerAvatar, bid, hasSecretBid, phase, hudScale = 1, onClick }: OtherPlayerActorMarkerProps) {
     const objectPosition = FACE_Offsets[actor.type.toLowerCase()] || '50% 20%';
-    const phaseScaleAdjust = phase && phase >= 3 ? 1.2 : 1.0;
+    const phaseScaleAdjust = phase && phase >= 3 ? 1.44 : 1.0;
 
     return (
         <div
