@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { gameService } from '@/lib/gameService';
+import { formatLog } from '@/lib/logUtils';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
     try {
@@ -28,10 +29,17 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
                 return NextResponse.json({ error: 'Player data required' }, { status: 400 });
             }
             try {
+                const logs = [...(game.logs || []), formatLog(game.displayId || game.id, `${player.name} joined`)];
                 game = gameService.addPlayer(params.id, { ...player, joinedAt: Date.now() }) || game;
+                game = gameService.update(params.id, { logs }) || game;
             } catch (e: any) {
                 return NextResponse.json({ error: e.message }, { status: 400 });
             }
+        } else if (action === 'add-log' && body.message) {
+            const formattedMsg = formatLog(game.displayId || game.id, body.message);
+            game = gameService.update(params.id, {
+                logs: [...(game.logs || []), formattedMsg]
+            }) || game;
         } else if (action === 'update' && updates) {
             game = gameService.update(params.id, updates) || game;
         }

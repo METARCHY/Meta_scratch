@@ -70,28 +70,28 @@ export default function GameResources({ resources, vp }: GameResourcesProps) {
                 {/* Resource Slots - Positioned based on user provided coords */}
 
                 {/* VP (White) x=35.15 y=3.5 - NOW STAR/FAME */}
-                {renderSlot(35.15, 3.5, "/intangibles/resource_fame.png", vp, "VP")}
+                {renderSlot(35.15, 3.5, "/intangibles/resource_VP.png", vp, "VP")}
 
                 {/* Glory (Yellow) x=118.15 y=3.5 - NOW VICTORY */}
-                {renderSlot(118.15, 3.5, "/intangibles/resource_victory.png", resources.glory, "Glory")}
+                {renderSlot(118.15, 3.5, "/intangibles/resource_Glory.png", resources.glory, "Glory")}
 
                 {/* Power (Orange) x=189.15 y=4.5 */}
-                {renderSlot(189.15, 4.5, "/intangibles/resource_ledger.png", resources.power, "Power")}
+                {renderSlot(189.15, 4.5, "/intangibles/resource_power.png", resources.power, "Power")}
 
                 {/* Art (Magenta) x=260.15 y=4.5 */}
-                {renderSlot(260.15, 4.5, "/intangibles/resource_culture.png", resources.art, "Art")}
+                {renderSlot(260.15, 4.5, "/intangibles/resource_Art.png", resources.art, "Art")}
 
                 {/* Wisdom (Light Blue) x=331.15 y=4.5 */}
-                {renderSlot(331.15, 4.5, "/intangibles/resource_focus.png", resources.knowledge, "Wisdom")}
+                {renderSlot(331.15, 4.5, "/intangibles/resource_wisdom.png", resources.knowledge, "Wisdom")}
 
                 {/* Product (Red) x=404.15 y=3.5 */}
-                {renderSlot(404.15, 3.5, "/resources/resource_box.png", resources.product, "Product")}
+                {renderSlot(404.15, 3.5, "/resources/resource_product.png", resources.product, "Product")}
 
                 {/* Energy (Blue) x=475.15 y=3.5 */}
                 {renderSlot(475.15, 3.5, "/resources/resource_energy.png", resources.energy, "Energy")}
 
                 {/* Recycle (Green) x=545.15 y=3.5 */}
-                {renderSlot(545.15, 3.5, "/resources/resource_bio.png", resources.recycle, "Recycle")}
+                {renderSlot(545.15, 3.5, "/resources/resource_Recycle.png", resources.recycle, "Recycle")}
 
             </div>
         </div>
