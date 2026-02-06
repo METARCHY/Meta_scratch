@@ -1019,11 +1019,7 @@
     "id": "e5208b64-cd87-4ab9-b376-b866e1d608a7",
     "displayId": "010",
     "roomId": "Neural_Drift",
-<<<<<<< HEAD
-    "status": "playing",
-=======
     "status": "finished",
->>>>>>> new-feature
     "isPrivate": false,
     "createdAt": 1769974360910,
     "players": [
@@ -1108,9 +1104,8 @@
       }
     ],
     "startTime": 1769974371262
-<<<<<<< HEAD
-=======
   },
+  {},
   {
     "id": "edbd9484-2858-416d-bf65-6d2ba4c007d9",
     "displayId": "011",
@@ -2327,6 +2322,5 @@
       }
     ],
     "startTime": 1770144473674
->>>>>>> new-feature
   }
 ]

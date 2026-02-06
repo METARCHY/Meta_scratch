@@ -753,11 +753,7 @@ export default function GameBoardPage() {
                         players={dynamicPlayers}
                         p3Step={p3Step}
                         availableExchangeCards={exchangeCardsCount}
-<<<<<<< HEAD
-                        onExchangeClick={(id, name) => setExchangeTarget({ id, x: 0, y: 0 })} // x/y not needed for modal
-=======
                         onExchangeClick={(id, name) => setExchangeTarget({ id, name, x: 0, y: 0 })} // x/y not needed for modal
->>>>>>> new-feature
                     />
 
                     {/* Left Sidebar: Actors / Hand */}
@@ -872,13 +868,9 @@ export default function GameBoardPage() {
                                 isOpen={true}
                                 onClose={() => setExchangeTarget(null)}
                                 onConfirm={handleExchangeConfirm}
-<<<<<<< HEAD
-                                targetName={exchangeTarget.id === 'p2' ? 'Viper' : 'Ghost'}
-=======
                                 targetName={exchangeTarget.name}
                                 playerResources={resources}
                                 opponentResources={opponentsData[exchangeTarget.id]?.resources || {}}
->>>>>>> new-feature
                             />
                         </div>
                     )}
