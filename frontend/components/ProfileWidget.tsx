@@ -2,9 +2,34 @@ import React from 'react';
 import { useGameState } from '../context/GameStateContext';
 
 export default function ProfileWidget() {
-    const { player } = useGameState();
+    const { player, setPlayer } = useGameState();
 
     if (!player || !player.citizenId || player.citizenId === "0000") return null;
+
+    const handleLogout = async () => {
+        if (!player.address) return;
+
+        try {
+            await fetch('/api/citizen', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ address: player.address, status: 'offline' })
+            });
+
+            // Clear local state
+            setPlayer({
+                name: "",
+                address: "",
+                citizenId: "0000",
+                avatar: ""
+            });
+
+            // Redirect or refresh
+            window.location.href = '/';
+        } catch (e) {
+            console.error("Logout failed:", e);
+        }
+    };
 
     return (
         <div className="absolute top-0 right-0 z-30 w-full pointer-events-none flex justify-end">
@@ -96,15 +121,15 @@ export default function ProfileWidget() {
                     )}
                 </div>
 
-                {/* 4. Profile Menu Button */}
-                {/* Positioned 5px from top-right page corner (local coords to snapped container) */}
+                {/* 4. Profile Menu Button / Logout */}
                 <button
-                    className="absolute top-[5px] right-[5px] z-50 hover:scale-110 transition-transform cursor-pointer"
-                    onClick={() => console.log('Profile Menu Clicked')}
+                    className="absolute top-[5px] right-[5px] z-50 hover:scale-110 transition-transform cursor-pointer group"
+                    onClick={handleLogout}
+                    title="LOGOUT"
                 >
                     <svg width="23" height="23" viewBox="0 0 23 23" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M11.17 21.84C17.0629 21.84 21.84 17.0629 21.84 11.17C21.84 5.27712 17.0629 0.5 11.17 0.5C5.27712 0.5 0.5 5.27712 0.5 11.17C0.5 17.0629 5.27712 21.84 11.17 21.84Z" fill="#23262D" />
-                        <path d="M11.17 21.84C17.0629 21.84 21.84 17.0629 21.84 11.17C21.84 5.27712 17.0629 0.5 11.17 0.5C5.27712 0.5 0.5 5.27712 0.5 11.17C0.5 17.0629 5.27712 21.84 11.17 21.84Z" stroke="#A08C5C" strokeMiterlimit="10" />
+                        <path className="group-hover:stroke-red-500" d="M11.17 21.84C17.0629 21.84 21.84 17.0629 21.84 11.17C21.84 5.27712 17.0629 0.5 11.17 0.5C5.27712 0.5 0.5 5.27712 0.5 11.17C0.5 17.0629 5.27712 21.84 11.17 21.84Z" stroke="#A08C5C" strokeMiterlimit="10" />
                         <path d="M15.0003 7.42004H7.34027C7.03099 7.42004 6.78027 7.66853 6.78027 7.97504C6.78027 8.28156 7.03099 8.53004 7.34027 8.53004H15.0003C15.3096 8.53004 15.5603 8.28156 15.5603 7.97504C15.5603 7.66853 15.3096 7.42004 15.0003 7.42004Z" fill="#A08C5C" />
                         <path d="M15.0003 10.62H7.34027C7.03099 10.62 6.78027 10.8685 6.78027 11.175C6.78027 11.4815 7.03099 11.73 7.34027 11.73H15.0003C15.3096 11.73 15.5603 11.4815 15.5603 11.175C15.5603 10.8685 15.3096 10.62 15.0003 10.62Z" fill="#A08C5C" />
                         <path d="M15.0003 13.8199H7.34027C7.03099 13.8199 6.78027 14.0684 6.78027 14.3749C6.78027 14.6815 7.03099 14.9299 7.34027 14.9299H15.0003C15.3096 14.9299 15.5603 14.6815 15.5603 14.3749C15.5603 14.0684 15.3096 13.8199 15.0003 13.8199Z" fill="#A08C5C" />

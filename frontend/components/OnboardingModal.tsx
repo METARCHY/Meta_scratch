@@ -1,5 +1,11 @@
 "use client";
 
+declare global {
+    interface Window {
+        ethereum?: any;
+    }
+}
+
 import React, { useState } from 'react';
 import { useGameState } from '../context/GameStateContext';
 import { useRouter } from 'next/navigation';
@@ -11,7 +17,7 @@ import { WindowFrame } from './WindowFrame';
 import { CompactFrame } from './CompactFrame';
 
 export default function OnboardingModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
-    const { setPlayerName, setPlayerAddress, setCitizenId, setPlayer } = useGameState();
+    const { player, setPlayerName, setPlayerAddress, setCitizenId, setPlayer } = useGameState();
     const router = useRouter();
     const [step, setStep] = useState<'connect' | 'create' | 'minting' | 'success'>('connect');
     const [name, setName] = useState('');
@@ -22,72 +28,92 @@ export default function OnboardingModal({ isOpen, onClose }: { isOpen: boolean, 
     // if (!isOpen) return null;
 
     const handleConnect = async () => {
+        if (!window.ethereum) {
+            setError("MetaMask not detected. Please install the extension.");
+            return;
+        }
+
         setIsLoading(true);
         setError(null);
-        console.log("Initiating connection...");
+        console.log("Initiating real wallet connection...");
 
-        // Mock connection (replace with valid wallet login logic as needed)
-        // In a real app, we'd get the address from the wallet provider
-        // For now, we simulate a connection 
-        const mockAddress = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // Fixed for demo, or random if desired
-
-        // Simulate delay
-        await new Promise(resolve => setTimeout(resolve, 600));
-
-        // setPlayerAddress(mockAddress);
-
-        // Check user registration
         try {
-            console.log("Fetching citizen data for:", mockAddress);
-            const res = await fetch(`/api/citizen?address=${mockAddress}`);
-            console.log("API Response status:", res.status);
+            // Request accounts from MetaMask
+            const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+            if (!accounts || accounts.length === 0) {
+                setError("No accounts found. Please unlock MetaMask.");
+                setIsLoading(false);
+                return;
+            }
+
+            const connectedAddress = accounts[0];
+            console.log("Connected address:", connectedAddress);
+            setPlayerAddress(connectedAddress);
+
+            // Check user registration
+            console.log("Fetching citizen data for:", connectedAddress);
+            const res = await fetch(`/api/citizen?address=${connectedAddress}`);
 
             if (res.ok) {
                 const data = await res.json();
-                console.log("User found:", data);
-                // User exists!
+                console.log("Citizen found:", data);
+
+                // Update status to online
+                await fetch('/api/citizen', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ address: connectedAddress, status: 'online' })
+                });
+
                 setPlayer({
-                    address: mockAddress,
+                    address: connectedAddress,
                     name: data.name,
                     citizenId: data.citizenId,
-                    avatar: data.avatar || "/avatars/golden_avatar.png" // Fallback to default
+                    avatar: data.avatar || "/avatars/golden_avatar.png"
                 });
                 setGeneratedId(data.citizenId);
-                setName(data.name); // Pre-fill name state for success screen
+                setName(data.name);
                 setStep('success');
             } else {
-                console.log("User not found, proceeding to creation.");
-                setPlayerAddress(mockAddress);
-                // User is new
+                console.log("Citizen not found, proceeding to creation.");
                 setStep('create');
             }
-        } catch (e) {
-            console.error("Failed to check registration:", e);
-            setError("Connection failed. Please try again.");
-            // setStep('create'); // Don't auto-advance on error, let user see it
+        } catch (e: any) {
+            console.error("Wallet connection failed:", e);
+            if (e.code === 4001) {
+                setError("Connection request rejected by user.");
+            } else {
+                setError("Failed to connect wallet. Please try again.");
+            }
         } finally {
             setIsLoading(false);
         }
     };
 
     const handleCreate = async () => {
-        if (!name) return;
+        if (!name || !player.address) return;
         setStep('minting');
-
-        const currentAddress = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // Matching handleConnect
 
         try {
             const res = await fetch('/api/citizen', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ address: currentAddress, name: name })
+                body: JSON.stringify({ address: player.address, name: name })
             });
 
             if (res.ok) {
                 const data = await res.json();
+
+                // Update status to online (Identity just minted)
+                await fetch('/api/citizen', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ address: player.address, status: 'online' })
+                });
+
                 setGeneratedId(data.citizenId);
                 setPlayer({
-                    address: currentAddress,
+                    address: player.address,
                     name: data.name,
                     citizenId: data.citizenId,
                     avatar: data.avatar || "/avatars/golden_avatar.png"

@@ -41,13 +41,8 @@ export default function LobbyPage() {
                     setMessages(data.messages || []);
 
                     // Handle Start Trigger
-                    if (data.status === 'starting' && data.startTime) {
-                        const timeLeft = Math.floor((data.startTime - Date.now()) / 1000);
-                        if (timeLeft <= 0) {
-                            router.push(`/game/board/${id}`);
-                        } else {
-                            setCountdown(timeLeft);
-                        }
+                    if (data.status === 'playing') {
+                        router.push(`/game/board/${id}`);
                     } else if (data.status === 'waiting') {
                         setCountdown(null);
                     }

@@ -11,6 +11,7 @@ const CITIZENS = citizensData as any[]; // Type assertion for simple usage
 
 interface MapContainerProps {
     phase: number;
+    p3Step?: number;
     placedActors: any[];
     selectedActorId: string | null;
     hoveredActorId: string | null;
@@ -19,6 +20,7 @@ interface MapContainerProps {
     selectedHex: string | null;
     playerActorsV2: any[];
     players: any[];
+    availableTeleportCards?: number;
     onHexClick: (locId: string) => void;
     onPlayerClick: (actor: any, event: React.MouseEvent) => void;
 }
@@ -34,6 +36,7 @@ const ACTOR_AVATARS: { [key: string]: string } = {
 
 export default function MapContainer({
     phase,
+    p3Step,
     placedActors,
     selectedActorId,
     hoveredActorId,
@@ -42,40 +45,72 @@ export default function MapContainer({
     selectedHex,
     playerActorsV2,
     players,
+    availableTeleportCards,
     onHexClick,
     onPlayerClick
 }: MapContainerProps) {
     const [scale, setScale] = useState(0.7);
+    const [offset, setOffset] = useState({ x: 0, y: 0 });
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const [hoveredLocId, setHoveredLocId] = useState<string | null>(null);
+
+    // Zoom Compensation logic: keep HUD size constant as seen in Phase 2
+    const BASE_ZOOM = 0.7;
+    const currentZoomFactor = phase >= 3 ? 1.6 : 0.7;
+    const hudScale = BASE_ZOOM / currentZoomFactor;
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
             const updateScale = () => {
                 const baseScale = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
-                const zoomFactor = phase >= 3 ? 0.9 : 0.7;
-                setScale(baseScale * zoomFactor);
+                setScale(baseScale * currentZoomFactor);
             };
             updateScale();
             window.addEventListener('resize', updateScale);
             return () => window.removeEventListener('resize', updateScale);
         }
-    }, [phase]);
+    }, [phase, currentZoomFactor]);
 
-    const activeActorId = hoveredActorId || selectedActorId;
+    const handleMouseDown = (e: React.MouseEvent) => {
+        if (e.button !== 0) return; // Only left click
+        setIsDragging(true);
+        setDragStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
+    };
+
+    const handleMouseMove = (e: React.MouseEvent) => {
+        if (!isDragging) return;
+        setOffset({
+            x: e.clientX - dragStart.x,
+            y: e.clientY - dragStart.y
+        });
+    };
+
+    const handleMouseUp = () => {
+        setIsDragging(false);
+    };
+
+    const activeActorId = teleportSource || hoveredActorId || selectedActorId;
     const activeActor = activeActorId ? playerActorsV2.find(a => a.id === activeActorId) : null;
     const validLocs = activeActor ? ALLOWED_MOVES[activeActor.type] || [] : [];
 
     return (
-        <div className="absolute inset-0 z-0 bg-black overflow-hidden flex items-center justify-center">
+        <div
+            className={`absolute inset-0 z-0 bg-black overflow-hidden flex items-center justify-center ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+        >
             {/* Background Map Layer */}
             <div className={`absolute inset-0 bg-[#0a0a10] bg-[url('/map/game_map_v2.jpg')] bg-cover bg-center transition-all duration-1000 ${phase >= 4 ? 'blur-sm brightness-50' : ''}`} />
             <div className="absolute inset-0 bg-black/40 pointer-events-none" />
 
             {/* Virtual Canvas for Fixed 1080p Positioning */}
             <div
-                className="absolute top-1/2 left-1/2 w-[1920px] h-[1080px] origin-center transition-transform duration-1000 ease-in-out"
+                className={`absolute top-1/2 left-1/2 w-[1920px] h-[1080px] origin-center ${isDragging ? '' : 'transition-transform duration-1000 ease-in-out'}`}
                 style={{
-                    transform: `translate(-50%, -50%) scale(${scale})`
+                    transform: `translate(calc(-50% + ${offset.x}px), calc(-50% + ${offset.y}px)) scale(${scale})`
                 }}
             >
                 {LOCATIONS.map(loc => {
@@ -172,26 +207,38 @@ export default function MapContainer({
                                     if (!isVisible) return null;
 
                                     // Resolve full actor details
-                                    const actorDetails = playerActorsV2.find(origin => origin.id === a.actorId) || a;
+                                    const actorDetails = playerActorsV2.find(origin => origin.id === a.actorId) || { ...a, type: a.actorType || a.type };
                                     const token = a.type !== actorDetails.type ? a.type : undefined;
+
+                                    // Centered Spread Logic
+                                    const spread = 100;
+                                    const startX = -((actorsHere.length - 1) * spread) / 2;
+                                    const currentX = startX + (i * spread);
+                                    const baseSlotY = phase >= 3 ? -4 : -34;
+                                    const opponentYOffset = a.playerId !== 'p1' ? -80 : 0;
+                                    const finalY = baseSlotY + opponentYOffset;
 
                                     // Opponent Marker 
                                     if (a.playerId !== 'p1') {
-                                        const pIndex = parseInt(a.playerId.replace('p', '')) - 1;
-                                        const playerAvatar = CITIZENS[pIndex]?.avatar || "";
+                                        const opponent = players.find(p => p.id === a.playerId);
+                                        const playerAvatar = opponent?.avatar || "";
 
                                         return (
                                             <div
                                                 key={i}
-                                                className="absolute pointer-events-auto"
+                                                className="absolute pointer-events-auto transition-all duration-700"
                                                 style={{
-                                                    transform: `translateX(${i * 60}px) translateY(-34px)`
+                                                    transform: `translateX(${currentX}px) translateY(${finalY}px)`,
+                                                    filter: disabledLocations.includes(loc.id) ? 'grayscale(1) opacity(0.8)' : 'none'
                                                 }}
                                             >
                                                 <OtherPlayerActorMarker
                                                     actor={{ ...actorDetails, type: actorDetails.type }}
                                                     playerAvatar={playerAvatar}
+                                                    bid={phase >= 4 ? a.bid : undefined}
+                                                    hasSecretBid={phase === 3 && !!a.bid}
                                                     phase={phase}
+                                                    hudScale={hudScale}
                                                     onClick={(e) => { e.stopPropagation(); onPlayerClick(a, e) }}
                                                 />
                                             </div>
@@ -202,17 +249,23 @@ export default function MapContainer({
                                     return (
                                         <div
                                             key={i}
-                                            className="absolute pointer-events-auto"
+                                            className="absolute pointer-events-auto transition-all duration-700"
                                             style={{
-                                                transform: `translateX(${i * 60}px) translateY(-34px)`
+                                                transform: `translateX(${currentX}px) translateY(${finalY}px)`,
+                                                filter: disabledLocations.includes(loc.id) ? 'grayscale(1) opacity(0.8)' : 'none'
                                             }}
                                         >
+
                                             <PlacedActorMarker
                                                 actor={{ ...actorDetails, type: actorDetails.type }}
                                                 token={token}
+                                                bid={a.bid}
                                                 isP1={true}
                                                 isTeleporting={teleportSource === a.actorId}
                                                 phase={phase}
+                                                p3Step={p3Step}
+                                                availableTeleportCards={availableTeleportCards}
+                                                hudScale={hudScale}
                                                 onClick={(e) => { e.stopPropagation(); onPlayerClick(a, e) }}
                                             />
                                         </div>

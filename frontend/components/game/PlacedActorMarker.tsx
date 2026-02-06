@@ -1,14 +1,17 @@
 "use client";
 
-import React from 'react';
 import Image from 'next/image';
 
 interface PlacedActorMarkerProps {
     actor: { type: string, avatar: string, id: string };
     token?: string; // RSP token id
+    bid?: string; // Attached resource type
     isP1: boolean;
     isTeleporting?: boolean;
     phase?: number;
+    p3Step?: number;
+    availableTeleportCards?: number;
+    hudScale?: number;
     onClick?: (e: React.MouseEvent) => void;
 }
 
@@ -19,15 +22,78 @@ const FACE_Offsets: { [key: string]: string } = {
     'robot': '50% 20%'
 };
 
-export default function PlacedActorMarker({ actor, token, isP1, isTeleporting, phase, onClick }: PlacedActorMarkerProps) {
+const Resource_Icons: { [key: string]: string } = {
+    'product': '/resources/resource_box.png',
+    'energy': '/resources/resource_energy.png',
+    'recycle': '/resources/resource_bio.png'
+};
+
+export default function PlacedActorMarker({ actor, token, bid, isP1, isTeleporting, phase, p3Step, availableTeleportCards, hudScale = 1, onClick }: PlacedActorMarkerProps) {
     const objectPosition = FACE_Offsets[actor.type.toLowerCase()] || '50% 20%';
-    const baseScale = phase && phase >= 3 ? 'scale-[1.4]' : 'scale-125';
+    const phaseScaleAdjust = phase && phase >= 3 ? 1.5 : 1.25;
+
+    const canTeleport = phase === 3 && p3Step === 3 && availableTeleportCards && availableTeleportCards > 0 && !isTeleporting;
 
     return (
         <div
-            className={`relative w-[145px] h-[188px] cursor-pointer transition-all duration-700 group origin-bottom ${baseScale} ${isTeleporting ? 'scale-[1.5] drop-shadow-[0_0_20px_cyan]' : 'hover:scale-[1.5]'}`}
+            className={`relative w-[145px] h-[188px] cursor-pointer transition-all duration-700 group origin-bottom ${isTeleporting ? 'drop-shadow-[0_0_20px_cyan]' : (canTeleport ? 'drop-shadow-[0_0_15px_white]' : '')}`}
+            style={{
+                transform: `scale(${hudScale * phaseScaleAdjust}) ${isTeleporting ? 'scale(1.2)' : ''}`
+            }}
             onClick={onClick}
         >
+            {/* Phase 3 Interactions: Bidding & Teleport */}
+            {phase === 3 && (
+                <div className="absolute -top-24 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-2">
+                    {/* Bidding (Step 1 or View-Only) */}
+                    {bid && (
+                        <div
+                            className={`flex items-center gap-1 group/bid animate-in zoom-in duration-300 ${p3Step === 1 ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'}`}
+                            onClick={(e) => {
+                                if (p3Step === 1) {
+                                    e.stopPropagation();
+                                    onClick?.(e);
+                                }
+                            }}
+                        >
+                            <div className={`absolute inset-x-[-10px] inset-y-[-4px] bg-[#171B21]/90 backdrop-blur-sm border border-[#514D44] rounded-full -z-10 shadow-xl ${p3Step === 1 ? 'group-hover/bid:border-[#d4af37]/50' : ''} transition-colors`} />
+                            <div className="relative w-[28px] h-[28px]">
+                                <Image
+                                    src={Resource_Icons[bid] || ""}
+                                    fill
+                                    className="object-contain drop-shadow-[0_0_8px_rgba(212,175,55,0.4)]"
+                                    alt={bid}
+                                />
+                            </div>
+                            <span className="text-white font-bold text-sm drop-shadow-md pr-1">1</span>
+                        </div>
+                    )}
+
+                    {/* Step 1: Add Bid Button (if no bid) */}
+                    {!bid && p3Step === 1 && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onClick?.(e); }}
+                            className="pointer-events-auto group/add w-10 h-10 rounded-full bg-black/60 backdrop-blur-md border border-[#d4af37]/40 flex items-center justify-center hover:bg-[#d4af37] transition-all shadow-lg animate-in fade-in slide-in-from-bottom-2"
+                        >
+                            <span className="text-[#d4af37] text-2xl font-light group-hover/add:text-black transition-colors">+</span>
+                        </button>
+                    )}
+
+                    {/* Step 3: Teleport Interaction (Only if cards available) */}
+                    {p3Step === 3 && availableTeleportCards && availableTeleportCards > 0 && !isTeleporting && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onClick?.(e); }}
+                            className="pointer-events-auto group/teleport w-10 h-10 rounded-full bg-[#171B21]/90 backdrop-blur-sm border border-[#d4af37]/40 flex items-center justify-center hover:bg-[#d4af37]/20 hover:border-[#d4af37] transition-all shadow-lg z-50"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d4af37" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M5 12h14" />
+                                <path d="m12 5 7 7-7 7" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
+            )}
+
             {/* Layer 0: Background Fills */}
             <svg width="145" height="188" viewBox="0 0 145 188" fill="none" className="absolute inset-0 z-0 pointer-events-none">
                 <path d="M143.824 72.7557L143.88 72.6618L143.824 72.6055C143.806 53.7577 136.307 35.6876 122.975 22.3655C109.642 9.04334 91.566 1.55882 72.7182 1.55634L72.6618 1.5L72.6055 1.55634C53.7667 1.57127 35.7037 9.06157 22.3826 22.3826C9.06157 35.7037 1.57127 53.7667 1.55634 72.6055L1.5 72.6618L1.55634 72.7557C1.57225 85.9389 5.25334 98.8581 12.1883 110.07C19.1233 121.282 29.0391 130.344 40.8278 136.245L72.6618 187.715L104.505 136.245C116.301 130.349 126.226 121.289 133.169 110.077C140.112 98.8651 143.801 85.9434 143.824 72.7557Z" fill="#23262D" fillOpacity="0.8" />
