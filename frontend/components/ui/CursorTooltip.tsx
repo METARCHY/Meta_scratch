@@ -29,7 +29,7 @@ export default function CursorTooltip() {
 
     return (
         <div
-            className="fixed pointer-events-none z-[100] transition-opacity duration-150"
+            className="fixed pointer-events-none z-[9999] transition-opacity duration-150"
             style={{
                 left: `${coords.x}px`,
                 top: `${coords.y}px`,

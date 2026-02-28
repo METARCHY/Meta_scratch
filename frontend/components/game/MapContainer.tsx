@@ -6,6 +6,7 @@ import { Box, Zap, Recycle } from 'lucide-react';
 import { LOCATIONS, ALLOWED_MOVES } from '@/data/gameConstants';
 import PlacedActorMarker from './PlacedActorMarker';
 import OtherPlayerActorMarker from './OtherPlayerActorMarker';
+import { useTooltip } from '@/context/TooltipContext';
 import citizensData from '@/data/citizens.json';
 const CITIZENS = citizensData as any[]; // Type assertion for simple usage
 
@@ -54,6 +55,7 @@ export default function MapContainer({
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
     const [hoveredLocId, setHoveredLocId] = useState<string | null>(null);
+    const { showTooltip, hideTooltip } = useTooltip();
 
     // Zoom Compensation logic: keep HUD size constant as seen in Phase 2
     const BASE_ZOOM = 0.7;
@@ -148,8 +150,14 @@ export default function MapContainer({
                                     width: '276px',
                                     height: '276px',
                                 }}
-                                onMouseEnter={() => isHintVisible && setHoveredLocId(loc.id)}
-                                onMouseLeave={() => setHoveredLocId(null)}
+                                onMouseEnter={() => {
+                                    if (isHintVisible) setHoveredLocId(loc.id);
+                                    showTooltip(loc.name);
+                                }}
+                                onMouseLeave={() => {
+                                    setHoveredLocId(null);
+                                    hideTooltip();
+                                }}
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     if (isHintVisible) {

@@ -1,5 +1,5 @@
-import React from 'react';
 import Image from 'next/image';
+import { useTooltip } from '@/context/TooltipContext';
 
 interface GameResourcesProps {
     resources: {
@@ -15,13 +15,16 @@ interface GameResourcesProps {
 }
 
 export default function GameResources({ resources, vp }: GameResourcesProps) {
+    const { showTooltip, hideTooltip } = useTooltip();
     if (!resources) return null;
 
     // Helper to render a resource slot
     const renderSlot = (x: number, y: number, iconPath: string, count: number, label: string) => (
         <div
-            className="absolute flex items-center justify-center gap-1 z-10"
+            className="absolute flex items-center justify-center gap-1 z-10 pointer-events-auto cursor-help"
             style={{ left: `${x}px`, top: `${y}px`, width: '30px', height: '30px' }}
+            onMouseEnter={() => showTooltip(label)}
+            onMouseLeave={hideTooltip}
         >
             {/* Icon */}
             <div className="relative w-full h-full">

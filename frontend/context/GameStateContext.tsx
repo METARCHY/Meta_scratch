@@ -33,7 +33,7 @@ interface GameState {
     setCitizenId: (id: string) => void;
     setPlayerAvatar: (avatar: string) => void;
     setPlayer: (player: Player) => void;
-    createRoom: (name: string, maxPlayers: number, isPrivate: boolean, id?: string) => Promise<any>;
+    createRoom: (name: string, maxPlayers: number, isPrivate: boolean, id?: string, isTest?: boolean) => Promise<any>;
     joinRoom: (gameId: string, player: Player) => Promise<void>;
     leaveRoom: () => void;
 }
@@ -121,12 +121,12 @@ export function GameStateProvider({ children }: { children: ReactNode }) {
         return () => clearInterval(interval);
     }, []);
 
-    const createRoom = async (name: string, maxPlayers: number, isPrivate: boolean, id?: string) => {
+    const createRoom = async (name: string, maxPlayers: number, isPrivate: boolean, id?: string, isTest?: boolean) => {
         try {
             const res = await fetch('/api/games', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id, roomName: name, maxPlayers, hostPlayer: player, isPrivate })
+                body: JSON.stringify({ id, roomName: name, maxPlayers, hostPlayer: player, isPrivate, isTest })
             });
 
             if (res.ok) {

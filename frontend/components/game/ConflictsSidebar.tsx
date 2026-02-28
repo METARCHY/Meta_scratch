@@ -1,9 +1,9 @@
 "use client";
 
 import React from 'react';
+import Image from 'next/image';
 import { Swords } from 'lucide-react';
 import { motion } from 'framer-motion';
-import ActorOrb from './ActorOrb';
 import OtherPlayerActorMarker from './OtherPlayerActorMarker';
 
 interface Conflict {
@@ -17,6 +17,34 @@ interface ConflictsSidebarProps {
     conflicts: Conflict[];
     activeConflictLocId: string | null;
     onSelectConflict: (locId: string) => void;
+}
+
+/** Small circular avatar using the FULL actor image (not head crop). */
+function ActorCircle({ avatar, size = 56 }: { avatar: string; size?: number }) {
+    return (
+        <div
+            className="rounded-full overflow-hidden border-2 border-[#d4af37]/60 flex-shrink-0 bg-[#1a1a1c]"
+            style={{ width: size, height: size }}
+        >
+            <div className="relative w-full h-full">
+                <Image src={avatar} fill className="object-cover object-top" alt="" />
+            </div>
+        </div>
+    );
+}
+
+/** Small circular player avatar (citizen photo). */
+function PlayerCircle({ avatar, size = 32 }: { avatar: string; size?: number }) {
+    return (
+        <div
+            className="rounded-full overflow-hidden border border-white/30 flex-shrink-0 bg-[#1a1a1c]"
+            style={{ width: size, height: size }}
+        >
+            <div className="relative w-full h-full">
+                <Image src={avatar} fill className="object-cover" alt="" />
+            </div>
+        </div>
+    );
 }
 
 export default function ConflictsSidebar({ conflicts, activeConflictLocId, onSelectConflict }: ConflictsSidebarProps) {
@@ -41,55 +69,42 @@ export default function ConflictsSidebar({ conflicts, activeConflictLocId, onSel
                             key={conflict.locId}
                             onClick={() => onSelectConflict(conflict.locId)}
                             className={`
-                                relative group flex items-start justify-between p-3 rounded-xl border transition-all duration-300 w-full text-left cursor-pointer
+                                relative group flex items-center gap-4 p-4 rounded-xl border transition-all duration-300 w-full text-left cursor-pointer
                                 ${isActive
                                     ? 'bg-[#d4af37]/20 border-[#d4af37] shadow-[0_0_15px_rgba(212,175,55,0.2)]'
                                     : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/20'
                                 }
                             `}
                         >
-                            {/* Location Label */}
-                            <div className="flex items-start gap-3 w-full">
+                            {/* Player's actor — head avatar */}
+                            <ActorCircle avatar={conflict.playerActor.headAvatar || conflict.playerActor.avatar} size={64} />
 
-                                {/* 1. Main Player: Actor Orb (Scaled) */}
-                                <div className="relative w-[60px] h-[60px] flex-shrink-0 -ml-2 -mt-2 pointer-events-none">
-                                    <div className="scale-[0.45] origin-top-left absolute left-0 top-0">
-                                        <ActorOrb
-                                            actor={conflict.playerActor}
-                                            isSelected={false}
-                                            onSelect={() => { }} // No-op
-                                        />
-                                    </div>
-                                </div>
+                            <div className="flex flex-col gap-1 flex-grow min-w-0">
+                                <span className={`text-[11px] font-bold uppercase tracking-wider truncate ${isActive ? 'text-[#d4af37]' : 'text-gray-300'}`}>
+                                    {conflict.locationName}
+                                </span>
 
-                                <div className="flex flex-col flex-grow pointer-events-none">
-                                    <span className={`text-[12px] font-bold uppercase tracking-wider mb-2 ${isActive ? 'text-[#d4af37]' : 'text-gray-300'}`}>
-                                        {conflict.playerActor.type}
-                                    </span>
-
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[10px] font-mono text-white/40 italic">VS</span>
-
-                                        {/* 2. Opponents: HUD Markers (Scaled) */}
-                                        <div className="flex flex-wrap gap-1">
-                                            {conflict.opponents.map((opp, idx) => (
-                                                <div key={idx} className="relative w-[40px] h-[40px]">
-                                                    <div className="scale-[0.35] origin-top-left absolute left-0 top-0">
-                                                        <OtherPlayerActorMarker
-                                                            actor={opp}
-                                                            playerAvatar={opp.playerAvatar}
-                                                            bid={undefined}
-                                                            phase={3}
-                                                        />
-                                                    </div>
+                                {/* Opponents row */}
+                                <div className="flex items-center gap-3 mt-1">
+                                    <span className="text-[10px] font-mono text-white/40 italic mt-1">VS</span>
+                                    <div className="flex gap-2">
+                                        {conflict.opponents.map((opp, idx) => (
+                                            <div key={idx} className="relative w-[46px] h-[46px]">
+                                                <div className="scale-[0.40] origin-top-left absolute left-0 top-0 pointer-events-none">
+                                                    <OtherPlayerActorMarker
+                                                        actor={opp}
+                                                        playerAvatar={opp.playerAvatar}
+                                                        bid={undefined}
+                                                        phase={3}
+                                                    />
                                                 </div>
-                                            ))}
-                                        </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Status or Arrow */}
+                            {/* Active indicator stripe */}
                             <div className={`w-1 h-full absolute right-0 top-0 bottom-0 rounded-r-xl transition-all ${isActive ? 'bg-[#d4af37]' : 'bg-transparent group-hover:bg-white/10'}`} />
                         </button>
                     );

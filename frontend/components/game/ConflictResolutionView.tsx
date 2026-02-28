@@ -8,7 +8,10 @@ import Image from 'next/image';
 export interface ConflictResult {
     winnerId: string | null; // null if true draw (and no draw bid wins)
     isDraw: boolean;
-    restart: boolean; // For "Energy Bid" logic
+    restart: boolean; // For "Energy Bid" logic or Politician Draw
+    evictAll: boolean; // For Artist Draw
+    shareRewards: boolean; // For Scientist/Robot Draw
+    usedBid?: string; // Tracks if a bid was actively consumed this round
     logs: string[];
 }
 
@@ -20,6 +23,7 @@ interface ConflictResolutionViewProps {
         opponents: any[]; // { actorId, name, avatar, type, bid? }
         resourceType: string;
     };
+    hasNextConflict?: boolean;
     onResolve: (result: ConflictResult) => void;
     onClose: () => void;
 }
@@ -46,6 +50,16 @@ const BID_ICONS: { [key: string]: string } = {
     'recycle': '/resources/resource_bio.png' // Draw Bid
 };
 
+const RESOURCE_ICONS: { [key: string]: string } = {
+    'glory': '/intangibles/resource_Glory.png',
+    'power': '/intangibles/resource_power.png',
+    'art': '/intangibles/resource_Art.png',
+    'knowledge': '/intangibles/resource_wisdom.png',
+    'product': '/resources/resource_product.png',
+    'energy': '/resources/resource_energy.png',
+    'recycle': '/resources/resource_Recycle.png'
+};
+
 const ACTOR_IMAGES: { [key: string]: string } = {
     'politician': '/actors/Polotican.png',
     'robot': '/actors/Robot.png',
@@ -53,7 +67,10 @@ const ACTOR_IMAGES: { [key: string]: string } = {
     'artist': '/actors/Artist.png'
 };
 
-export default function ConflictResolutionView({ conflict, onResolve, onClose }: ConflictResolutionViewProps) {
+import { useGameState } from '@/context/GameStateContext';
+
+export default function ConflictResolutionView({ conflict, hasNextConflict, onResolve, onClose }: ConflictResolutionViewProps) {
+    const { player } = useGameState();
     const [step, setStep] = useState<'intro' | 'reveal' | 'outcome_rsp' | 'outcome_bid'>('intro');
 
     // State for choices (Player can change theirs in Draw)
@@ -65,16 +82,38 @@ export default function ConflictResolutionView({ conflict, onResolve, onClose }:
 
     // 1. Initialize Opponent Choices (Random for now)
     useEffect(() => {
+        if (conflict.opponents.length === 0) {
+            // Peaceful Mining: No opponents, auto-resolve
+            const res = resolveConflict(playerChoice);
+            setResult(res);
+            setStep('outcome_rsp');
+            return;
+        }
+
         const choices: { [id: string]: string } = {};
         conflict.opponents.forEach(opp => {
             const roll = Math.random();
             choices[opp.actorId] = roll < 0.33 ? 'rock' : roll < 0.66 ? 'paper' : 'scissors';
         });
         setOpponentChoices(choices);
+        setStep('intro');
+        setResult(null);
     }, [conflict]);
 
     // 2. Logic: Resolve the Conflict
-    const resolveConflict = (pChoice: string) => {
+    const resolveConflict = (pChoice: string, applyBids: boolean = true): ConflictResult => {
+        if (conflict.opponents.length === 0) {
+            return {
+                winnerId: 'p1',
+                isDraw: false,
+                restart: false,
+                evictAll: false,
+                shareRewards: false,
+                usedBid: undefined,
+                logs: ["Area secured without opposition."]
+            };
+        }
+
         const choices = [
             { id: 'p1', choice: pChoice, bid: conflict.playerActor.bid, isPlayer: true },
             ...conflict.opponents.map(opp => ({
@@ -114,18 +153,84 @@ export default function ConflictResolutionView({ conflict, onResolve, onClose }:
 
         const winners = isDraw ? [] : choices.filter(c => c.choice === winnerType);
 
-        // Initial Result Object
+        // Initial Result Values
+        let finalWinnerId = winners.length === 1 ? winners[0].id : null;
+        let finalIsDraw = isDraw || winners.length > 1;
+        let finalRestart = false;
+        let finalEvictAll = false;
+        let finalShareRewards = false;
+        const logs: string[] = [];
+
+        // Apply Bids to the outcome BEFORE Actor-specific draw logic
+        // Only apply to P1 for now since opponents don't actively bid yet
+        const p1ChoiceObj = choices.find(c => c.id === 'p1');
+        const p1Bid = applyBids ? p1ChoiceObj?.bid : undefined;
+        let usedBid: string | undefined = undefined;
+
+        let p1Won = finalWinnerId === 'p1';
+        let p1Lost = !p1Won && !finalIsDraw;
+
+        if (p1Bid === 'recycle' && finalIsDraw) {
+            logs.push("Recycle Bid Activated: Player wins the draw!");
+            finalWinnerId = 'p1';
+            finalIsDraw = false;
+            p1Won = true;
+            p1Lost = false;
+            usedBid = 'recycle';
+        }
+
+        if (p1Bid === 'energy' && p1Lost) {
+            logs.push("Energy Bid Activated: Defeat averted, conflict restarts.");
+            finalRestart = true;
+            usedBid = 'energy';
+            // Energy bid forces a restart, bypassing other draw/loss logic
+            return { winnerId: null, isDraw: false, restart: true, evictAll: false, shareRewards: false, usedBid, logs };
+        }
+
+        if (p1Bid === 'product' && p1Won) {
+            usedBid = 'product'; // Track that product was actively used in this successful resolution
+        }
+
+        // Apply Actor-Specific Draw Logic (If STILL a draw after Recycle bid overrides)
+        if (finalIsDraw) {
+            const actorType = conflict.playerActor.actorType.toLowerCase();
+
+            if (actorType === 'politician') {
+                logs.push("Politicians clash in debate: Conflict must be re-resolved.");
+                finalRestart = true; // Handled like an energy bid (shows re-roll screen)
+            } else if (actorType === 'artist') {
+                logs.push("Artists refuse to compromise: All Artists leave the location.");
+                finalEvictAll = true;
+            } else if (actorType === 'scientist' || actorType === 'robot') {
+                logs.push(`${actorType}s find common ground: All remain and share the location.`);
+                finalShareRewards = true;
+                // Treat this as a win for everyone involved in terms of game flow, but handled specially by parent
+            }
+        }
+
         return {
-            winnerId: winners.length === 1 ? winners[0].id : null,
-            isDraw: isDraw || winners.length > 1,
-            restart: false, // Will be checked in Bid Phase
-            logs: [] as string[]
+            winnerId: finalWinnerId,
+            isDraw: finalIsDraw,
+            restart: finalRestart,
+            evictAll: finalEvictAll,
+            shareRewards: finalShareRewards,
+            usedBid,
+            logs
         };
     };
 
     // Handler: "Reveal" Button Click
     const handleReveal = () => {
-        const res = resolveConflict(playerChoice);
+        // If we already have a usedBid from a previous fail/draw, we know bids are burned.
+        // Otherwise, it's the first time, so we apply bids.
+        const areBidsActive = !result?.usedBid && !result?.restart;
+        const res = resolveConflict(playerChoice, areBidsActive);
+
+        // Preserve the usedBid state if it was already burned by an Energy bid
+        if (result?.usedBid && !res.usedBid) {
+            res.usedBid = result.usedBid;
+        }
+
         setResult(res);
         setStep('reveal');
 
@@ -133,11 +238,12 @@ export default function ConflictResolutionView({ conflict, onResolve, onClose }:
         setTimeout(() => setStep('outcome_rsp'), 2000);
     };
 
-    // Handler: Re-Roll (Draw)
-    const handleReRoll = (newChoice: string) => {
-        setPlayerChoice(newChoice);
-        // Optional: Re-roll opponents too?
-        // For fairness/chaos, let's re-roll opponents randomly too
+    // Handler: Trigger a Re-Roll (from Energy Bid or Politician Draw)
+    const handleReRollRequest = () => {
+        // Clear the player's choice so they have to pick again
+        setPlayerChoice('');
+
+        // Let's re-roll opponents randomly for the new attempt
         const newOppChoices: { [id: string]: string } = {};
         conflict.opponents.forEach(opp => {
             const roll = Math.random();
@@ -145,52 +251,44 @@ export default function ConflictResolutionView({ conflict, onResolve, onClose }:
         });
         setOpponentChoices(newOppChoices);
 
-        // Re-calculate immediately
-        const res = resolveConflict(newChoice);
-
-        // Slightly hacky: Set result, but keep step 'outcome_rsp' to update the modal content
-        setResult(res);
+        // Reset the view back to the intro phase so the player can select a new token
+        // We do NOT clear result.usedBid here because we want to remember that bids are burned!
+        // We will pass a flag to handleReveal on the next click to know bids are burned.
+        setStep('intro');
     };
 
     // Handler: Next (Check Bids or Close)
     const handleNext = () => {
         if (!result) return;
 
-        // Check for active bids that affect outcome
-        // 1. Lose Bid (Energy) - if Bidder Lost
-        // 2. Win Bid (Product) - if Bidder Won
-        // 3. Draw Bid (Recycle) - if Draw
-
-        // We need to know who bid what.
-        const playerBid = conflict.playerActor.bid;
-        const playerWon = result.winnerId === 'p1';
-        const playerLost = !playerWon && !result.isDraw;
-
-        let hasBidEffect = false;
-        const newLogs = [...result.logs];
-        let restart = false;
-
-        if (playerBid === 'energy' && playerLost) {
-            hasBidEffect = true;
-            newLogs.push("Energy Bid Triggered: RESTART!");
-            restart = true;
-        } else if (playerBid === 'product' && playerWon) {
-            hasBidEffect = true;
-            newLogs.push("Product Bid: DOUBLE PRIZE!");
-        } else if (playerBid === 'recycle' && result.isDraw) {
-            hasBidEffect = true;
-            newLogs.push("Recycle Bid: DRAW WIN!");
-            // Technically changes result to win? For now just log it.
+        // Bids logic that forces modal steps
+        // Energy/Restart logic (Energy bid or Politician Draw)
+        if (result.restart) {
+            // Need to show "outcome_bid" first if it was an energy bid to explain the restart
+            if (result.usedBid === 'energy' && step !== 'outcome_bid' && !result.isDraw) {
+                setStep('outcome_bid');
+                return;
+            }
+            // If it's a Politician draw, we just transition to 'outcome_rsp' and rely on the UI to show the Re-Roll buttons.
+            if (step !== 'outcome_rsp') {
+                setStep('outcome_rsp');
+            }
         }
 
-        if (hasBidEffect && step !== 'outcome_bid') {
-            setResult({ ...result, logs: newLogs, restart });
-            setStep('outcome_bid');
-            return;
+        // Product Bid logic (Win)
+        if (result.usedBid === 'product' && result.winnerId === 'p1') {
+            if (step !== 'outcome_bid') {
+                // Add the log dynamically right before showing
+                const updatedLogs = [...result.logs, "Product Bid: DOUBLE PRIZE!"];
+                setResult({ ...result, logs: updatedLogs });
+                setStep('outcome_bid');
+                return;
+            }
         }
 
-        // If no bid effect or already showed it -> Confirm & Close
-        onResolve({ ...result, logs: newLogs, restart });
+        // If no bid effect pending or already showed it -> Confirm & Close
+        // Send the usedBid back to page.tsx so it knows whether to double the reward, independent of the initial actor bid state!
+        onResolve(result);
     };
 
     const bgImage = LOCATION_IMAGES[conflict.locId] || LOCATION_IMAGES['square'];
@@ -205,44 +303,67 @@ export default function ConflictResolutionView({ conflict, onResolve, onClose }:
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
+        <div className="absolute inset-0 z-0 flex items-center justify-center bg-black">
             {/* Background Layer */}
             <div className="absolute inset-0 z-0">
                 <Image src={bgImage} fill className="object-cover opacity-80" alt="Backdrop" priority />
             </div>
 
             {/* SCENE: Actors & Tokens */}
-            <div className="relative z-10 w-full max-w-[1400px] h-full flex items-end justify-between px-20 pb-20">
+            <div className="relative z-10 w-full max-w-[1400px] h-full flex items-end justify-between px-10 pb-0">
 
                 {/* Left: Player */}
-                <div className={`relative w-[400px] h-[700px] flex items-end justify-center transition-all duration-1000 ${isActorLoser('p1') ? 'grayscale opacity-60' : ''}`}>
-                    {/* Token Floating Above */}
-                    <motion.div
-                        initial={{ y: -50, opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        className="absolute bottom-[650px] w-32 h-32 z-20"
-                    >
-                        <Image src={RSP_ICONS[playerChoice]} fill className="object-contain drop-shadow-[0_0_20px_rgba(255,255,0,0.5)]" alt="Player Choice" />
-                    </motion.div>
+                <div className={`relative w-[350px] h-[550px] flex items-end justify-center transition-all duration-1000 ${isActorLoser('p1') ? 'grayscale opacity-60' : ''}`}>
+                    {/* Stack Above Head (Bottom to Top: Avatar -> RSP -> Bid) */}
+                    <div className="absolute bottom-[100%] mb-4 flex flex-col-reverse items-center gap-3 z-30">
+                        {/* 1. Player Avatar */}
+                        <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-[#d4af37] shadow-[0_0_15px_rgba(212,175,55,0.4)] relative bg-[#1a1a1c]">
+                            {player && player.avatar && (
+                                <Image src={player.avatar} fill className="object-cover" alt="Player" />
+                            )}
+                        </div>
+                        {/* 2. RSP Token */}
+                        <motion.div
+                            initial={{ scale: 0, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            className="w-24 h-24 relative"
+                        >
+                            {playerChoice ? (
+                                <Image src={RSP_ICONS[playerChoice]} fill className="object-contain drop-shadow-[0_0_20px_rgba(255,255,0,0.5)]" alt="Player Choice" />
+                            ) : (
+                                <div className="w-full h-full rounded-full border-2 border-white/20 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                                    <span className="text-4xl font-bold text-white/50">?</span>
+                                </div>
+                            )}
+                        </motion.div>
+                        {/* 3. Bid Token */}
+                        {conflict.playerActor.bid && (
+                            <div className="w-12 h-12 relative animate-bounce">
+                                <Image src={BID_ICONS[conflict.playerActor.bid]} fill className="object-contain drop-shadow-lg" alt="Bid" />
+                            </div>
+                        )}
+                    </div>
 
                     {/* Actor Body */}
-                    <Image
-                        src={ACTOR_IMAGES[conflict.playerActor.actorType.toLowerCase()] || ACTOR_IMAGES['politician']}
-                        width={500} height={800}
-                        className="object-contain drop-shadow-2xl"
-                        alt="Player"
-                    />
+                    <div className="relative w-full h-[120%]">
+                        <Image
+                            src={ACTOR_IMAGES[conflict.playerActor.actorType.toLowerCase()] || ACTOR_IMAGES['politician']}
+                            fill
+                            className="object-contain object-bottom drop-shadow-[0_0_30px_rgba(0,0,0,0.8)]"
+                            alt="Player Actor"
+                        />
+                    </div>
 
                     {/* Tag */}
-                    <div className="absolute -bottom-10 bg-black/80 px-6 py-2 rounded-full border border-[#d4af37] text-[#d4af37] font-bold text-xl uppercase tracking-widest">
+                    <div className="absolute bottom-8 bg-black/80 px-6 py-2 rounded-full border border-[#d4af37] text-[#d4af37] font-bold text-lg uppercase tracking-widest z-20">
                         YOU
                     </div>
                 </div>
 
                 {/* Center: VS (Only Intro/Reveal) */}
                 {(step === 'intro' || step === 'reveal') && (
-                    <div className="mb-64">
-                        <h1 className="text-[150px] font-black italic text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-500 drop-shadow-[0_0_30px_rgba(255,0,0,0.6)] font-rajdhani">
+                    <div className="mb-48">
+                        <h1 className="text-[120px] font-black italic text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-orange-500 drop-shadow-[0_0_30px_rgba(255,0,0,0.6)] font-rajdhani">
                             VS
                         </h1>
                     </div>
@@ -251,31 +372,52 @@ export default function ConflictResolutionView({ conflict, onResolve, onClose }:
                 {/* Right: Opponents */}
                 <div className="flex gap-10">
                     {conflict.opponents.map((opp, idx) => (
-                        <div key={opp.actorId} className={`relative w-[300px] h-[600px] flex items-end justify-center transition-all duration-1000 ${isActorLoser(opp.actorId) ? 'grayscale opacity-60' : ''}`}>
-                            {/* Token Above */}
-                            <motion.div
-                                initial={{ y: -50, opacity: 0 }}
-                                animate={{ y: step === 'intro' ? 0 : 0, opacity: 1 }}
-                                className="absolute bottom-[550px] w-28 h-28 z-20"
-                            >
-                                {step === 'intro' ? (
-                                    <div className="w-full h-full bg-white/10 backdrop-blur-md rounded-full border border-white/20 animate-pulse flex items-center justify-center">
-                                        <span className="text-4xl">?</span>
+                        <div key={opp.actorId} className={`relative w-[350px] h-[550px] flex items-end justify-center transition-all duration-1000 ${isActorLoser(opp.actorId) ? 'grayscale opacity-60' : ''}`}>
+
+                            {/* Stack Above Head */}
+                            <div className="absolute bottom-[100%] mb-4 flex flex-col-reverse items-center gap-3 z-30">
+                                {/* 1. Opponent Player Avatar */}
+                                <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/40 relative bg-[#1a1a1c]">
+                                    {opp.playerAvatar ? (
+                                        <Image src={opp.playerAvatar} fill className="object-cover" alt={opp.name} />
+                                    ) : (
+                                        <div className="w-full h-full bg-gray-800" />
+                                    )}
+                                </div>
+                                {/* 2. RSP Token */}
+                                <motion.div
+                                    initial={{ scale: 0, opacity: 0 }}
+                                    animate={{ scale: step === 'intro' ? 0.9 : 1, opacity: 1 }}
+                                    className="w-24 h-24 relative"
+                                >
+                                    {step === 'intro' ? (
+                                        <div className="w-full h-full bg-white/10 backdrop-blur-md rounded-full border border-white/20 animate-pulse flex items-center justify-center">
+                                            <span className="text-3xl font-bold text-white/50">?</span>
+                                        </div>
+                                    ) : (
+                                        <Image src={RSP_ICONS[opponentChoices[opp.actorId]]} fill className="object-contain drop-shadow-2xl" alt="Opponent Choice" />
+                                    )}
+                                </motion.div>
+                                {/* 3. Bid Token */}
+                                {opp.bid && (
+                                    <div className="w-12 h-12 relative animate-bounce">
+                                        <Image src={BID_ICONS[opp.bid]} fill className="object-contain drop-shadow-lg" alt="Bid" />
                                     </div>
-                                ) : (
-                                    <Image src={RSP_ICONS[opponentChoices[opp.actorId]]} fill className="object-contain drop-shadow-2xl" alt="Opponent Choice" />
                                 )}
-                            </motion.div>
+                            </div>
 
                             {/* Actor Body */}
-                            <Image
-                                src={ACTOR_IMAGES[opp.actorType?.toLowerCase()] || ACTOR_IMAGES['robot']}
-                                width={400} height={700}
-                                className={`object-contain drop-shadow-2xl ${idx % 2 === 0 ? 'sepia-0' : 'sepia'}`} // Simple variance
-                                alt={opp.name}
-                            />
+                            <div className="relative w-full h-[120%]">
+                                <Image
+                                    src={ACTOR_IMAGES[opp.actorType?.toLowerCase()] || ACTOR_IMAGES['robot']}
+                                    fill
+                                    className={`object-contain object-bottom drop-shadow-[0_0_30px_rgba(0,0,0,0.8)] ${idx % 2 === 0 ? 'sepia-0' : 'sepia'}`}
+                                    alt="Opponent Actor"
+                                />
+                            </div>
 
-                            <div className="absolute -bottom-8 bg-black/80 px-4 py-1 rounded-full border border-white/30 text-white font-bold tracking-wider">
+                            {/* Tag */}
+                            <div className="absolute bottom-8 bg-black/80 px-4 py-1 rounded-full border border-white/30 text-white font-bold tracking-wider z-20">
                                 {opp.name}
                             </div>
                         </div>
@@ -283,15 +425,34 @@ export default function ConflictResolutionView({ conflict, onResolve, onClose }:
                 </div>
             </div>
 
-            {/* BUTTON: Reveal (Intro Only) */}
+            {/* BUTTON / SELECTION: Intro Only */}
             {step === 'intro' && (
-                <div className="absolute bottom-10 z-50">
-                    <button
-                        onClick={handleReveal}
-                        className="px-16 py-4 bg-[#d4af37] text-black font-black text-2xl uppercase tracking-[0.2em] rounded-sm hover:bg-[#ffe066] shadow-[0_0_40px_rgba(212,175,55,0.4)] transition-transform hover:scale-105 active:scale-95"
-                    >
-                        Reveal Conflict
-                    </button>
+                <div className="absolute bottom-10 z-[60] flex flex-col items-center gap-4">
+                    {!playerChoice ? (
+                        <div className="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <p className="text-white font-rajdhani text-xl uppercase tracking-widest bg-black/50 px-6 py-2 rounded-full border border-white/10 backdrop-blur-md">
+                                Select New Argument
+                            </p>
+                            <div className="flex gap-6 bg-black/80 p-4 rounded-2xl border border-white/10 backdrop-blur-md shadow-2xl">
+                                {['rock', 'paper', 'scissors'].map(token => (
+                                    <button
+                                        key={token}
+                                        onClick={() => setPlayerChoice(token)}
+                                        className="w-20 h-20 rounded-full border-2 border-white/20 hover:border-[#d4af37] hover:bg-[#d4af37]/20 transition-all flex items-center justify-center hover:scale-110 shadow-lg"
+                                    >
+                                        <Image src={RSP_ICONS[token]} width={40} height={40} alt={token} />
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <button
+                            onClick={handleReveal}
+                            className="px-16 py-4 bg-[#d4af37] text-black font-black text-2xl uppercase tracking-[0.2em] rounded-sm hover:bg-[#ffe066] shadow-[0_0_40px_rgba(212,175,55,0.4)] transition-transform hover:scale-105 active:scale-95 animate-in zoom-in duration-300"
+                        >
+                            Reveal Conflict
+                        </button>
+                    )}
                 </div>
             )}
 
@@ -308,13 +469,21 @@ export default function ConflictResolutionView({ conflict, onResolve, onClose }:
                             {/* Header */}
                             <div className="bg-[#1a1a20] p-6 border-b border-white/5 text-center">
                                 <h2 className={`font-rajdhani font-bold text-4xl tracking-widest uppercase ${result?.isDraw ? 'text-blue-400' : result?.winnerId === 'p1' ? 'text-[#d4af37]' : 'text-red-500'}`}>
-                                    {result?.isDraw ? 'DRAW' : result?.winnerId === 'p1' ? 'VICTORY' : 'DEFEAT'}
+                                    {result?.isDraw
+                                        ? (result.evictAll ? 'DISMISSED' : result.shareRewards ? 'TRUCE' : 'DRAW')
+                                        : result?.winnerId === 'p1'
+                                            ? (conflict.opponents.length === 0 ? 'SECURED' : 'VICTORY')
+                                            : 'DEFEAT'}
                                 </h2>
                                 <p className="text-white/60 text-sm mt-2 italic font-mono">
                                     {result?.isDraw
-                                        ? "The negotiation stalled. Arguments were inconclusive."
+                                        ? (result.evictAll
+                                            ? "Refusing to compromise, all Artists leave the location."
+                                            : result.shareRewards
+                                                ? "Finding common ground, all actors remain at the location."
+                                                : "The negotiation stalled. A new argument is required.")
                                         : result?.winnerId === 'p1'
-                                            ? "Your arguments prevailed over the opposition."
+                                            ? (conflict.opponents.length === 0 ? "Mining operations secured without opposition." : "Your arguments prevailed over the opposition.")
                                             : "You failed to convince the assembly."
                                     }
                                 </p>
@@ -323,39 +492,65 @@ export default function ConflictResolutionView({ conflict, onResolve, onClose }:
                             {/* Body */}
                             <div className="p-8 flex flex-col items-center gap-8">
 
-                                {/* DRAW: Re-Selection */}
-                                {step === 'outcome_rsp' && result?.isDraw && (
+                                {/* RE-ROLL STATE: Caused by Draw (Politician) OR Energy Bid (Loss) */}
+                                {step === 'outcome_rsp' && result?.restart && (
                                     <div className="flex flex-col items-center gap-4 w-full">
-                                        <p className="text-white text-lg uppercase tracking-widest mb-2">Resolve the dispute. Choose argument:</p>
-                                        <div className="flex gap-6">
-                                            {['rock', 'paper', 'scissors'].map(token => (
-                                                <button
-                                                    key={token}
-                                                    onClick={() => handleReRoll(token)}
-                                                    className={`w-24 h-24 rounded-full border-2 flex items-center justify-center transition-all ${playerChoice === token ? 'bg-[#d4af37]/20 border-[#d4af37] scale-110 shadow-[0_0_20px_#d4af37]' : 'bg-white/5 border-white/20 hover:bg-white/10'}`}
-                                                >
-                                                    <Image src={RSP_ICONS[token]} width={50} height={50} alt={token} />
-                                                </button>
-                                            ))}
+                                        <p className="text-white text-lg uppercase tracking-widest mb-2">
+                                            {result.isDraw ? "Resolve the dispute. Confrontation restarted:" : "Energy Bid active: Confrontation restarted!"}
+                                        </p>
+                                        <div className="flex gap-6 mt-4">
+                                            <button
+                                                onClick={handleReRollRequest}
+                                                className="px-8 py-3 bg-[#d4af37] text-black font-bold uppercase tracking-widest hover:bg-[#ffe066] rounded shadow-[0_0_20px_rgba(212,175,55,0.4)]"
+                                            >
+                                                Select New Argument
+                                            </button>
                                         </div>
                                     </div>
                                 )}
 
-                                {/* WIN/LOSE: Next/Close */}
-                                {step === 'outcome_rsp' && !result?.isDraw && (
+                                {/* WIN/LOSE/SPECIAL-DRAW: Next/Close */}
+                                {step === 'outcome_rsp' && !result?.restart && (
                                     <div className="text-center">
-                                        <div className="w-20 h-20 mx-auto mb-4 bg-white/5 rounded-full flex items-center justify-center border border-white/10">
-                                            <Image
-                                                src={result?.winnerId === 'p1' ? '/icons/icon_check.png' : '/icons/icon_cross.png'} // Fallback icons or use Lucide
-                                                width={40} height={40} alt="Status"
-                                            />
-                                        </div>
-                                        <p className="text-xl font-bold uppercase text-white mb-6">Conflict Resolved</p>
+                                        {result?.winnerId === 'p1' && (
+                                            <div className="flex flex-col items-center">
+                                                <div className="w-24 h-24 mx-auto mb-4 relative flex items-center justify-center bg-white/5 rounded-full border border-white/10">
+                                                    <div className="relative w-16 h-16">
+                                                        <Image
+                                                            src={RESOURCE_ICONS[conflict.resourceType] || '/resources/resource_box.png'}
+                                                            fill className="object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]" alt="Resource Won"
+                                                        />
+                                                    </div>
+                                                    <div className="absolute -bottom-2 right-0 bg-[#d4af37] text-black font-black text-xl px-2 py-0.5 rounded-md border-2 border-black shadow-lg shadow-[#d4af37]/50">
+                                                        +{conflict.playerActor.bid === 'product' ? 2 : 1}
+                                                    </div>
+                                                </div>
+                                                <p className="text-xl font-bold uppercase text-white mb-6">Resource Secured</p>
+                                            </div>
+                                        )}
+                                        {/* Shared Rewards Logic (Scientist/Robot Draw) */}
+                                        {result?.isDraw && result?.shareRewards && (
+                                            <div className="flex flex-col items-center">
+                                                <div className="w-24 h-24 mx-auto mb-4 relative flex items-center justify-center bg-white/5 rounded-full border border-white/10">
+                                                    <div className="relative w-16 h-16">
+                                                        <Image
+                                                            src={RESOURCE_ICONS[conflict.resourceType] || '/resources/resource_box.png'}
+                                                            fill className="object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]" alt="Resource Won"
+                                                        />
+                                                    </div>
+                                                    <div className="absolute -bottom-2 right-0 bg-[#d4af37] text-black font-black text-xl px-2 py-0.5 rounded-md border-2 border-black shadow-lg shadow-[#d4af37]/50">
+                                                        +1
+                                                    </div>
+                                                </div>
+                                                <p className="text-xl font-bold uppercase text-white mb-6">Shared Resource</p>
+                                            </div>
+                                        )}
+                                        {/* If not a winner and not sharing, display nothing but the button */}
                                         <button
                                             onClick={handleNext}
-                                            className="px-10 py-3 bg-[#d4af37] text-black font-bold uppercase tracking-widest rounded hover:bg-[#ffe066]"
+                                            className="px-10 py-3 bg-[#d4af37] text-black font-bold uppercase tracking-widest rounded hover:bg-[#ffe066] mt-4"
                                         >
-                                            Next
+                                            {hasNextConflict ? 'Next Step' : 'Next Phase'}
                                         </button>
                                     </div>
                                 )}

@@ -16,7 +16,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { id, roomName, maxPlayers, hostPlayer, isPrivate } = body;
+        const { id, roomName, maxPlayers, hostPlayer, isPrivate, isTest } = body;
 
         if (!roomName || !hostPlayer) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -26,19 +26,23 @@ export async function POST(request: NextRequest) {
         const displayId = (allGames.length + 1).toString().padStart(3, '0');
 
         const gameId = id || uuidv4();
+
+        const players = [
+            { ...hostPlayer, joinedAt: Date.now() }
+        ];
+
         const newGame: Game = {
             id: gameId,
             displayId,
             roomId: roomName,
             status: 'waiting',
             isPrivate: !!isPrivate,
+            isTest: !!isTest,
             createdAt: Date.now(),
-            players: [
-                { ...hostPlayer, joinedAt: Date.now() }
-            ],
-            maxPlayers: maxPlayers || 4,
+            players: players,
+            maxPlayers: isTest ? 3 : (maxPlayers || 4),
             bidAmount: 0,
-            logs: [formatLog(displayId, `GAME CREATED BY ${hostPlayer.name}`)],
+            logs: [formatLog(displayId, `GAME CREATED BY ${hostPlayer.name}${isTest ? ' [TEST MODE]' : ''}`)],
             transactions: [],
             messages: []
         };

@@ -63,13 +63,16 @@ export default function LobbyPage() {
     const simulationStarted = useRef(false);
 
     useEffect(() => {
-        if (!game || simulationStarted.current || game.players.length > 1 || game.status !== 'waiting') return;
+        if (!game || simulationStarted.current || game.status !== 'waiting') return;
+
+        // Only trigger simulation if it's a test game OR if it's an empty "normal" game (legacy behavior)
+        if (!game.isTest && game.players.length > 1) return;
 
         simulationStarted.current = true;
 
         const simulate = async () => {
-            const ghost = { name: "Ghost", citizenId: "1002", avatar: "/avatars/ghost.png", address: "0x3C44...93BC" };
-            const viper = { name: "Viper", citizenId: "1001", avatar: "/avatars/viper.png", address: "0x7099...79C8" };
+            const ghost = { name: "Ghost", citizenId: "bot-2", avatar: "/avatars/ghost.png", address: "0xBotGhost" };
+            const viper = { name: "Viper", citizenId: "bot-1", avatar: "/avatars/viper.png", address: "0xBotViper" };
 
             // 1. Ghost Joins
             await new Promise(r => setTimeout(r, 2000));
@@ -77,7 +80,7 @@ export default function LobbyPage() {
 
             // 2. Ghost Chats
             await new Promise(r => setTimeout(r, 1500));
-            await fetch(`/api/games/${id}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sender: ghost.name, avatar: ghost.avatar, content: "Hello world!" }) });
+            await fetch(`/api/games/${id}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sender: ghost.name, avatar: ghost.avatar, content: "Hello citizens!" }) });
 
             // 3. Ghost Ready
             await new Promise(r => setTimeout(r, 1500));
@@ -89,7 +92,7 @@ export default function LobbyPage() {
 
             // 5. Viper Chats
             await new Promise(r => setTimeout(r, 1500));
-            await fetch(`/api/games/${id}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sender: viper.name, avatar: viper.avatar, content: "Hello world!" }) });
+            await fetch(`/api/games/${id}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sender: viper.name, avatar: viper.avatar, content: "Ready to strategize." }) });
 
             // 6. Viper Ready
             await new Promise(r => setTimeout(r, 1500));

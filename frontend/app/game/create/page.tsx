@@ -33,6 +33,7 @@ export default function CreateGamePage() {
     const [playerCount, setPlayerCount] = useState(3);
     const [isCreating, setIsCreating] = useState(false);
     const [isPrivate, setIsPrivate] = useState(false);
+    const [isTest, setIsTest] = useState(false);
     const [copied, setCopied] = useState(false);
     const [preGeneratedId, setPreGeneratedId] = useState("");
     const router = useRouter();
@@ -46,7 +47,7 @@ export default function CreateGamePage() {
     const handleCreate = async () => {
         if (!preGeneratedId) return;
         setIsCreating(true);
-        const gameId = await createRoom(roomName, playerCount, isPrivate, preGeneratedId);
+        const gameId = await createRoom(roomName, playerCount, isPrivate, preGeneratedId, isTest);
         if (gameId) {
             router.push(`/game/lobby/${gameId}`);
         }
@@ -152,6 +153,21 @@ export default function CreateGamePage() {
                                     <div className="w-full bg-black/50 border border-white/10 rounded px-4 py-3 text-gray-500 flex justify-between items-center hover:text-[#d4af37] transition-colors hover:border-[#d4af37]/50">
                                         <span>{copied ? "LINK COPIED!" : preGeneratedId ? "Click to copy invite" : "Press to generate"}</span>
                                         {copied ? <Check size={16} className="text-green-500" /> : <Copy size={16} />}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 items-center gap-4">
+                                <label className="text-gray-400 text-sm font-medium uppercase tracking-wider font-rajdhani">Test Game (Bots)</label>
+                                <div className="col-span-2">
+                                    <div
+                                        onClick={() => !isCreating && setIsTest(!isTest)}
+                                        className={`w-full bg-black/50 border border-white/10 rounded px-4 py-3 cursor-pointer flex items-center justify-between transition-colors ${!isCreating && 'hover:border-[#d4af37]'}`}
+                                    >
+                                        <span className={isTest ? "text-[#d4af37]" : "text-gray-500"}>{isTest ? "ON" : "OFF"}</span>
+                                        <div className={`w-5 h-5 rounded border flex items-center justify-center ${isTest ? "border-[#d4af37] bg-[#d4af37]/20" : "border-gray-600"}`}>
+                                            {isTest && <Check size={14} className="text-[#d4af37]" />}
+                                        </div>
                                     </div>
                                 </div>
                             </div>

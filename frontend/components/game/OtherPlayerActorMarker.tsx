@@ -1,9 +1,10 @@
 "use client";
 
 import Image from 'next/image';
+import { useTooltip } from '@/context/TooltipContext';
 
 interface OtherPlayerActorMarkerProps {
-    actor: { type: string, avatar: string, id: string }; // The actor
+    actor: { type: string, avatar: string, headAvatar?: string, id: string, name?: string }; // The actor
     playerAvatar?: string; // The player's citizen avatar
     bid?: string; // Attached resource type
     hasSecretBid?: boolean; // New: indicates a bid exists but is hidden
@@ -12,14 +13,6 @@ interface OtherPlayerActorMarkerProps {
     onClick?: (e: React.MouseEvent) => void;
 }
 
-// Manual face-crop offsets
-const FACE_Offsets: { [key: string]: string } = {
-    'politician': '50% 20%',
-    'scientist': '50% 15%',
-    'artist': '55% 25%',
-    'robot': '50% 20%'
-};
-
 const Resource_Icons: { [key: string]: string } = {
     'product': '/resources/resource_product.png',
     'energy': '/resources/resource_energy.png',
@@ -27,7 +20,7 @@ const Resource_Icons: { [key: string]: string } = {
 };
 
 export default function OtherPlayerActorMarker({ actor, playerAvatar, bid, hasSecretBid, phase, hudScale = 1, onClick }: OtherPlayerActorMarkerProps) {
-    const objectPosition = FACE_Offsets[actor.type.toLowerCase()] || '50% 20%';
+    const { showTooltip, hideTooltip } = useTooltip();
     const phaseScaleAdjust = phase && phase >= 3 ? 1.44 : 1.0;
 
     return (
@@ -37,6 +30,8 @@ export default function OtherPlayerActorMarker({ actor, playerAvatar, bid, hasSe
                 transform: `scale(${hudScale * phaseScaleAdjust})`
             }}
             onClick={onClick}
+            onMouseEnter={() => showTooltip(actor.name || actor.type)}
+            onMouseLeave={hideTooltip}
         >
             {/* Bid Icon Overlay - Styled like GameResources panel */}
             {(bid || hasSecretBid) && (
@@ -83,15 +78,12 @@ export default function OtherPlayerActorMarker({ actor, playerAvatar, bid, hasSe
                     backgroundColor: '#1a1a1c'
                 }}
             >
-                <div className="relative w-full h-full scale-125">
-                    <Image
-                        src={actor.avatar}
-                        fill
-                        className="object-cover"
-                        style={{ objectPosition }}
-                        alt={actor.type}
-                    />
-                </div>
+                <Image
+                    src={actor.headAvatar || actor.avatar}
+                    fill
+                    className="object-cover"
+                    alt={actor.type}
+                />
             </div>
 
             {/* Layer 1b: Player Avatar (Blue Ring Area) */}
@@ -103,7 +95,7 @@ export default function OtherPlayerActorMarker({ actor, playerAvatar, bid, hasSe
              */}
             {playerAvatar && (
                 <div
-                    className="absolute z-20 rounded-full overflow-hidden bg-black/60 border border-blue-500/30"
+                    className="absolute z-30 rounded-full overflow-hidden bg-black/60 border border-blue-500/30"
                     style={{
                         left: '5.5px',
                         top: '69.5px',

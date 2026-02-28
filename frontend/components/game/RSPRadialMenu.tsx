@@ -4,34 +4,22 @@ import React from 'react';
 import Image from 'next/image';
 
 interface RSPRadialMenuProps {
-    actor: { name: string, avatar: string, type: string } | null;
+    actor: { name: string, avatar: string, headAvatar?: string, type: string } | null;
     usedTokens?: string[];
     onSelect: (token: string) => void;
     onCancel: () => void;
 }
 
-// Manual face-crop offsets
-const FACE_Offsets: { [key: string]: string } = {
-    'politician': '50% 20%',
-    'scientist': '50% 15%',
-    'artist': '55% 25%',
-    'robot': '50% 20%'
-};
+const allOptions = [
+    { id: 'rock', icon: '/tokens/rsp_rock.png', x: 43, y: 25 },
+    { id: 'paper', icon: '/tokens/rsp_paper.png', x: 25, y: 84 },
+    { id: 'scissors', icon: '/tokens/rsp_scissors.png', x: 37, y: 146 },
+    { id: 'dummy', icon: '/tokens/rsp_dummy.png', x: 87, y: 186 }
+];
 
 export default function RSPRadialMenu({ actor, usedTokens = [], onSelect, onCancel }: RSPRadialMenuProps) {
     if (!actor) return null;
 
-    const objectPosition = FACE_Offsets[actor.type.toLowerCase()] || '50% 20%';
-
-    // Tokens matching the Red Circle positions from top to bottom/arc
-    const allOptions = [
-        { id: 'rock', icon: '/tokens/rsp_rock.png', x: 43, y: 25 },
-        { id: 'paper', icon: '/tokens/rsp_paper.png', x: 25, y: 84 },
-        { id: 'scissors', icon: '/tokens/rsp_scissors.png', x: 37, y: 146 },
-        { id: 'dummy', icon: '/tokens/rsp_dummy.png', x: 87, y: 186 }
-    ];
-
-    // Filter available options
     const options = allOptions.filter(opt => !usedTokens.includes(opt.id));
 
     return (
@@ -41,25 +29,17 @@ export default function RSPRadialMenu({ actor, usedTokens = [], onSelect, onCanc
                 <path d="M131.687 159.373C171.278 159.373 203.373 127.278 203.373 87.6867C203.373 48.0952 171.278 16 131.687 16C92.0952 16 60 48.0952 60 87.6867C60 127.278 92.0952 159.373 131.687 159.373Z" fill="#23262D" fillOpacity="0.8" />
             </svg>
 
-            {/* Layer 1: Actor Avatar (Green Circle Area) */}
+            {/* Layer 1: Actor Avatar */}
             <div
                 className="absolute z-10 rounded-full overflow-hidden border-2 border-[#d4af37] shadow-inner"
-                style={{
-                    left: '75px',
-                    top: '31px',
-                    width: '113px',
-                    height: '113px'
-                }}
+                style={{ left: '75px', top: '31px', width: '113px', height: '113px' }}
             >
-                <div className="relative w-full h-full scale-125">
-                    <Image
-                        src={actor.avatar}
-                        alt={actor.name}
-                        fill
-                        className="object-cover"
-                        style={{ objectPosition }}
-                    />
-                </div>
+                <Image
+                    src={actor.headAvatar || actor.avatar}
+                    alt={actor.name}
+                    fill
+                    className="object-cover"
+                />
             </div>
 
             {/* Layer 2: Foreground Strokes */}

@@ -1,9 +1,10 @@
 "use client";
 
 import Image from 'next/image';
+import { useTooltip } from '@/context/TooltipContext';
 
 interface PlacedActorMarkerProps {
-    actor: { type: string, avatar: string, id: string };
+    actor: { type: string, avatar: string, headAvatar?: string, id: string, name?: string };
     token?: string; // RSP token id
     bid?: string; // Attached resource type
     isP1: boolean;
@@ -15,13 +16,6 @@ interface PlacedActorMarkerProps {
     onClick?: (e: React.MouseEvent) => void;
 }
 
-const FACE_Offsets: { [key: string]: string } = {
-    'politician': '50% 20%',
-    'scientist': '50% 15%',
-    'artist': '55% 25%',
-    'robot': '50% 20%'
-};
-
 const Resource_Icons: { [key: string]: string } = {
     'product': '/resources/resource_box.png',
     'energy': '/resources/resource_energy.png',
@@ -29,7 +23,7 @@ const Resource_Icons: { [key: string]: string } = {
 };
 
 export default function PlacedActorMarker({ actor, token, bid, isP1, isTeleporting, phase, p3Step, availableTeleportCards, hudScale = 1, onClick }: PlacedActorMarkerProps) {
-    const objectPosition = FACE_Offsets[actor.type.toLowerCase()] || '50% 20%';
+    const { showTooltip, hideTooltip } = useTooltip();
     const phaseScaleAdjust = phase && phase >= 3 ? 1.5 : 1.25;
 
     const canTeleport = phase === 3 && p3Step === 3 && availableTeleportCards && availableTeleportCards > 0 && !isTeleporting;
@@ -41,6 +35,8 @@ export default function PlacedActorMarker({ actor, token, bid, isP1, isTeleporti
                 transform: `scale(${hudScale * phaseScaleAdjust}) ${isTeleporting ? 'scale(1.2)' : ''}`
             }}
             onClick={onClick}
+            onMouseEnter={() => showTooltip(actor.name || actor.type)}
+            onMouseLeave={hideTooltip}
         >
             {/* Phase 3 Interactions: Bidding & Teleport */}
             {phase === 3 && (
@@ -119,15 +115,12 @@ export default function PlacedActorMarker({ actor, token, bid, isP1, isTeleporti
                     backgroundColor: '#1a1a1c'
                 }}
             >
-                <div className="relative w-full h-full scale-125">
-                    <Image
-                        src={actor.avatar}
-                        fill
-                        className="object-cover"
-                        style={{ objectPosition }}
-                        alt={actor.type}
-                    />
-                </div>
+                <Image
+                    src={actor.headAvatar || actor.avatar}
+                    fill
+                    className="object-cover"
+                    alt={actor.type}
+                />
             </div>
 
             {/* Layer 1b: RSP Token */}

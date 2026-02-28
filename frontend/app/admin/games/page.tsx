@@ -134,7 +134,12 @@ export default function AdminGamesPage() {
                                     <td className="px-8 py-6">
                                         <div className="flex flex-col">
                                             <span className="text-lg font-bold font-rajdhani text-white uppercase tracking-wider group-hover:text-[#d4af37] transition-colors">{game.roomId}</span>
-                                            <span className="text-[10px] text-gray-500 font-mono tracking-tight mt-1 opacity-50">{game.id}</span>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className="text-[10px] text-gray-500 font-mono tracking-tight opacity-50">{game.id}</span>
+                                                {game.isTest && (
+                                                    <span className="text-[8px] bg-[#d4af37]/20 text-[#d4af37] border border-[#d4af37]/30 px-1.5 py-0.5 rounded font-bold uppercase tracking-widest">Test</span>
+                                                )}
+                                            </div>
                                         </div>
                                     </td>
                                     <td className="px-8 py-6 text-center">
@@ -154,9 +159,9 @@ export default function AdminGamesPage() {
                                     </td>
                                     <td className="px-8 py-6 text-center">
                                         <div className="flex flex-col items-center">
-                                            <span className="text-white font-mono font-bold text-lg">{game.players.length} / {game.maxPlayers}</span>
+                                            <span className="text-white font-mono font-bold text-lg">{(game.players || []).length} / {game.maxPlayers}</span>
                                             <div className="flex -space-x-2 mt-2 opacity-50 group-hover:opacity-100 transition-opacity">
-                                                {game.players.map((p, i) => (
+                                                {(game.players || []).map((p, i) => (
                                                     <div key={i} className="w-6 h-6 rounded-full border border-[#d4af37]/30 overflow-hidden bg-black" title={p.name}>
                                                         <img src={p.avatar || '/avatars/default.png'} alt={p.name} className="w-full h-full object-cover" />
                                                     </div>
@@ -221,7 +226,7 @@ export default function AdminGamesPage() {
                             {selectedGame && selectedGame.logs && selectedGame.logs.length > 0 ? (
                                 [...selectedGame.logs].reverse().map((log, i) => (
                                     <div key={i} className="flex gap-4 group animate-in slide-in-from-left-2 duration-300">
-                                        <span className="text-[#d4af37]/30 text-[10px] font-mono mt-1 shrink-0">#{String(selectedGame.logs.length - i).padStart(3, '0')}</span>
+                                        <span className="text-[#d4af37]/30 text-[10px] font-mono mt-1 shrink-0">#{String((selectedGame.logs || []).length - i).padStart(3, '0')}</span>
                                         <p className="text-gray-300 font-medium tracking-wide leading-relaxed border-l border-white/5 pl-4 group-hover:border-[#d4af37]/30 transition-colors">
                                             {log}
                                         </p>

@@ -36,4 +36,5 @@ export interface Game {
     transactions: GameTransaction[];
     messages: ChatMessage[]; // New: Chat history
     startTime?: number; // New: Game start timestamp
+    isTest?: boolean;
 }

@@ -5,23 +5,14 @@ import Image from 'next/image';
 import { useTooltip } from '@/context/TooltipContext';
 
 interface ActorOrbProps {
-    actor: { id: string; avatar: string; name: string; type: string };
+    actor: { id: string; avatar: string; headAvatar?: string; name: string; type: string };
     isSelected: boolean;
     onSelect: () => void;
     onHover?: () => void;
     onLeave?: () => void;
 }
 
-// Manual face-crop offsets for the known big actor images
-const FACE_Offsets: { [key: string]: string } = {
-    'politician': '50% 20%',
-    'scientist': '50% 15%',
-    'artist': '55% 25%',
-    'robot': '50% 20%'
-};
-
 export default function ActorOrb({ actor, isSelected, onSelect, onHover, onLeave }: ActorOrbProps) {
-    const objectPosition = FACE_Offsets[actor.type.toLowerCase()] || '50% 20%';
     const { showTooltip, hideTooltip } = useTooltip();
 
     const handleEnter = () => {
@@ -57,15 +48,12 @@ export default function ActorOrb({ actor, isSelected, onSelect, onHover, onLeave
                     backgroundColor: '#1a1a1c'
                 }}
             >
-                <div className="relative w-full h-full scale-125">
-                    <Image
-                        src={actor.avatar}
-                        fill
-                        className="object-cover"
-                        style={{ objectPosition }}
-                        alt={actor.name}
-                    />
-                </div>
+                <Image
+                    src={actor.headAvatar || actor.avatar}
+                    fill
+                    className="object-cover"
+                    alt={actor.name}
+                />
             </div>
 
             {/* Layer 2: Foreground Rings/Borders */}

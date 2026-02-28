@@ -25,18 +25,18 @@ import { formatLog } from '@/lib/logUtils';
 import { EVENTS, LOCATIONS, ACTION_CARDS, getConflicts, ALLOWED_MOVES } from '@/data/gameConstants';
 
 // --- MOCK DATA FOR ACTORS (Assuming these will come from State/Wallet later) ---
-const ACTOR_TYPES: { [key: string]: { name: string, avatar: string } } = {
-    "politician": { name: "Politician", avatar: "/actors/Polotican.png" },
-    "robot": { name: "Robot", avatar: "/actors/Robot.png" },
-    "scientist": { name: "Scientist", avatar: "/actors/Scientist.png" },
-    "artist": { name: "Artist", avatar: "/actors/Artist.png" }
+const ACTOR_TYPES: { [key: string]: { name: string, avatar: string, headAvatar: string } } = {
+    "politician": { name: "Politician", avatar: "/actors/Polotican.png", headAvatar: "/actors/Politican_head.png" },
+    "robot": { name: "Robot", avatar: "/actors/Robot.png", headAvatar: "/actors/Robot_head.png" },
+    "scientist": { name: "Scientist", avatar: "/actors/Scientist.png", headAvatar: "/actors/Scientist_head.png" },
+    "artist": { name: "Artist", avatar: "/actors/Artist.png", headAvatar: "/actors/Artist_head.png" }
 };
 
 const MY_ACTORS = [
-    { id: "a1", type: "politician", avatar: ACTOR_TYPES.politician.avatar, name: ACTOR_TYPES.politician.name },
-    { id: "a3", type: "scientist", avatar: ACTOR_TYPES.scientist.avatar, name: ACTOR_TYPES.scientist.name },
-    { id: "a4", type: "artist", avatar: ACTOR_TYPES.artist.avatar, name: ACTOR_TYPES.artist.name },
-    { id: "a2", type: "robot", avatar: ACTOR_TYPES.robot.avatar, name: ACTOR_TYPES.robot.name }
+    { id: "a1", type: "politician", avatar: ACTOR_TYPES.politician.avatar, headAvatar: ACTOR_TYPES.politician.headAvatar, name: ACTOR_TYPES.politician.name },
+    { id: "a3", type: "scientist", avatar: ACTOR_TYPES.scientist.avatar, headAvatar: ACTOR_TYPES.scientist.headAvatar, name: ACTOR_TYPES.scientist.name },
+    { id: "a4", type: "artist", avatar: ACTOR_TYPES.artist.avatar, headAvatar: ACTOR_TYPES.artist.headAvatar, name: ACTOR_TYPES.artist.name },
+    { id: "a2", type: "robot", avatar: ACTOR_TYPES.robot.avatar, headAvatar: ACTOR_TYPES.robot.headAvatar, name: ACTOR_TYPES.robot.name }
 ];
 
 const PLAYERS = [
@@ -47,15 +47,15 @@ const PLAYERS = [
 
 const AUTO_PLACEMENTS = [
     // Viper (p2)
-    { actorId: "v1", playerId: "p2", locId: "square", type: "rock", isOpponent: true, name: "Politician", actorType: "politician", avatar: "/actors/Polotican.png", bid: "product" },
-    { actorId: "v2", playerId: "p2", locId: "factory", type: "paper", isOpponent: true, name: "Robot", actorType: "robot", avatar: "/actors/Robot.png", bid: "energy" },
-    { actorId: "v3", playerId: "p2", locId: "university", type: "scissors", isOpponent: true, name: "Scientist", actorType: "scientist", avatar: "/actors/Scientist.png" },
-    { actorId: "v4", playerId: "p2", locId: "theatre", type: "rock", isOpponent: true, name: "Artist", actorType: "artist", avatar: "/actors/Artist.png" },
+    { actorId: "v1", playerId: "p2", locId: "square", type: "rock", isOpponent: true, name: "Politician", actorType: "politician", avatar: "/actors/Polotican.png", headAvatar: "/actors/Politican_head.png", bid: "product" },
+    { actorId: "v2", playerId: "p2", locId: "factory", type: "paper", isOpponent: true, name: "Robot", actorType: "robot", avatar: "/actors/Robot.png", headAvatar: "/actors/Robot_head.png", bid: "energy" },
+    { actorId: "v3", playerId: "p2", locId: "university", type: "scissors", isOpponent: true, name: "Scientist", actorType: "scientist", avatar: "/actors/Scientist.png", headAvatar: "/actors/Scientist_head.png" },
+    { actorId: "v4", playerId: "p2", locId: "theatre", type: "rock", isOpponent: true, name: "Artist", actorType: "artist", avatar: "/actors/Artist.png", headAvatar: "/actors/Artist_head.png" },
     // Ghost (p3)
-    { actorId: "g1", playerId: "p3", locId: "university", type: "scissors", isOpponent: true, name: "Politician", actorType: "politician", avatar: "/actors/Polotican.png", bid: "recycle" },
-    { actorId: "g2", playerId: "p3", locId: "dump", type: "rock", isOpponent: true, name: "Robot", actorType: "robot", avatar: "/actors/Robot.png" },
-    { actorId: "g3", playerId: "p3", locId: "theatre", type: "paper", isOpponent: true, name: "Scientist", actorType: "scientist", avatar: "/actors/Scientist.png" },
-    { actorId: "g4", playerId: "p3", locId: "square", type: "scissors", isOpponent: true, name: "Artist", actorType: "artist", avatar: "/actors/Artist.png" },
+    { actorId: "g1", playerId: "p3", locId: "university", type: "scissors", isOpponent: true, name: "Politician", actorType: "politician", avatar: "/actors/Polotican.png", headAvatar: "/actors/Politican_head.png", bid: "recycle" },
+    { actorId: "g2", playerId: "p3", locId: "dump", type: "rock", isOpponent: true, name: "Robot", actorType: "robot", avatar: "/actors/Robot.png", headAvatar: "/actors/Robot_head.png" },
+    { actorId: "g3", playerId: "p3", locId: "theatre", type: "paper", isOpponent: true, name: "Scientist", actorType: "scientist", avatar: "/actors/Scientist.png", headAvatar: "/actors/Scientist_head.png" },
+    { actorId: "g4", playerId: "p3", locId: "square", type: "scissors", isOpponent: true, name: "Artist", actorType: "artist", avatar: "/actors/Artist.png", headAvatar: "/actors/Artist_head.png" },
 ];
 
 interface OpponentData {
@@ -76,19 +76,39 @@ export default function GameBoardPage() {
     // Initialize opponents data dynamically
     useEffect(() => {
         const initialOpponents: Record<string, OpponentData> = {};
-        PLAYERS.forEach(opp => {
-            initialOpponents[opp.id] = {
-                id: opp.id,
-                resources: {
-                    gato: 1000,
-                    product: 1, energy: 1, recycle: 1,
-                    power: 0, art: 0, knowledge: 0, glory: 0, vp: 0
-                },
-                cards: {}
-            };
-        });
+
+        // Use game players if available (especially for bots)
+        if (game && game.players) {
+            game.players.forEach((p: any) => {
+                if (p.citizenId !== player.citizenId) {
+                    const id = p.citizenId || p.address;
+                    initialOpponents[id] = {
+                        id,
+                        resources: {
+                            gato: 1000,
+                            product: 1, energy: 1, recycle: 1,
+                            power: 0, art: 0, knowledge: 0, glory: 0, vp: 0
+                        },
+                        cards: {}
+                    };
+                }
+            });
+        } else {
+            // Fallback for simulation
+            PLAYERS.forEach(opp => {
+                initialOpponents[opp.id] = {
+                    id: opp.id,
+                    resources: {
+                        gato: 1000,
+                        product: 1, energy: 1, recycle: 1,
+                        power: 0, art: 0, knowledge: 0, glory: 0, vp: 0
+                    },
+                    cards: {}
+                };
+            });
+        }
         setOpponentsData(initialOpponents);
-    }, []);
+    }, [game, player.citizenId]);
 
     // Fetch Specific Game Data
     useEffect(() => {
@@ -100,7 +120,41 @@ export default function GameBoardPage() {
                 if (res.ok) {
                     const data = await res.json();
                     setGame(data);
-                    // Sync turn/phase if needed, but for now we keep local for simulation
+
+                    // IF TEST GAME: Initialize resources and cards
+                    if (data.isTest && !game) { // Only do this once
+                        // Set my resources
+                        ['product', 'energy', 'recycle', 'power', 'art', 'knowledge', 'glory'].forEach(r => {
+                            updateResource(r, 2);
+                        });
+
+                        // Set my cards (2 of each)
+                        const testHand: any[] = [];
+                        ACTION_CARDS.forEach(card => {
+                            testHand.push({ ...card, instanceId: `${card.id}_1` });
+                            testHand.push({ ...card, instanceId: `${card.id}_2` });
+                        });
+                        setActionHand(testHand);
+
+                        // Set opponent resources
+                        setOpponentsData(prev => {
+                            const next = { ...prev };
+                            data.players.forEach((p: any) => {
+                                if (p.citizenId !== player.citizenId) {
+                                    next[p.citizenId || p.address] = {
+                                        id: p.citizenId || p.address,
+                                        resources: {
+                                            gato: 1000,
+                                            product: 2, energy: 2, recycle: 2,
+                                            power: 2, art: 2, knowledge: 2, glory: 2, vp: 0
+                                        },
+                                        cards: ACTION_CARDS.reduce((acc: any, c) => ({ ...acc, [c.id]: 2 }), {})
+                                    };
+                                }
+                            });
+                            return next;
+                        });
+                    }
                 }
             } catch (e) {
                 console.error("Fetch game error", e);
@@ -110,7 +164,7 @@ export default function GameBoardPage() {
         fetchGame();
         const interval = setInterval(fetchGame, 2000);
         return () => clearInterval(interval);
-    }, [id]);
+    }, [id, game, player.citizenId, updateResource]);
 
     // --- Opponent Emulation ---
     useEffect(() => {
@@ -125,7 +179,22 @@ export default function GameBoardPage() {
 
         await new Promise(r => setTimeout(r, 1500));
 
-        const opponentActions = AUTO_PLACEMENTS;
+        // Map hardcoded bot IDs to actual joined bot IDs if in test mode
+        const botMap: Record<string, string> = {};
+        if (game.isTest) {
+            botMap['p2'] = 'bot-1';
+            botMap['p3'] = 'bot-2';
+            botMap['p4'] = 'bot-3'; // Just in case
+        } else {
+            botMap['p2'] = 'p2';
+            botMap['p3'] = 'p3';
+            botMap['p4'] = 'p4';
+        }
+
+        const opponentActions = AUTO_PLACEMENTS.map(action => ({
+            ...action,
+            playerId: botMap[action.playerId] || action.playerId
+        }));
 
         for (const action of opponentActions) {
             setPlacedActors(prev => {
@@ -144,7 +213,9 @@ export default function GameBoardPage() {
                     return next;
                 });
             }
-            const playerName = PLAYERS.find(p => p.id === action.playerId)?.name || action.playerId;
+            // Resolve name from game players if possible
+            const playerInfo = game.players.find((p: any) => (p.citizenId || p.address) === action.playerId);
+            const playerName = playerInfo?.name || PLAYERS.find(p => p.id === action.playerId)?.name || action.playerId;
             await addLog(`${playerName} placed ${action.name} with ${action.type.toUpperCase()} to ${action.locId}`);
 
             await new Promise(r => setTimeout(r, 600)); // Increased delay for stability
@@ -200,10 +271,11 @@ export default function GameBoardPage() {
     const [biddingActorId, setBiddingActorId] = useState<string | null>(null);
     const [p3Step, setP3Step] = useState<1 | 2 | 3 | 4>(1); // 1: Bidding, 2: Stop, 3: Teleport, 4: Exchange
     const [actionHand, setActionHand] = useState<any[]>([]);
+    const [activationEffect, setActivationEffect] = useState<string | null>(null);
 
     const filteredActionHand = useMemo(() => {
         if (p3Step === 1) return [];
-        if (p3Step === 2) return actionHand.filter(c => c.type === 'location');
+        if (p3Step === 2) return actionHand.filter(c => c.type === 'turn off location');
         if (p3Step === 3) return actionHand.filter(c => c.id.includes('relocation') || c.id.includes('teleport'));
         if (p3Step === 4) return actionHand.filter(c => c.id.includes('change_values') || c.id.includes('exchange'));
         return [];
@@ -239,9 +311,8 @@ export default function GameBoardPage() {
             // if (activeConflictLocId === locId) return; // Removed to allow all conflicts
 
             // Conflict if > 1 actor AND location not disabled
-            // Conflict if > 1 actor AND location not disabled
-            if (actors.length > 1 && !disabledLocations.includes(locId)) {
-
+            // Process locations where player 1 has actors, ignoring disabled locations
+            if (!disabledLocations.includes(locId)) {
                 // Find all player actors at this location
                 const myActorsAtLoc = actors.filter(a => a.playerId === 'p1');
 
@@ -252,38 +323,39 @@ export default function GameBoardPage() {
                         a.actorType === playerActorRaw.actorType
                     );
 
-                    if (sameTypeOpponents.length > 0) {
-                        // Enhance playerActor with full details including avatar
-                        const playerActorSource = MY_ACTORS.find(p => p.id === playerActorRaw.actorId);
-                        const playerActor = {
-                            ...playerActorRaw,
-                            avatar: playerActorSource?.avatar || '',
-                            name: playerActorSource?.name || 'My Actor',
-                            type: playerActorSource?.type || playerActorRaw.type || 'unknown'
-                        };
+                    // We now process both Conflicts (>0 opponents) and Peaceful Resolutions (0 opponents)
+                    const playerActorSource = MY_ACTORS.find(p => p.id === playerActorRaw.actorId);
+                    const playerActor = {
+                        ...playerActorRaw,
+                        avatar: playerActorSource?.avatar || '',
+                        headAvatar: playerActorSource?.headAvatar || '',
+                        // playerActorRaw.type holds the RSP token (rock/paper/scissors)
+                        type: playerActorRaw.type || playerActorSource?.type || 'unknown',
+                        actorType: playerActorSource?.type || 'unknown'
+                    };
 
-                        const locDef = LOCATIONS.find(l => l.id === locId);
+                    const locDef = LOCATIONS.find(l => l.id === locId);
 
-                        // Unique ID per conflict instance (Location + ActorType)
-                        const uniqueConflictId = `${locId}_${playerActor.type}`;
+                    // Unique ID per conflict instance (Location + ActorType)
+                    const uniqueConflictId = `${locId}_${playerActor.type}`;
 
-                        // Don't duplicate if already added OR resolved
-                        if (conflicts.find(c => c.locId === uniqueConflictId)) return;
-                        if (resolvedConflicts.includes(uniqueConflictId)) return;
+                    // Don't duplicate if already added OR resolved
+                    if (conflicts.find(c => c.locId === uniqueConflictId)) return;
+                    if (resolvedConflicts.includes(uniqueConflictId)) return;
 
-                        conflicts.push({
-                            locId: uniqueConflictId,
-                            realLocId: locId,
-                            locationName: locDef?.name || locId,
-                            playerActor,
-                            opponents: sameTypeOpponents.map(o => ({
-                                ...o,
-                                name: PLAYERS.find(p => p.id === o.playerId)?.name || 'Unknown',
-                                playerAvatar: PLAYERS.find(p => p.id === o.playerId)?.avatar || '',
-                            })),
-                            resourceType: locDef?.resource || 'glory'
-                        });
-                    }
+                    conflicts.push({
+                        locId: uniqueConflictId,
+                        realLocId: locId,
+                        locationName: locDef?.name || locId,
+                        playerActor,
+                        opponents: sameTypeOpponents.map(o => ({
+                            ...o,
+                            name: PLAYERS.find(p => p.id === o.playerId)?.name || 'Unknown',
+                            playerAvatar: PLAYERS.find(p => p.id === o.playerId)?.avatar || '',
+                        })),
+                        resourceType: locDef?.resource || 'glory',
+                        isPeaceful: sameTypeOpponents.length === 0
+                    });
                 });
             }
         });
@@ -301,32 +373,60 @@ export default function GameBoardPage() {
         addLog(`Conflict at ${activeConflictLocId} complete.`);
         result.logs.forEach(l => addLog(`> ${l}`));
 
+        // Clear used bids from the actor so they don't apply on re-rolls
+        if (result.usedBid) {
+            setPlacedActors(prev => prev.map(actor => {
+                if (actor.actorId === currentConflict?.playerActor.actorId) {
+                    return { ...actor, bid: undefined };
+                }
+                return actor;
+            }));
+        }
+
         if (result.restart) {
             // Logic to restart: Close modal so user can click sidebar again
-            addLog("Conflict is restarting due to Lose Bid...");
+            addLog("Conflict is restarting due to Lose Bid or Politician Draw...");
             setActiveConflictLocId(null);
             return;
         }
 
+        const realLocId = currentConflict?.realLocId;
+        const locDef = LOCATIONS.find(l => l.id === realLocId);
+
+        // Handle Artist Eviction
+        if (result.evictAll) {
+            addLog("Draw: All players evicted from location.");
+            setPlacedActors(prev => prev.filter(actor => actor.locId !== realLocId));
+        }
+
         // Logic for Reward
-        if (result.winnerId === 'p1') {
-            const locDef = LOCATIONS.find(l => l.id === activeConflictLocId);
+        if (result.winnerId === 'p1' || result.shareRewards) {
             if (locDef) {
-                // Double prize check inside result logs? Or logic here?
-                // Modal logic pushed "Product Bid! DOUBLE PRIZE!" log.
-                // We should check the player's bid to trust the state.
                 const actor = placedActors.find(a => a.actorId === currentConflict?.playerActor.actorId);
-                const isDouble = actor?.bid === 'product';
+                // Double prize only if they actually bid product and won (not just shared a draw)
+                const isDouble = result.winnerId === 'p1' && actor?.bid === 'product';
                 const baseReward = 1;
                 const finalReward = isDouble ? 2 : baseReward;
 
                 updateResource(locDef.resource, (resources as any)[locDef.resource] + finalReward);
                 addLog(`You won ${finalReward} ${locDef.resource.toUpperCase()}!`);
+            } else {
+                addLog(`Error: Could not find location definition for ${realLocId}`);
             }
         }
 
         // Mark as resolved
-        setResolvedConflicts(prev => [...prev, activeConflictLocId]);
+        setResolvedConflicts(prev => {
+            const updated = [...prev, activeConflictLocId];
+
+            // If this was the absolute last conflict, auto-advance phase
+            const remaining = activeConflicts.filter(c => !updated.includes(c.locId)).length;
+            if (remaining === 0) {
+                setTimeout(() => handleNextPhase(), 300); // slight delay to allow modal to close smoothly before phase transition
+            }
+
+            return updated;
+        });
         setActiveConflictLocId(null);
     };
 
@@ -425,16 +525,20 @@ export default function GameBoardPage() {
         setPendingPlacement(null);
     };
 
-    // Generic Card Action Handler
-    const handleCardAction = (cardId: string, locId: string) => {
-        // Implement "Stopping Locations" logic (Phase 3 Step 2)
-        if (p3Step === 2) {
-            setDisabledLocations(prev => [...prev, locId]);
-            addLog(`${player.name || '080'} disabled ${locId}`);
-            // Decrement card... (Assuming unlimited for now or need similar logic to teleport)
+    const handleCardActivate = (card: any) => {
+        if (!card) return;
 
-            // Simple card consumption from hand simulation
-            const cardIndex = actionHand.findIndex(c => c.type === 'location'); // roughly
+        // Visual Feedback
+        setActivationEffect(card.title);
+        setTimeout(() => setActivationEffect(null), 2000);
+
+        // Turn Off Location Logic
+        if (card.type === 'turn off location' && card.disables) {
+            setDisabledLocations(prev => [...prev, card.disables]);
+            addLog(`${player.name || '080'} activated ${card.title} - ${card.disables} is now DISABLED`);
+
+            // Consume card
+            const cardIndex = actionHand.findIndex(c => c.id === card.id);
             if (cardIndex !== -1) {
                 setActionHand(prev => {
                     const newHand = [...prev];
@@ -443,6 +547,10 @@ export default function GameBoardPage() {
                 });
             }
         }
+    };
+
+    const handleCardAction = (cardId: string, locId: string) => {
+        // ... (this might be deprecated now for Turn Off Location if we use double click on card)
     }
 
     const handleHexClick = async (locId: string) => {
@@ -657,12 +765,20 @@ export default function GameBoardPage() {
             setPhase(nextPhase);
             // Reset P3 step when leaving P3
             if (nextPhase !== 3) setP3Step(1);
+
+            if (nextPhase === 5) {
+                // Remove all actors from the board at the end of Phase 4
+                setPlacedActors([]);
+                setResolvedConflicts([]);
+            }
+
             addLog(`${player.name || '080'} ready`);
             addLog(`PHASE ${nextPhase}`);
         } else {
             setPhase(1);
             setP3Step(1);
             setTurn(t => t + 1);
+            setPlacedActors([]); // Safety clearing for next turn
             addLog(`TURN ${turn + 1} BEGINS`);
         }
     };
@@ -736,11 +852,12 @@ export default function GameBoardPage() {
 
                     {/* Phase 4: Conflict Resolution Modal */}
                     {phase === 4 && activeConflictLocId && currentConflict && (
-                        <div className="absolute inset-0 z-[60] pointer-events-auto">
+                        <div className="absolute inset-0 z-0 pointer-events-auto">
                             <ConflictResolutionView
                                 conflict={currentConflict}
                                 onResolve={handleConflictResolve}
                                 onClose={() => setActiveConflictLocId(null)}
+                                hasNextConflict={activeConflicts.filter(c => !resolvedConflicts.includes(c.locId)).length > 1}
                             />
                         </div>
                     )}
@@ -771,10 +888,24 @@ export default function GameBoardPage() {
                             <ActionCardsPanel
                                 cards={filteredActionHand}
                                 onSelect={setActiveCardId}
+                                onActivate={handleCardActivate}
                                 activeCardId={activeCardId}
                                 emptyMessage="NO ACTION CARDS"
                                 compact={p3Step >= 3}
                             />
+                        )}
+
+                        {/* Activation Feedback Overlay */}
+                        {activationEffect && (
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[300] pointer-events-none animate-in fade-in zoom-in duration-300">
+                                <div className="px-12 py-6 bg-[#d4af37] text-black rounded-full shadow-[0_0_50px_rgba(212,175,55,0.6)] border-4 border-white/20">
+                                    <div className="text-center">
+                                        <span className="block text-[10px] uppercase font-black tracking-[0.4em] opacity-60 mb-1">Action Card</span>
+                                        <span className="text-3xl font-bold uppercase font-rajdhani tracking-wider">ACTIVATED</span>
+                                        <span className="block text-sm font-bold mt-1 opacity-80">{activationEffect}</span>
+                                    </div>
+                                </div>
+                            </div>
                         )}
                     </div>
 
@@ -784,8 +915,8 @@ export default function GameBoardPage() {
                     {/* Bottom Right: Next Phase Button */}
                     {/* Bottom Right: Next Phase Button */}
                     <div className="absolute bottom-10 right-10 pointer-events-auto">
-                        {/* Only show Next Phase if not in Phase 2 OR if all actors distributed */}
-                        {(phase !== 2 || availableActors.length === 0) && (
+                        {/* Only show Next Phase if not in Phase 2 OR if all actors distributed. And in Phase 4, only if all conflicts are resolved. */}
+                        {((phase !== 2 || availableActors.length === 0) && (phase !== 4 || activeConflicts.filter(c => !resolvedConflicts.includes(c.locId)).length === 0)) && (
                             <button
                                 onClick={handleNextPhase}
                                 className="px-8 py-3 bg-[#d4af37] text-black font-bold rounded-lg shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:bg-[#ffe066] transition-all transform hover:scale-105 active:scale-95 uppercase tracking-widest text-xs"
