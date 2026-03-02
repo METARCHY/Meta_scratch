@@ -4,10 +4,12 @@ import { Game } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { formatLog } from '@/lib/logUtils';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        const { searchParams } = new URL(request.url);
+        const all = searchParams.get('all') === 'true';
         const games = gameService.getAll();
-        return NextResponse.json(games);
+        return NextResponse.json(all ? games : games.filter(g => g.status !== 'deleted'));
     } catch (error) {
         return NextResponse.json({ error: 'Failed to fetch games' }, { status: 500 });
     }

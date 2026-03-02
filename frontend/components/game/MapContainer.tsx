@@ -22,6 +22,7 @@ interface MapContainerProps {
     playerActorsV2: any[];
     players: any[];
     availableTeleportCards?: number;
+    availableExchangeCards?: number;
     onHexClick: (locId: string) => void;
     onPlayerClick: (actor: any, event: React.MouseEvent) => void;
 }
@@ -47,6 +48,7 @@ export default function MapContainer({
     playerActorsV2,
     players,
     availableTeleportCards,
+    availableExchangeCards,
     onHexClick,
     onPlayerClick
 }: MapContainerProps) {
@@ -237,7 +239,6 @@ export default function MapContainer({
                                                 className="absolute pointer-events-auto transition-all duration-700"
                                                 style={{
                                                     transform: `translateX(${currentX}px) translateY(${finalY}px)`,
-                                                    filter: disabledLocations.includes(loc.id) ? 'grayscale(1) opacity(0.8)' : 'none'
                                                 }}
                                             >
                                                 <OtherPlayerActorMarker
@@ -245,7 +246,10 @@ export default function MapContainer({
                                                     playerAvatar={playerAvatar}
                                                     bid={phase >= 4 ? a.bid : undefined}
                                                     hasSecretBid={phase === 3 && !!a.bid}
+                                                    isDisabled={disabledLocations.includes(loc.id)}
                                                     phase={phase}
+                                                    p3Step={p3Step}
+                                                    availableExchangeCards={availableExchangeCards}
                                                     hudScale={hudScale}
                                                     onClick={(e) => { e.stopPropagation(); onPlayerClick(a, e) }}
                                                 />
@@ -260,7 +264,6 @@ export default function MapContainer({
                                             className="absolute pointer-events-auto transition-all duration-700"
                                             style={{
                                                 transform: `translateX(${currentX}px) translateY(${finalY}px)`,
-                                                filter: disabledLocations.includes(loc.id) ? 'grayscale(1) opacity(0.8)' : 'none'
                                             }}
                                         >
 
@@ -270,6 +273,7 @@ export default function MapContainer({
                                                 bid={a.bid}
                                                 isP1={true}
                                                 isTeleporting={teleportSource === a.actorId}
+                                                isDisabled={disabledLocations.includes(loc.id)}
                                                 phase={phase}
                                                 p3Step={p3Step}
                                                 availableTeleportCards={availableTeleportCards}

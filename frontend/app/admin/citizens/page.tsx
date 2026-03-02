@@ -140,7 +140,7 @@ export default function AdminCitizensPage() {
                                     </td>
                                     <td className="px-8 py-6">
                                         <span className="text-gray-500 text-[10px] font-medium tracking-widest uppercase">
-                                            {new Date(citizen.joinedAt).toLocaleDateString()}
+                                            {new Date(citizen.joinedAt).toLocaleString('en-US')}
                                         </span>
                                     </td>
                                     <td className="px-8 py-6 text-right">

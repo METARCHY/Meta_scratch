@@ -17,7 +17,9 @@ if (!fs.existsSync(gamesFilePath)) {
 function readGames(): Game[] {
     try {
         const fileData = fs.readFileSync(gamesFilePath, 'utf-8');
-        return JSON.parse(fileData);
+        const parsed = JSON.parse(fileData);
+        // Filter out invalid entries without an id to prevent ghost games
+        return parsed.filter((g: any) => g && g.id);
     } catch (error) {
         console.error("Error reading games file:", error);
         return [];
@@ -84,13 +86,42 @@ export const gameService = {
 
     delete: (id: string): boolean => {
         const games = readGames();
-        const initialLength = games.length;
-        const remainingGames = games.filter(g => g.id !== id);
+        const index = games.findIndex(g => g.id === id);
+        if (index === -1) return false;
 
-        if (remainingGames.length < initialLength) {
-            writeGames(remainingGames);
+        games[index] = { ...games[index], status: 'deleted', deletedAt: Date.now() };
+        writeGames(games);
+        return true;
+    },
+
+    restore: (id: string): boolean => {
+        const games = readGames();
+        const index = games.findIndex(g => g.id === id);
+        if (index === -1) return false;
+
+        const { deletedAt, ...rest } = games[index] as any;
+        games[index] = { ...rest, status: 'finished' };
+        writeGames(games);
+        return true;
+    },
+
+    hardDelete: (id: string): boolean => {
+        const games = readGames();
+        const initialLength = games.length;
+        const remaining = games.filter(g => g.id !== id);
+        if (remaining.length < initialLength) {
+            writeGames(remaining);
             return true;
         }
         return false;
+    },
+
+    deleteAllActive: (): void => {
+        const games = readGames();
+        const now = Date.now();
+        const updatedGames = games.map(g =>
+            g.status !== 'deleted' ? { ...g, status: 'deleted' as const, deletedAt: now } : g
+        );
+        writeGames(updatedGames);
     }
 };

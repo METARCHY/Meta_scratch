@@ -25,7 +25,7 @@ export interface Game {
     id: string; // Game Hash
     displayId?: string; // Sequential ID (e.g. 001)
     roomId: string; // Readable name
-    status: 'waiting' | 'playing' | 'finished';
+    status: 'waiting' | 'playing' | 'finished' | 'deleted';
     isPrivate: boolean;
     createdAt: number;
     players: Player[];
@@ -37,4 +37,5 @@ export interface Game {
     messages: ChatMessage[]; // New: Chat history
     startTime?: number; // New: Game start timestamp
     isTest?: boolean;
+    deletedAt?: number; // Soft delete timestamp
 }

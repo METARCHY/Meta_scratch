@@ -19,6 +19,9 @@ import ActionCardsPanel from "@/components/game/ActionCardsPanel";
 import ExchangeModal from "@/components/game/ExchangeModal";
 import ConflictsSidebar from "@/components/game/ConflictsSidebar";
 import ConflictResolutionView, { ConflictResult } from "@/components/game/ConflictResolutionView";
+import MarketOfferModal, { MarketOffer } from '@/components/game/MarketOfferModal';
+import MarketRevealModal from '@/components/game/MarketRevealModal';
+import BuyActionCardModal from '@/components/game/BuyActionCardModal';
 import { formatLog } from '@/lib/logUtils';
 
 // Constants
@@ -76,6 +79,7 @@ export default function GameBoardPage() {
     // Initialize opponents data dynamically
     useEffect(() => {
         const initialOpponents: Record<string, OpponentData> = {};
+        const isTest = game?.isTest;
 
         // Use game players if available (especially for bots)
         if (game && game.players) {
@@ -84,12 +88,16 @@ export default function GameBoardPage() {
                     const id = p.citizenId || p.address;
                     initialOpponents[id] = {
                         id,
-                        resources: {
+                        resources: isTest ? {
+                            gato: 1000,
+                            product: 2, energy: 2, recycle: 2,
+                            power: 2, art: 2, knowledge: 2, glory: 2, vp: 0
+                        } : {
                             gato: 1000,
                             product: 1, energy: 1, recycle: 1,
                             power: 0, art: 0, knowledge: 0, glory: 0, vp: 0
                         },
-                        cards: {}
+                        cards: isTest ? ACTION_CARDS.reduce((acc: any, c) => ({ ...acc, [c.id]: 2 }), {}) : {}
                     };
                 }
             });
@@ -98,12 +106,16 @@ export default function GameBoardPage() {
             PLAYERS.forEach(opp => {
                 initialOpponents[opp.id] = {
                     id: opp.id,
-                    resources: {
+                    resources: isTest ? {
+                        gato: 1000,
+                        product: 2, energy: 2, recycle: 2,
+                        power: 2, art: 2, knowledge: 2, glory: 2, vp: 0
+                    } : {
                         gato: 1000,
                         product: 1, energy: 1, recycle: 1,
                         power: 0, art: 0, knowledge: 0, glory: 0, vp: 0
                     },
-                    cards: {}
+                    cards: isTest ? ACTION_CARDS.reduce((acc: any, c) => ({ ...acc, [c.id]: 2 }), {}) : {}
                 };
             });
         }
@@ -136,24 +148,7 @@ export default function GameBoardPage() {
                         });
                         setActionHand(testHand);
 
-                        // Set opponent resources
-                        setOpponentsData(prev => {
-                            const next = { ...prev };
-                            data.players.forEach((p: any) => {
-                                if (p.citizenId !== player.citizenId) {
-                                    next[p.citizenId || p.address] = {
-                                        id: p.citizenId || p.address,
-                                        resources: {
-                                            gato: 1000,
-                                            product: 2, energy: 2, recycle: 2,
-                                            power: 2, art: 2, knowledge: 2, glory: 2, vp: 0
-                                        },
-                                        cards: ACTION_CARDS.reduce((acc: any, c) => ({ ...acc, [c.id]: 2 }), {})
-                                    };
-                                }
-                            });
-                            return next;
-                        });
+                        // Opponent resources are now initialized in the useEffect above to prevent overwrites
                     }
                 }
             } catch (e) {
@@ -166,12 +161,141 @@ export default function GameBoardPage() {
         return () => clearInterval(interval);
     }, [id, game, player.citizenId, updateResource]);
 
+    useEffect(() => {
+        if (phase === 4) {
+            resolveBotOnlyConflicts();
+        }
+    }, [phase]);
+
     // --- Opponent Emulation ---
     useEffect(() => {
         if (phase === 2 && !opponentsReady && game) {
             triggerOpponentPlacements();
         }
     }, [phase, game, opponentsReady]);
+
+    const triggerBotPhase3Actions = async (step: number) => {
+        if (!game) return;
+        const mainPlayerId = player.citizenId || player.address || 'p1';
+        const opponents = dynamicPlayers.filter(p => p.id !== mainPlayerId);
+
+        for (const opp of opponents) {
+            // 50% chance a bot performs an action in a sub-phase
+            if (Math.random() < 0.5) {
+                if (step === 2) { // Stopping Locations
+                    const targetLoc = LOCATIONS[Math.floor(Math.random() * LOCATIONS.length)];
+                    setDisabledLocations(prev => [...prev, targetLoc.id]);
+                    await addLog(`${opp.name} activated Under Construction - ${targetLoc.name.toUpperCase()} is now DISABLED`);
+                } else if (step === 3) { // Relocation
+                    const botActors = placedActors.filter(a => a.playerId === opp.id);
+                    if (botActors.length > 0) {
+                        const actorToMove = botActors[Math.floor(Math.random() * botActors.length)];
+                        const allowed = ALLOWED_MOVES[actorToMove.actorType] || [];
+                        const targetLoc = allowed[Math.floor(Math.random() * allowed.length)] || actorToMove.locId;
+
+                        setPlacedActors(prev => prev.map(a =>
+                            (a.actorId === actorToMove.actorId) ? { ...a, locId: targetLoc } : a
+                        ));
+                        await addLog(`${opp.name} used Relocation to move ${actorToMove.name || actorToMove.actorType} to ${targetLoc.toUpperCase()}`);
+                    }
+                } else if (step === 4) { // Exchange
+                    const resTypes = ['POWER', 'ART', 'KNOWLEDGE'];
+                    const give = resTypes[Math.floor(Math.random() * 3)];
+                    let take = resTypes[Math.floor(Math.random() * 3)];
+                    while (take === give) take = resTypes[Math.floor(Math.random() * 3)];
+
+                    await addLog(`${opp.name} used Change of Values: exchanged ${give} for ${take} with the Bank`);
+                }
+            }
+            await new Promise(r => setTimeout(r, 800));
+        }
+    };
+
+    const resolveBotOnlyConflicts = async () => {
+        if (phase !== 4) return;
+
+        const groups: { [key: string]: any[] } = {};
+        placedActors.forEach(p => {
+            if (disabledLocations.includes(p.locId)) return;
+            const key = `${p.locId}_${p.actorType}`;
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(p);
+        });
+
+        for (const [key, actors] of Object.entries(groups)) {
+            if (resolvedConflicts.includes(key)) continue;
+            if (actors.some(a => a.playerId === 'p1')) continue;
+
+            const [locId, actorType] = key.split('_');
+            const locDef = LOCATIONS.find(l => l.id === locId);
+            const realLocName = locDef?.name || locId.toUpperCase();
+
+            if (actors.length === 1) {
+                const bot = actors[0];
+                const botName = dynamicPlayers.find(p => p.id === bot.playerId)?.name || 'Bot';
+
+                let resource = '';
+                if (bot.actorType === 'politician') resource = 'POWER';
+                else if (bot.actorType === 'scientist') resource = 'KNOWLEDGE';
+                else if (bot.actorType === 'artist') resource = 'ART';
+                else if (bot.actorType === 'robot') resource = (locDef?.resource || 'PRODUCT').toUpperCase();
+
+                await addLog(`${botName} has no rivals at ${realLocName}. They won 1 ${resource}!`);
+
+                setOpponentsData(prev => {
+                    const next = { ...prev };
+                    if (!next[bot.playerId]) return prev;
+                    const res = { ...next[bot.playerId].resources } as any;
+                    const resKey = resource.toLowerCase();
+                    res[resKey] = (res[resKey] || 0) + 1;
+                    next[bot.playerId] = { ...next[bot.playerId], resources: res };
+                    return next;
+                });
+            } else {
+                const tokens = ['ROCK', 'PAPER', 'SCISSORS'];
+                const bot1 = actors[0];
+                const bot2 = actors[1];
+
+                const t1 = tokens[Math.floor(Math.random() * 3)];
+                const t2 = tokens[Math.floor(Math.random() * 3)];
+
+                const b1Name = dynamicPlayers.find(p => p.id === bot1.playerId)?.name || 'Bot 1';
+                const b2Name = dynamicPlayers.find(p => p.id === bot2.playerId)?.name || 'Bot 2';
+
+                await addLog(`Conflict at ${realLocName}: ${b1Name} (${t1}) vs ${b2Name} (${t2})`);
+
+                if (t1 === t2) {
+                    await addLog(`It's a DRAW at ${realLocName}! Both ${bot1.actorType}s evicted.`);
+                    setPlacedActors(prev => prev.filter(a => !(a.locId === locId && a.actorType === bot1.actorType)));
+                } else {
+                    const wins: any = { 'ROCK': 'SCISSORS', 'SCISSORS': 'PAPER', 'PAPER': 'ROCK' };
+                    const winner = wins[t1] === t2 ? bot1 : bot2;
+                    const winnerName = dynamicPlayers.find(p => p.id === winner.playerId)?.name || 'Bot';
+
+                    let resource = '';
+                    if (winner.actorType === 'politician') resource = 'POWER';
+                    else if (winner.actorType === 'scientist') resource = 'KNOWLEDGE';
+                    else if (winner.actorType === 'artist') resource = 'ART';
+                    else if (winner.actorType === 'robot') resource = (locDef?.resource || 'PRODUCT').toUpperCase();
+
+                    await addLog(`${winnerName} WON at ${realLocName} and received 1 ${resource}!`);
+
+                    setOpponentsData(prev => {
+                        const next = { ...prev };
+                        if (!next[winner.playerId]) return prev;
+                        const res = { ...next[winner.playerId].resources } as any;
+                        const resKey = resource.toLowerCase();
+                        res[resKey] = (res[resKey] || 0) + 1;
+                        next[winner.playerId] = { ...next[winner.playerId], resources: res };
+                        return next;
+                    });
+                }
+            }
+            // Mark as resolved ONLY if p1 not involved
+            setResolvedConflicts(prev => [...prev, key]);
+            await new Promise(r => setTimeout(r, 800));
+        }
+    };
 
     const triggerOpponentPlacements = async () => {
         if (!game) return;
@@ -216,7 +340,8 @@ export default function GameBoardPage() {
             // Resolve name from game players if possible
             const playerInfo = game.players.find((p: any) => (p.citizenId || p.address) === action.playerId);
             const playerName = playerInfo?.name || PLAYERS.find(p => p.id === action.playerId)?.name || action.playerId;
-            await addLog(`${playerName} placed ${action.name} with ${action.type.toUpperCase()} to ${action.locId}`);
+            const betText = action.bid ? ` (Bet on ${action.bid === 'product' ? 'WIN' : action.bid === 'energy' ? 'LOSE' : 'DRAW'})` : "";
+            await addLog(`${playerName} placed ${action.name} with ${action.type.toUpperCase()} to ${action.locId.toUpperCase()}${betText}`);
 
             await new Promise(r => setTimeout(r, 600)); // Increased delay for stability
         }
@@ -266,10 +391,14 @@ export default function GameBoardPage() {
     const [activeCardId, setActiveCardId] = useState<string | null>(null);
     const [activatedCards, setActivatedCards] = useState<string[]>([]);
     const [disabledLocations, setDisabledLocations] = useState<string[]>([]);
-    const [exchangeTarget, setExchangeTarget] = useState<{ id: string, name: string, x: number, y: number } | null>(null);
+    const [exchangeTarget, setExchangeTarget] = useState<{ id: string, name: string, avatar: string } | null>(null);
     const [teleportSource, setTeleportSource] = useState<string | null>(null);
     const [biddingActorId, setBiddingActorId] = useState<string | null>(null);
     const [p3Step, setP3Step] = useState<1 | 2 | 3 | 4>(1); // 1: Bidding, 2: Stop, 3: Teleport, 4: Exchange
+    const [p5Step, setP5Step] = useState<1 | 2 | 3>(1); // 1: Market Offer, 2: Market Reveal, 3: Buy Cards
+    const [playerMarketOffer, setPlayerMarketOffer] = useState<MarketOffer | null>(null);
+    const [botMarketOffers, setBotMarketOffers] = useState<{ [id: string]: MarketOffer | null }>({});
+    const [marketMatchId, setMarketMatchId] = useState<string | null>(null);
     const [actionHand, setActionHand] = useState<any[]>([]);
     const [activationEffect, setActivationEffect] = useState<string | null>(null);
 
@@ -295,6 +424,39 @@ export default function GameBoardPage() {
     // Phase 4: Conflicts
     const [activeConflictLocId, setActiveConflictLocId] = useState<string | null>(null);
     const [resolvedConflicts, setResolvedConflicts] = useState<string[]>([]);
+
+    // Construct dynamic player list
+    const dynamicPlayers = useMemo(() => {
+        const mainPlayer = {
+            id: player.citizenId || player.address || 'p1',
+            name: player.name || '080',
+            avatar: player.avatar || '/avatars/golden_avatar.png',
+            address: player.address
+        };
+
+        if (!game) return [mainPlayer, PLAYERS[0], PLAYERS[1]];
+
+        // Filter out current player from joined players to find opponents
+        const otherPlayers = game.players
+            .filter((p: any) => {
+                if (player.citizenId && p.citizenId === player.citizenId) return false;
+                if (player.address && p.address === player.address) return false;
+                if (p.name && p.name === (player.name || '080')) return false;
+                if (!player.citizenId && !player.address && p === game.players[0]) return false;
+                return true;
+            })
+            .map((p: any, index: number) => ({
+                ...p,
+                id: p.citizenId || p.address || p.id || `bot-${index + 1}`, // Ensure consistent 'id' field
+                name: p.name || PLAYERS[index]?.name || 'Citizen',
+                avatar: p.avatar || PLAYERS[index]?.avatar || '/avatars/ghost.png'
+            }));
+
+        const opponent1 = otherPlayers.length > 0 ? otherPlayers[0] : PLAYERS[0];
+        const opponent2 = otherPlayers.length > 1 ? otherPlayers[1] : PLAYERS[1];
+
+        return [mainPlayer, opponent1, opponent2];
+    }, [player.citizenId, player.address, player.name, player.avatar, game?.players, game?.isTest]);
 
     // Conflict Detection Logic (Local override of gameConstants version)
     const activeConflicts = useMemo(() => {
@@ -350,8 +512,8 @@ export default function GameBoardPage() {
                         playerActor,
                         opponents: sameTypeOpponents.map(o => ({
                             ...o,
-                            name: PLAYERS.find(p => p.id === o.playerId)?.name || 'Unknown',
-                            playerAvatar: PLAYERS.find(p => p.id === o.playerId)?.avatar || '',
+                            name: dynamicPlayers.find(p => p.id === o.playerId)?.name || PLAYERS.find(p => p.id === o.playerId)?.name || 'Unknown',
+                            playerAvatar: dynamicPlayers.find(p => p.id === o.playerId)?.avatar || PLAYERS.find(p => p.id === o.playerId)?.avatar || '',
                         })),
                         resourceType: locDef?.resource || 'glory',
                         isPeaceful: sameTypeOpponents.length === 0
@@ -360,7 +522,7 @@ export default function GameBoardPage() {
             }
         });
         return conflicts;
-    }, [phase, placedActors, disabledLocations, resolvedConflicts]);
+    }, [phase, placedActors, disabledLocations, resolvedConflicts, dynamicPlayers]);
 
     // Derived: Current Active Conflict Object
     const currentConflict = useMemo(() => {
@@ -370,8 +532,8 @@ export default function GameBoardPage() {
     const handleConflictResolve = (result: ConflictResult) => {
         if (!activeConflictLocId) return;
 
-        addLog(`Conflict at ${activeConflictLocId} complete.`);
-        result.logs.forEach(l => addLog(`> ${l}`));
+        // Detailed conflict logs are passed from ConflictResolutionView
+        result.logs.forEach(l => addLog(`${l}`));
 
         // Clear used bids from the actor so they don't apply on re-rolls
         if (result.usedBid) {
@@ -393,25 +555,44 @@ export default function GameBoardPage() {
         const realLocId = currentConflict?.realLocId;
         const locDef = LOCATIONS.find(l => l.id === realLocId);
 
-        // Handle Artist Eviction
+        // Handle Tie Eviction (Only evict the specific actor types involved in the tie)
         if (result.evictAll) {
-            addLog("Draw: All players evicted from location.");
-            setPlacedActors(prev => prev.filter(actor => actor.locId !== realLocId));
+            const tieActorType = currentConflict?.playerActor.actorType;
+            addLog(`Draw: All ${tieActorType}s evicted from location.`);
+            setPlacedActors(prev => prev.filter(actor => !(actor.locId === realLocId && actor.actorType === tieActorType)));
         }
 
         // Logic for Reward
         if (result.winnerId === 'p1' || result.shareRewards) {
-            if (locDef) {
-                const actor = placedActors.find(a => a.actorId === currentConflict?.playerActor.actorId);
-                // Double prize only if they actually bid product and won (not just shared a draw)
-                const isDouble = result.winnerId === 'p1' && actor?.bid === 'product';
-                const baseReward = 1;
-                const finalReward = isDouble ? 2 : baseReward;
+            const actor = placedActors.find(a => a.actorId === currentConflict?.playerActor.actorId);
 
-                updateResource(locDef.resource, (resources as any)[locDef.resource] + finalReward);
-                addLog(`You won ${finalReward} ${locDef.resource.toUpperCase()}!`);
-            } else {
-                addLog(`Error: Could not find location definition for ${realLocId}`);
+            if (actor) {
+                // Determine which resource this actor should receive based on their type
+                const actorType = actor.actorType?.toLowerCase();
+                let earnedResource = '';
+
+                if (actorType === 'politician') {
+                    earnedResource = 'power';
+                } else if (actorType === 'scientist') {
+                    earnedResource = 'knowledge';
+                } else if (actorType === 'artist') {
+                    earnedResource = 'art';
+                } else if (actorType === 'robot') {
+                    // Only robots earn the resource defined by the location itself
+                    earnedResource = locDef?.resource || '';
+                }
+
+                if (earnedResource) {
+                    // Double prize only if they actually bid product and won (not just shared a draw)
+                    const isDouble = result.winnerId === 'p1' && actor.bid === 'product';
+                    const baseReward = 1;
+                    const finalReward = isDouble ? 2 : baseReward;
+
+                    updateResource(earnedResource, (resources as any)[earnedResource] + finalReward);
+                    addLog(`${player.name || '080'} won ${finalReward} ${earnedResource.toUpperCase()}!`);
+                } else {
+                    addLog(`Error: Could not determine resource reward for actor ${actorType} at ${realLocId}`);
+                }
             }
         }
 
@@ -435,25 +616,7 @@ export default function GameBoardPage() {
     const usedRSPs = placedActors.filter(p => p.playerId === "p1").map(p => p.type);
     const availableActors = MY_ACTORS.filter(a => !placedActors.find(p => p.actorId === a.id));
 
-    // Construct dynamic player list
-    const dynamicPlayers = useMemo(() => {
-        const mainPlayer = {
-            id: 'p1',
-            name: player.name || '080',
-            avatar: player.avatar || '/avatars/golden_avatar.png',
-            address: player.address
-        };
 
-        if (!game) return [mainPlayer, PLAYERS[0], PLAYERS[1]];
-
-        // Filter out current player from joined players to find opponents
-        const otherPlayers = game.players.filter((p: any) => p.citizenId !== player.citizenId);
-
-        const opponent1 = otherPlayers.length > 0 ? otherPlayers[0] : PLAYERS[0];
-        const opponent2 = otherPlayers.length > 1 ? otherPlayers[1] : PLAYERS[1];
-
-        return [mainPlayer, opponent1, opponent2];
-    }, [player, game]);
 
     // VP Calculation logic
     const vp = useMemo(() => {
@@ -487,24 +650,43 @@ export default function GameBoardPage() {
         let msg = "";
 
         if (currentEvent.type === "discard") {
-            const maxOpponentDiscard = Math.floor(Math.random() * 4);
+            const oppDiscards = dynamicPlayers
+                .filter(p => (p.citizenId || p.address) !== player.citizenId)
+                .map(p => {
+                    const amount = Math.floor(Math.random() * 4);
+                    return { name: p.name, amount };
+                });
+
+            const maxOpponentDiscard = Math.max(...oppDiscards.map(o => o.amount), 0);
             win = discardAmount > maxOpponentDiscard;
             const currentAmount = (resources as any)[currentEvent.targetResource] || 0;
             updateResource(currentEvent.targetResource, Math.max(0, currentAmount - discardAmount));
+
             msg = win
-                ? `You discarded ${discardAmount} (Opponent max: ${maxOpponentDiscard}). You WIN an Action Card!`
-                : `You discarded ${discardAmount} (Opponent max: ${maxOpponentDiscard}). You lost.`;
+                ? `${player.name || '080'} discarded ${discardAmount} (Opponents: ${oppDiscards.map(o => `${o.name} discarded ${o.amount}`).join(', ')}). ${player.name || '080'} WON an Action Card!`
+                : `${player.name || '080'} discarded ${discardAmount} (Opponents: ${oppDiscards.map(o => `${o.name} discarded ${o.amount}`).join(', ')}). ${player.name || '080'} lost.`;
         } else {
-            const opponentStats = [1, 2, 3].map(() => Math.floor(Math.random() * 6) + 1);
+            const oppStats = dynamicPlayers
+                .filter(p => (p.citizenId || p.address) !== player.citizenId)
+                .map(p => {
+                    const id = p.citizenId || p.address;
+                    const amount = (opponentsData[id]?.resources as any)?.[currentEvent.targetResource] || 0;
+                    return { name: p.name, amount };
+                });
+
             const myStat = (resources as any)[currentEvent.targetResource] || 0;
             if (currentEvent.winCondition === "min") {
-                const minOpponent = Math.min(...opponentStats);
+                const minOpponent = Math.min(...oppStats.map(o => o.amount), Infinity);
                 win = myStat < minOpponent;
-                msg = win ? "You WIN Glory!" : "You lost.";
+                msg = win
+                    ? `${player.name || '080'} WON Glory! (Stats: ${player.name || '080'}: ${myStat}, ${oppStats.map(o => `${o.name}: ${o.amount}`).join(', ')})`
+                    : `${player.name || '080'} lost. (Stats: ${player.name || '080'}: ${myStat}, ${oppStats.map(o => `${o.name}: ${o.amount}`).join(', ')})`;
             } else {
-                const maxOpponent = Math.max(...opponentStats);
+                const maxOpponent = Math.max(...oppStats.map(o => o.amount), -1);
                 win = myStat > maxOpponent;
-                msg = win ? "You WIN Glory!" : "You lost.";
+                msg = win
+                    ? `${player.name || '080'} WON Glory! (Stats: ${player.name || '080'}: ${myStat}, ${oppStats.map(o => `${o.name}: ${o.amount}`).join(', ')})`
+                    : `${player.name || '080'} lost. (Stats: ${player.name || '080'}: ${myStat}, ${oppStats.map(o => `${o.name}: ${o.amount}`).join(', ')})`;
             }
         }
 
@@ -574,7 +756,7 @@ export default function GameBoardPage() {
             if (actor.type === 'robot') {
                 const validTargets = ALLOWED_MOVES[actor.type];
                 if (!validTargets?.includes(locId)) {
-                    addLog(`Invalid move for Robot! Must move to ${validTargets?.join(', ')}`);
+                    addLog(`Invalid move for Robot! Must move to ${validTargets?.map(t => t.toUpperCase()).join(', ')}`);
                     return;
                 }
             }
@@ -593,7 +775,8 @@ export default function GameBoardPage() {
                 });
             }
 
-            await addLog(`${player.name || '080'} teleported ${actor.type} to ${locId}`);
+            const actorSource = MY_ACTORS.find(a => a.id === actor.actorId);
+            await addLog(`${player.name || '080'} teleported ${actorSource?.name || actor.actorType} with ${actor.type.toUpperCase()} to ${locId.toUpperCase()}`);
             return;
         }
 
@@ -635,7 +818,7 @@ export default function GameBoardPage() {
             setSelectedActorId(null);
 
 
-            addLog(`${player.name || '080'} placed ${actor?.name} with ${type.toUpperCase()} to ${pendingPlacement.locId}`);
+            addLog(`${player.name || '080'} placed ${actor?.name} with ${type.toUpperCase()} to ${pendingPlacement.locId.toUpperCase()}`);
         }
     };
 
@@ -756,6 +939,14 @@ export default function GameBoardPage() {
                 setP3Step(nextStep);
                 const stepNames = ["", "BIDDING", "STOPPING LOCATIONS", "RELOCATION", "EXCHANGE"];
                 addLog(`${player.name || '080'} advanced to ${stepNames[nextStep]}`);
+
+                // Log opponents ready for the next sub-step
+                const mainPlayerId = player.citizenId || player.address || 'p1';
+                dynamicPlayers.filter(p => p.id !== mainPlayerId).forEach(opp => {
+                    addLog(`${opp.name} is ready for ${stepNames[nextStep]}`);
+                });
+
+                triggerBotPhase3Actions(nextStep);
                 return;
             }
         }
@@ -765,22 +956,115 @@ export default function GameBoardPage() {
             setPhase(nextPhase);
             // Reset P3 step when leaving P3
             if (nextPhase !== 3) setP3Step(1);
+            if (nextPhase === 5) setP5Step(1);
 
             if (nextPhase === 5) {
                 // Remove all actors from the board at the end of Phase 4
                 setPlacedActors([]);
                 setResolvedConflicts([]);
+                // Clear any locations disabled by action cards this turn
+                setDisabledLocations([]);
             }
 
             addLog(`${player.name || '080'} ready`);
+            const mainPlayerId = player.citizenId || player.address || 'p1';
+            dynamicPlayers.filter(p => p.id !== mainPlayerId).forEach(opp => {
+                addLog(`${opp.name} ready`);
+            });
             addLog(`PHASE ${nextPhase}`);
         } else {
             setPhase(1);
             setP3Step(1);
             setTurn(t => t + 1);
             setPlacedActors([]); // Safety clearing for next turn
+            setDisabledLocations([]); // Safety clearing for next turn
             addLog(`TURN ${turn + 1} BEGINS`);
         }
+    };
+
+    // Phase 5 handlers
+    const handleMarketOfferConfirm = (offer: MarketOffer | null) => {
+        setPlayerMarketOffer(offer);
+
+        // Generate Bot Offers and Log them
+        const offers: { [id: string]: MarketOffer | null } = {};
+        let foundMatch: string | null = null;
+        const RESOURCE_TYPES = ['product', 'energy', 'recycle'] as const;
+
+        const mainPlayerId = player.citizenId || player.address || 'p1';
+        const opponents = dynamicPlayers.filter(p => p.id !== mainPlayerId);
+
+        opponents.forEach(opp => {
+            // 30% chance a bot doesn't trade
+            if (Math.random() < 0.3) {
+                offers[opp.id] = null;
+                addLog(`${opp.name} skipped the Market`);
+                return;
+            }
+
+            // For the MVP, if the player made an offer, there's a 40% chance ONE bot will perfectly match it
+            if (offer && !foundMatch && Math.random() < 0.4) {
+                offers[opp.id] = {
+                    giveType: offer.takeType,
+                    giveAmount: offer.takeAmount,
+                    takeType: offer.giveType,
+                    takeAmount: offer.giveAmount
+                };
+                foundMatch = opp.id;
+            } else {
+                // Random sensible offer (1-2 resources for 1-2 resources)
+                const giveT = RESOURCE_TYPES[Math.floor(Math.random() * 3)];
+                let takeT = RESOURCE_TYPES[Math.floor(Math.random() * 3)];
+                while (takeT === giveT) takeT = RESOURCE_TYPES[Math.floor(Math.random() * 3)];
+
+                offers[opp.id] = {
+                    giveType: giveT,
+                    giveAmount: Math.floor(Math.random() * 2) + 1,
+                    takeType: takeT,
+                    takeAmount: Math.floor(Math.random() * 2) + 1
+                };
+            }
+
+            const botOffer = offers[opp.id];
+            if (botOffer) {
+                addLog(`${opp.name} offered ${botOffer.giveAmount} ${botOffer.giveType.toUpperCase()} for ${botOffer.takeAmount} ${botOffer.takeType.toUpperCase()}`);
+            }
+        });
+
+        setBotMarketOffers(offers);
+        setMarketMatchId(foundMatch);
+        setP5Step(2);
+    };
+
+    const handleMarketRevealComplete = (tradePartnerId: string | null) => {
+        if (tradePartnerId && playerMarketOffer) {
+            updateResource(playerMarketOffer.giveType as any, -playerMarketOffer.giveAmount);
+            updateResource(playerMarketOffer.takeType as any, playerMarketOffer.takeAmount);
+            addLog(`${player.name || '080'} successfully traded with ${dynamicPlayers.find(p => p.id === tradePartnerId)?.name}!`);
+        } else {
+            addLog(`${player.name || '080'} continued without a trade`);
+        }
+        setP5Step(3);
+    };
+
+    const handleBuyActionCard = (card: any) => {
+        updateResource('product', -1);
+        updateResource('energy', -1);
+        updateResource('recycle', -1);
+
+        const mappedCard = {
+            ...card,
+            id: `card_${Date.now()}_${Math.random()}`, // Truly unique ID
+            instanceId: `${card.id}_${Date.now()}`
+        };
+        setActionHand(prev => [...prev, mappedCard]);
+        addLog(`${player.name || '080'} purchased action card: ${card.title}`);
+        handleNextPhase();
+    };
+
+    const handleSkipBuyActionCard = () => {
+        addLog(`${player.name || '080'} skipped buying action card`);
+        handleNextPhase();
     };
 
     // --- Render ---
@@ -800,10 +1084,12 @@ export default function GameBoardPage() {
                     teleportSource={teleportSource}
                     selectedHex={selectedHex}
                     playerActorsV2={MY_ACTORS}
-                    players={PLAYERS}
+                    players={dynamicPlayers}
                     availableTeleportCards={teleportCardsCount}
+                    availableExchangeCards={exchangeCardsCount}
                     onHexClick={handleHexClick}
                     onPlayerClick={(actor, e) => {
+                        console.log("onPlayerClick triggered for actor:", actor);
                         if (phase === 2) handleActorRecall(actor);
                         if (phase === 3 && p3Step === 1 && actor.playerId === 'p1') {
                             // Toggle menu
@@ -814,10 +1100,28 @@ export default function GameBoardPage() {
                             if (teleportCardsCount > 0) {
                                 setTeleportSource(prev => prev === actor.actorId ? null : actor.actorId);
                                 if (teleportSource !== actor.actorId) {
-                                    addLog(`Selected ${actor.type} for teleport... choose a destination.`);
+                                    const actorSource = MY_ACTORS.find(a => a.id === actor.actorId);
+                                    addLog(`Selected ${actorSource?.name || actor.actorType} with ${actor.type.toUpperCase()} for teleport... choose a destination.`);
                                 }
                             } else {
                                 addLog("No Relocation cards available.");
+                            }
+                        }
+
+                        // NEW: Exchange interaction on map markers
+                        if (phase === 3 && p3Step === 4 && actor.playerId !== 'p1') {
+                            console.log("Exchange condition met, exchangeCardsCount:", exchangeCardsCount);
+                            if (exchangeCardsCount > 0) {
+                                const targetPlayer = dynamicPlayers.find(p => p.id === actor.playerId);
+                                console.log("Target player found:", targetPlayer);
+                                setExchangeTarget({
+                                    id: actor.playerId,
+                                    name: targetPlayer?.name || 'Opponent',
+                                    avatar: targetPlayer?.avatar || '/avatars/golden_avatar.png'
+                                });
+                                console.log("setExchangeTarget called with id:", actor.playerId);
+                            } else {
+                                addLog("No Change of Values cards available.");
                             }
                         }
                     }}
@@ -837,7 +1141,7 @@ export default function GameBoardPage() {
                                             p3Step === 2 ? "ACTION: STOP LOCATIONS" :
                                                 p3Step === 3 ? "ACTION: RELOCATION" : "ACTION: EXCHANGE"
                                     ) :
-                                        phase === 4 ? "CONFLICTS REVEAL" : "RESOLUTION"
+                                        phase === 4 ? "CONFLICTS REVEAL" : "MARKET & CARDS"
                         }
                     />
 
@@ -870,7 +1174,10 @@ export default function GameBoardPage() {
                         players={dynamicPlayers}
                         p3Step={p3Step}
                         availableExchangeCards={exchangeCardsCount}
-                        onExchangeClick={(id, name) => setExchangeTarget({ id, name, x: 0, y: 0 })} // x/y not needed for modal
+                        onExchangeClick={(id, name) => {
+                            const target = dynamicPlayers.find(p => p.id === id);
+                            setExchangeTarget({ id, name, avatar: target?.avatar || '/avatars/golden_avatar.png' });
+                        }}
                     />
 
                     {/* Left Sidebar: Actors / Hand */}
@@ -912,11 +1219,9 @@ export default function GameBoardPage() {
 
 
                     {/* Bottom Right: Next Phase Button */}
-                    {/* Bottom Right: Next Phase Button */}
-                    {/* Bottom Right: Next Phase Button */}
-                    <div className="absolute bottom-10 right-10 pointer-events-auto">
+                    <div className="absolute bottom-10 right-10 z-[300] pointer-events-auto">
                         {/* Only show Next Phase if not in Phase 2 OR if all actors distributed. And in Phase 4, only if all conflicts are resolved. */}
-                        {((phase !== 2 || availableActors.length === 0) && (phase !== 4 || activeConflicts.filter(c => !resolvedConflicts.includes(c.locId)).length === 0)) && (
+                        {phase !== 5 && ((phase !== 2 || availableActors.length === 0) && (phase !== 4 || activeConflicts.filter(c => !resolvedConflicts.includes(c.locId)).length === 0)) && (
                             <button
                                 onClick={handleNextPhase}
                                 className="px-8 py-3 bg-[#d4af37] text-black font-bold rounded-lg shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:bg-[#ffe066] transition-all transform hover:scale-105 active:scale-95 uppercase tracking-widest text-xs"
@@ -950,9 +1255,9 @@ export default function GameBoardPage() {
                                 <h3 className="text-[#d4af37] font-rajdhani font-bold uppercase tracking-widest text-sm">Make a Bid...</h3>
                                 <div className="flex gap-6">
                                     {[
-                                        { type: 'product', label: 'bet on win', icon: '/resources/resource_box.png', color: 'bg-red-500/10' },
+                                        { type: 'product', label: 'bet on win', icon: '/resources/resource_product.png', color: 'bg-red-500/10' },
                                         { type: 'energy', label: 'bet on lose', icon: '/resources/resource_energy.png', color: 'bg-blue-500/10' },
-                                        { type: 'recycle', label: 'bet on draw', icon: '/resources/resource_bio.png', color: 'bg-green-500/10' }
+                                        { type: 'recycle', label: 'bet on draw', icon: '/resources/resource_Recycle.png', color: 'bg-green-500/10' }
                                     ].map((res) => (
                                         <button
                                             key={res.type}
@@ -994,12 +1299,15 @@ export default function GameBoardPage() {
 
                     {/* --- Exchange Modal --- */}
                     {exchangeTarget && (
-                        <div className="absolute inset-0 z-[60] pointer-events-auto">
+                        <div className="fixed inset-0 z-[1000] pointer-events-auto overflow-hidden">
                             <ExchangeModal
                                 isOpen={true}
                                 onClose={() => setExchangeTarget(null)}
                                 onConfirm={handleExchangeConfirm}
                                 targetName={exchangeTarget.name}
+                                targetAvatar={exchangeTarget.avatar}
+                                playerName={player.name || '080'}
+                                playerAvatar={player.avatar || '/avatars/golden_avatar.png'}
                                 playerResources={resources}
                                 opponentResources={opponentsData[exchangeTarget.id]?.resources || {}}
                             />
@@ -1039,6 +1347,48 @@ export default function GameBoardPage() {
                             </div>
                         )
                     }
+
+                    {/* --- Phase 5: Modals --- */}
+                    {phase === 5 && p5Step === 1 && (
+                        <MarketOfferModal
+                            isOpen={true}
+                            playerResources={{
+                                product: resources.product,
+                                energy: resources.energy,
+                                recycle: resources.recycle
+                            }}
+                            onConfirm={handleMarketOfferConfirm}
+                        />
+                    )}
+
+                    {phase === 5 && p5Step === 2 && (
+                        <MarketRevealModal
+                            isOpen={true}
+                            playerOffer={playerMarketOffer}
+                            opponents={dynamicPlayers
+                                .filter(p => p.id !== (player.citizenId || player.address || 'p1'))
+                                .map(p => ({
+                                    ...p,
+                                    name: p.name || PLAYERS.find(bp => bp.id === p.id)?.name || 'Unknown',
+                                    avatar: p.avatar || PLAYERS.find(bp => bp.id === p.id)?.avatar || '/avatars/golden_avatar.png'
+                                }))
+                            }
+                            botOffers={botMarketOffers}
+                            matchId={marketMatchId}
+                            onComplete={handleMarketRevealComplete}
+                        />
+                    )}
+
+                    {phase === 5 && p5Step === 3 && (
+                        <BuyActionCardModal
+                            isOpen={true}
+                            onClose={handleSkipBuyActionCard}
+                            onBuy={handleBuyActionCard}
+                            canAfford={resources.product >= 1 && resources.energy >= 1 && resources.recycle >= 1}
+                            availableCards={ACTION_CARDS}
+                        />
+                    )}
+
                 </div >
             </main >
         </TooltipProvider >

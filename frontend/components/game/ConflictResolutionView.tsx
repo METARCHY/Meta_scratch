@@ -98,7 +98,7 @@ export default function ConflictResolutionView({ conflict, hasNextConflict, onRe
         setOpponentChoices(choices);
         setStep('intro');
         setResult(null);
-    }, [conflict]);
+    }, [conflict.locId]);
 
     // 2. Logic: Resolve the Conflict
     const resolveConflict = (pChoice: string, applyBids: boolean = true): ConflictResult => {
@@ -160,6 +160,18 @@ export default function ConflictResolutionView({ conflict, hasNextConflict, onRe
         let finalEvictAll = false;
         let finalShareRewards = false;
         const logs: string[] = [];
+
+        // Log the actual choices
+        const p1ActorType = conflict.playerActor.actorType?.toUpperCase() || 'ACTOR';
+        const p1ChoiceStr = choices.find(c => c.id === 'p1')?.choice?.toUpperCase() || 'UNKNOWN';
+        const oppDetails = conflict.opponents.map(opp => {
+            const oppChoice = choices.find(c => c.id === opp.actorId)?.choice?.toUpperCase() || 'UNKNOWN';
+            const oppActorType = opp.actorType?.toUpperCase() || 'ACTOR';
+            return `${opp.name || 'Opponent'} used ${oppActorType} with ${oppChoice}`;
+        });
+
+        const locName = conflict.locationName || 'Unknown Location';
+        logs.push(`Conflict at ${locName.toUpperCase()}: ${player.name || '080'} used ${p1ActorType} with ${p1ChoiceStr}. Opponents: ${oppDetails.join(', ')}.`);
 
         // Apply Bids to the outcome BEFORE Actor-specific draw logic
         // Only apply to P1 for now since opponents don't actively bid yet
@@ -318,9 +330,12 @@ export default function ConflictResolutionView({ conflict, hasNextConflict, onRe
                     <div className="absolute bottom-[100%] mb-4 flex flex-col-reverse items-center gap-3 z-30">
                         {/* 1. Player Avatar */}
                         <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-[#d4af37] shadow-[0_0_15px_rgba(212,175,55,0.4)] relative bg-[#1a1a1c]">
-                            {player && player.avatar && (
-                                <Image src={player.avatar} fill className="object-cover" alt="Player" />
-                            )}
+                            <Image
+                                src={player?.avatar || '/avatars/golden_avatar.png'}
+                                fill
+                                className="object-cover"
+                                alt="Player"
+                            />
                         </div>
                         {/* 2. RSP Token */}
                         <motion.div
@@ -517,7 +532,13 @@ export default function ConflictResolutionView({ conflict, hasNextConflict, onRe
                                                 <div className="w-24 h-24 mx-auto mb-4 relative flex items-center justify-center bg-white/5 rounded-full border border-white/10">
                                                     <div className="relative w-16 h-16">
                                                         <Image
-                                                            src={RESOURCE_ICONS[conflict.resourceType] || '/resources/resource_box.png'}
+                                                            src={(() => {
+                                                                const actorType = conflict.playerActor.actorType?.toLowerCase();
+                                                                if (actorType === 'politician') return RESOURCE_ICONS['power'];
+                                                                if (actorType === 'scientist') return RESOURCE_ICONS['knowledge'];
+                                                                if (actorType === 'artist') return RESOURCE_ICONS['art'];
+                                                                return RESOURCE_ICONS[conflict.resourceType] || '/resources/resource_product.png';
+                                                            })()}
                                                             fill className="object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]" alt="Resource Won"
                                                         />
                                                     </div>
@@ -534,7 +555,13 @@ export default function ConflictResolutionView({ conflict, hasNextConflict, onRe
                                                 <div className="w-24 h-24 mx-auto mb-4 relative flex items-center justify-center bg-white/5 rounded-full border border-white/10">
                                                     <div className="relative w-16 h-16">
                                                         <Image
-                                                            src={RESOURCE_ICONS[conflict.resourceType] || '/resources/resource_box.png'}
+                                                            src={(() => {
+                                                                const actorType = conflict.playerActor.actorType?.toLowerCase();
+                                                                if (actorType === 'politician') return RESOURCE_ICONS['power'];
+                                                                if (actorType === 'scientist') return RESOURCE_ICONS['knowledge'];
+                                                                if (actorType === 'artist') return RESOURCE_ICONS['art'];
+                                                                return RESOURCE_ICONS[conflict.resourceType] || '/resources/resource_product.png';
+                                                            })()}
                                                             fill className="object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]" alt="Resource Won"
                                                         />
                                                     </div>

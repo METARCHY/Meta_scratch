@@ -17,10 +17,18 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     }
 }
 
+// Soft delete → if already soft-deleted, hard delete
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
     try {
         const id = params.id;
-        const success = gameService.delete(id);
+        const game = gameService.getById(id);
+
+        let success: boolean;
+        if (game?.status === 'deleted') {
+            success = gameService.hardDelete(id);
+        } else {
+            success = gameService.delete(id);
+        }
 
         if (!success) {
             return NextResponse.json({ error: 'Game not found' }, { status: 404 });
@@ -29,5 +37,21 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
         return NextResponse.json({ success: true });
     } catch (error) {
         return NextResponse.json({ error: 'Failed to delete game' }, { status: 500 });
+    }
+}
+
+// Restore from trash
+export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+    try {
+        const id = params.id;
+        const success = gameService.restore(id);
+
+        if (!success) {
+            return NextResponse.json({ error: 'Game not found' }, { status: 404 });
+        }
+
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        return NextResponse.json({ error: 'Failed to restore game' }, { status: 500 });
     }
 }

@@ -59,22 +59,25 @@ export default function ActionCardsPanel({ cards, onSelect, onActivate, activeCa
     // Compact Mode (Opponent Cards)
     if (compact) {
         return (
-            <div className="absolute bottom-32 left-1/2 -translate-x-1/2 flex gap-4 z-40 animate-in slide-in-from-bottom-10 duration-500 pointer-events-none">
+            <div className="absolute right-10 top-1/2 -translate-y-1/2 flex flex-col gap-4 z-40 animate-in slide-in-from-right-10 duration-500 pointer-events-none">
                 {uniqueCards.map(({ card, count }) => (
                     <div
                         key={card.title}
-                        className="group relative w-32 h-44 rounded-xl border border-white/10 bg-[#0d0d12]/90 backdrop-blur-md overflow-hidden"
+                        className="group relative w-48 h-64 rounded-2xl border-2 border-white/20 bg-[#0d0d12]/95 backdrop-blur-xl overflow-hidden shadow-[0_0_30px_rgba(0,0,0,0.5)]"
                     >
-                        <div className="p-4 flex flex-col h-full bg-[#171B21]/50">
-                            <span className="text-[10px] uppercase font-bold tracking-widest text-[#d4af37]/60 mb-1">{card.type}</span>
-                            <h4 className="font-bold text-white uppercase leading-tight mb-2 font-rajdhani text-[10px]">{card.title}</h4>
+                        <div className="p-5 flex flex-col h-full bg-[#171B21]/50">
+                            <span className="text-[12px] uppercase font-black tracking-[0.2em] text-[#d4af37] mb-1.5">{card.type}</span>
+                            <h4 className="font-bold text-white uppercase leading-tight mb-3 font-rajdhani text-lg">{card.title}</h4>
 
-                            <div className="flex-1 rounded border border-white/5 bg-white/5 mb-2 overflow-hidden relative">
-                                {card.icon && <Image src={card.icon} fill className="object-cover opacity-80" alt={card.title} />}
+                            <div className="flex-1 rounded-xl border border-white/10 bg-white/5 mb-3 overflow-hidden relative">
+                                {card.icon && <Image src={card.icon} fill className="object-cover opacity-90 group-hover:scale-110 transition-transform duration-700" alt={card.title} />}
                             </div>
 
-                            <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-[#d4af37] text-black flex items-center justify-center font-bold text-xs shadow-lg z-10">
-                                {count}
+                            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 w-[80%]">
+                                <div className="px-3 py-1.5 rounded-full bg-[#d4af37] text-black flex items-center justify-center gap-1 border-2 border-white/20 shadow-[0_0_15px_rgba(212,175,55,0.4)]">
+                                    <span className="text-[10px] font-black opacity-70">CARDS:</span>
+                                    <span className="text-sm font-black">{count}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -96,7 +99,7 @@ export default function ActionCardsPanel({ cards, onSelect, onActivate, activeCa
     };
 
     return (
-        <div className="absolute top-[2%] right-10 z-50 flex flex-col items-center animate-in slide-in-from-right-10 duration-700">
+        <div className="absolute top-[10%] right-10 z-50 flex flex-col items-center animate-in slide-in-from-right-10 duration-700">
             <div className="flex items-center gap-4">
                 {/* Prev Button */}
                 <button
@@ -110,7 +113,7 @@ export default function ActionCardsPanel({ cards, onSelect, onActivate, activeCa
                 <div
                     onDoubleClick={() => onActivate(card)}
                     onClick={() => onSelect(card.id)}
-                    className={`relative w-[310px] h-[840px] rounded-[2.5rem] border transition-all cursor-pointer overflow-hidden
+                    className={`relative w-[310px] h-[720px] rounded-[2.5rem] border transition-all cursor-pointer overflow-hidden
                         ${isActive
                             ? 'border-[#d4af37] bg-[#171B21] shadow-[0_0_80px_rgba(212,175,55,0.35)]'
                             : 'border-white/10 bg-[#0d0d12]/95 backdrop-blur-xl hover:border-[#d4af37]/40'
@@ -140,7 +143,7 @@ export default function ActionCardsPanel({ cards, onSelect, onActivate, activeCa
                         )}
 
                         {/* Ultra Large Borderless Image Section - Fixed stable size */}
-                        <div className="w-full h-[520px] relative overflow-hidden group">
+                        <div className="w-full h-[420px] relative overflow-hidden group">
                             {card.icon && (
                                 <Image
                                     key={card.id}

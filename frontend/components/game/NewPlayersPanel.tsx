@@ -47,7 +47,7 @@ export default function NewPlayersPanel({ players = [], p3Step, availableExchang
                 )}
                 <div
                     className={`absolute rounded-full overflow-hidden border-2 bg-black shadow-lg transition-all
-                        ${isOpponent && showExchange ? 'cursor-pointer hover:border-[#00f0ff] hover:scale-110 z-50' : 'border-[#A08C5C]'}
+                        ${isOpponent && showExchange ? 'cursor-pointer hover:border-[#00f0ff] hover:scale-110 z-50 pointer-events-auto' : 'border-[#A08C5C]'}
                     `}
                     style={{
                         left: `${x - r}px`,
@@ -56,25 +56,44 @@ export default function NewPlayersPanel({ players = [], p3Step, availableExchang
                         height: `${size}px`
                     }}
                     onClick={() => {
+                        console.log("AVATAR CLICKED", { isOpponent, showExchange, onExchangeClick: !!onExchangeClick });
                         if (isOpponent && showExchange && onExchangeClick) {
                             onExchangeClick(player.id, player.name);
                         }
                     }}
                 >
                     <Image src={img} layout="fill" objectFit="cover" alt={alt} />
-
-                    {/* Interaction Overlay */}
-                    {isOpponent && showExchange && (
-                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center animate-in fade-in">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#00f0ff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                </div>
+                {/* NEW: Explicit Exchange Trigger Button Below Avatar */}
+                {isOpponent && showExchange && (
+                    <div
+                        className="absolute z-50 pointer-events-auto flex items-center justify-center animate-in zoom-in duration-300"
+                        style={{
+                            left: `${x - 14}px`, // Center the 28px button
+                            top: `${y + r + 2}px`, // Place right below the avatar
+                        }}
+                    >
+                        <button
+                            className="group/exchange w-7 h-7 rounded-full bg-[#1a1c23] border border-cyan-400/50 shadow-[0_0_10px_rgba(0,240,255,0.3)] flex items-center justify-center hover:bg-cyan-500/10 hover:border-cyan-400 hover:shadow-[0_0_15px_rgba(0,240,255,0.6)] hover:scale-110 transition-all cursor-pointer"
+                            onPointerDown={(e) => {
+                                console.log("EXCHANGE BUTTON TRIGGERED", { playerId: player.id });
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (onExchangeClick) {
+                                    onExchangeClick(player.id, player.name);
+                                }
+                            }}
+                            title="Exchange Resources"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00f0ff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="drop-shadow-[0_0_5px_rgba(0,240,255,0.8)] group-hover/exchange:drop-shadow-[0_0_8px_rgba(0,240,255,1)] transition-all">
                                 <path d="m16 3 4 4-4 4" />
                                 <path d="M20 7H4" />
                                 <path d="m8 21-4-4 4-4" />
                                 <path d="M4 17h16" />
                             </svg>
-                        </div>
-                    )}
-                </div>
+                        </button>
+                    </div>
+                )}
             </>
         );
     };

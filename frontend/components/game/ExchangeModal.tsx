@@ -9,6 +9,9 @@ interface ExchangeModalProps {
     onClose: () => void;
     onConfirm: (give: 'power' | 'art' | 'wisdom', take: 'power' | 'art' | 'wisdom') => void;
     targetName: string;
+    targetAvatar: string;
+    playerName: string;
+    playerAvatar: string;
     playerResources: Record<string, number>;
     opponentResources: Record<string, number>;
 }
@@ -26,6 +29,9 @@ export default function ExchangeModal({
     onClose,
     onConfirm,
     targetName,
+    targetAvatar,
+    playerName,
+    playerAvatar,
     playerResources,
     opponentResources
 }: ExchangeModalProps) {
@@ -56,14 +62,23 @@ export default function ExchangeModal({
                 {/* Content */}
                 <div className="p-6">
                     <p className="text-gray-400 text-sm mb-6 text-center">
-                        Select a resource to <span className="text-red-400 font-bold uppercase">give</span> and a resource to <span className="text-green-400 font-bold uppercase">take</span> from <span className="text-white font-bold">{targetName}</span>.
+                        Select a resource to <span className="text-red-400 font-bold uppercase">give</span> and a resource to <span className="text-green-400 font-bold uppercase">take</span>.
                     </p>
 
-                    <div className="space-y-8 mb-8">
-                        {/* Give Section */}
-                        <div>
-                            <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] mb-3 text-center">You Give</h4>
-                            <div className="grid grid-cols-3 gap-3">
+                    <div className="flex items-stretch justify-between gap-6 mb-8">
+                        {/* MY RESOURCES COLUMN (GIVE) */}
+                        <div className="flex-1 flex flex-col items-center bg-[#1a1c23]/50 rounded-xl p-4 border border-white/5">
+                            {/* Player Header */}
+                            <div className="flex flex-col items-center mb-6">
+                                <div className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-[#d4af37] mb-2 shadow-lg">
+                                    <Image src={playerAvatar} fill className="object-cover" alt={playerName} />
+                                </div>
+                                <h4 className="text-sm font-bold text-white uppercase tracking-widest">{playerName}</h4>
+                                <span className="text-[10px] text-red-400 uppercase tracking-widest font-bold mt-1">Gives</span>
+                            </div>
+
+                            {/* Resources Grid */}
+                            <div className="flex flex-col gap-3 w-full">
                                 {RESOURCES.map((res) => {
                                     const resourceKey = res.id === 'wisdom' ? 'knowledge' : res.id;
                                     const count = playerResources[resourceKey] || 0;
@@ -75,23 +90,23 @@ export default function ExchangeModal({
                                             disabled={isDisabled}
                                             onClick={() => setGive(res.id)}
                                             className={`
-                                                relative flex flex-col items-center gap-2 p-3 rounded-xl border transition-all
+                                                relative flex items-center gap-3 p-3 rounded-xl border transition-all w-full
                                                 ${give === res.id
-                                                    ? 'bg-red-500/10 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.1)]'
+                                                    ? 'bg-red-500/10 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.15)]'
                                                     : isDisabled
                                                         ? 'bg-black/20 border-white/5 opacity-30 grayscale cursor-not-allowed'
                                                         : 'bg-black/40 border-white/5 hover:border-white/20'
                                                 }
                                             `}
                                         >
-                                            <div className="relative w-10 h-10">
+                                            <div className="relative w-10 h-10 flex-shrink-0">
                                                 <Image src={res.icon} fill className="object-contain" alt={res.label} />
                                             </div>
-                                            <div className="flex flex-col items-center">
-                                                <span className={`text-[10px] font-bold uppercase tracking-wider ${give === res.id ? 'text-red-400' : 'text-gray-500'}`}>
+                                            <div className="flex flex-col items-start">
+                                                <span className={`text-xs font-bold uppercase tracking-wider ${give === res.id ? 'text-red-400' : 'text-gray-400'}`}>
                                                     {res.label}
                                                 </span>
-                                                <span className="text-[8px] font-mono text-white/40">{count}</span>
+                                                <span className="text-[10px] font-mono text-white/40">{count} available</span>
                                             </div>
                                         </button>
                                     );
@@ -99,17 +114,26 @@ export default function ExchangeModal({
                             </div>
                         </div>
 
-                        {/* Divider Icon */}
-                        <div className="flex justify-center -my-4">
-                            <div className="bg-[#0d0d12] p-2 rounded-full border border-white/5">
-                                <ArrowRightLeft className="w-4 h-4 text-gray-600 rotate-90" />
+                        {/* CENTER ARROW */}
+                        <div className="flex flex-col items-center justify-center pt-8">
+                            <div className="bg-[#1a1c23] p-3 rounded-full border border-[#d4af37]/30 shadow-[0_0_20px_rgba(212,175,55,0.1)]">
+                                <ArrowRightLeft className="w-6 h-6 text-[#d4af37]" />
                             </div>
                         </div>
 
-                        {/* Take Section */}
-                        <div>
-                            <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] mb-3 text-center">{targetName} Gives You</h4>
-                            <div className="grid grid-cols-3 gap-3">
+                        {/* OPPONENT RESOURCES COLUMN (TAKE) */}
+                        <div className="flex-1 flex flex-col items-center bg-[#1a1c23]/50 rounded-xl p-4 border border-white/5">
+                            {/* Opponent Header */}
+                            <div className="flex flex-col items-center mb-6">
+                                <div className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-cyan-400/50 mb-2 shadow-lg">
+                                    <Image src={targetAvatar} fill className="object-cover" alt={targetName} />
+                                </div>
+                                <h4 className="text-sm font-bold text-white uppercase tracking-widest">{targetName}</h4>
+                                <span className="text-[10px] text-green-400 uppercase tracking-widest font-bold mt-1">Gives</span>
+                            </div>
+
+                            {/* Resources Grid */}
+                            <div className="flex flex-col gap-3 w-full">
                                 {RESOURCES.map((res) => {
                                     const resourceKey = res.id === 'wisdom' ? 'knowledge' : res.id;
                                     const count = opponentResources[resourceKey] || 0;
@@ -121,23 +145,23 @@ export default function ExchangeModal({
                                             disabled={isDisabled}
                                             onClick={() => setTake(res.id)}
                                             className={`
-                                                relative flex flex-col items-center gap-2 p-3 rounded-xl border transition-all
+                                                relative flex items-center gap-3 p-3 rounded-xl border transition-all w-full
                                                 ${take === res.id
-                                                    ? 'bg-green-500/10 border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.1)]'
+                                                    ? 'bg-green-500/10 border-green-500/50 shadow-[0_0_15px_rgba(34,197,94,0.15)]'
                                                     : isDisabled
                                                         ? 'bg-black/20 border-white/5 opacity-30 grayscale cursor-not-allowed'
                                                         : 'bg-black/40 border-white/5 hover:border-white/20'
                                                 }
                                             `}
                                         >
-                                            <div className="relative w-10 h-10">
+                                            <div className="relative w-10 h-10 flex-shrink-0">
                                                 <Image src={res.icon} fill className="object-contain" alt={res.label} />
                                             </div>
-                                            <div className="flex flex-col items-center">
-                                                <span className={`text-[10px] font-bold uppercase tracking-wider ${take === res.id ? 'text-green-400' : 'text-gray-500'}`}>
+                                            <div className="flex flex-col items-start">
+                                                <span className={`text-xs font-bold uppercase tracking-wider ${take === res.id ? 'text-green-400' : 'text-gray-400'}`}>
                                                     {res.label}
                                                 </span>
-                                                <span className="text-[8px] font-mono text-white/40">{count}</span>
+                                                <span className="text-[10px] font-mono text-white/40">{count} available</span>
                                             </div>
                                         </button>
                                     );
