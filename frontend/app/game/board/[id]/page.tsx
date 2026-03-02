@@ -18,11 +18,14 @@ import RSPRadialMenu from "@/components/game/RSPRadialMenu";
 import ActionCardsPanel from "@/components/game/ActionCardsPanel";
 import ExchangeModal from "@/components/game/ExchangeModal";
 import ConflictsSidebar from "@/components/game/ConflictsSidebar";
-import ConflictResolutionView, { ConflictResult } from "@/components/game/ConflictResolutionView";
+import ConflictResolutionView from "@/components/game/ConflictResolutionView";
+import { ConflictResult } from "@/lib/game/ConflictResolver";
 import MarketOfferModal, { MarketOffer } from '@/components/game/MarketOfferModal';
 import MarketRevealModal from '@/components/game/MarketRevealModal';
 import BuyActionCardModal from '@/components/game/BuyActionCardModal';
 import { formatLog } from '@/lib/logUtils';
+import { triggerBotPhase3Actions, resolveBotOnlyConflicts, triggerOpponentPlacements } from '@/lib/game/BotAI';
+import { handleNextPhase } from '@/lib/game/PhaseEngine';
 
 // Constants
 import { EVENTS, LOCATIONS, ACTION_CARDS, getConflicts, ALLOWED_MOVES } from '@/data/gameConstants';
@@ -163,192 +166,30 @@ export default function GameBoardPage() {
 
     useEffect(() => {
         if (phase === 4) {
-            resolveBotOnlyConflicts();
+            resolveBotOnlyConflicts(placedActors, disabledLocations, resolvedConflicts, dynamicPlayers, addLog, setOpponentsData, setPlacedActors, setResolvedConflicts);
         }
     }, [phase]);
+
+    const handleNextPhaseWrapper = () => {
+        handleNextPhase(
+            turn, phase, p3Step, player, dynamicPlayers,
+            addLog, triggerBotPhase3ActionsWrapper, setPhase, setP3Step as any, setP5Step as any,
+            setTurn, setPlacedActors, setResolvedConflicts, setDisabledLocations
+        );
+    };
 
     // --- Opponent Emulation ---
     useEffect(() => {
         if (phase === 2 && !opponentsReady && game) {
-            triggerOpponentPlacements();
+            triggerOpponentPlacements(game, AUTO_PLACEMENTS, PLAYERS, setOpponentsReady, setPlacedActors, setOpponentsData, addLog);
         }
     }, [phase, game, opponentsReady]);
 
-    const triggerBotPhase3Actions = async (step: number) => {
+    const triggerBotPhase3ActionsWrapper = async (step: number) => {
         if (!game) return;
         const mainPlayerId = player.citizenId || player.address || 'p1';
         const opponents = dynamicPlayers.filter(p => p.id !== mainPlayerId);
-
-        for (const opp of opponents) {
-            // 50% chance a bot performs an action in a sub-phase
-            if (Math.random() < 0.5) {
-                if (step === 2) { // Stopping Locations
-                    const targetLoc = LOCATIONS[Math.floor(Math.random() * LOCATIONS.length)];
-                    setDisabledLocations(prev => [...prev, targetLoc.id]);
-                    await addLog(`${opp.name} activated Under Construction - ${targetLoc.name.toUpperCase()} is now DISABLED`);
-                } else if (step === 3) { // Relocation
-                    const botActors = placedActors.filter(a => a.playerId === opp.id);
-                    if (botActors.length > 0) {
-                        const actorToMove = botActors[Math.floor(Math.random() * botActors.length)];
-                        const allowed = ALLOWED_MOVES[actorToMove.actorType] || [];
-                        const targetLoc = allowed[Math.floor(Math.random() * allowed.length)] || actorToMove.locId;
-
-                        setPlacedActors(prev => prev.map(a =>
-                            (a.actorId === actorToMove.actorId) ? { ...a, locId: targetLoc } : a
-                        ));
-                        await addLog(`${opp.name} used Relocation to move ${actorToMove.name || actorToMove.actorType} to ${targetLoc.toUpperCase()}`);
-                    }
-                } else if (step === 4) { // Exchange
-                    const resTypes = ['POWER', 'ART', 'KNOWLEDGE'];
-                    const give = resTypes[Math.floor(Math.random() * 3)];
-                    let take = resTypes[Math.floor(Math.random() * 3)];
-                    while (take === give) take = resTypes[Math.floor(Math.random() * 3)];
-
-                    await addLog(`${opp.name} used Change of Values: exchanged ${give} for ${take} with the Bank`);
-                }
-            }
-            await new Promise(r => setTimeout(r, 800));
-        }
-    };
-
-    const resolveBotOnlyConflicts = async () => {
-        if (phase !== 4) return;
-
-        const groups: { [key: string]: any[] } = {};
-        placedActors.forEach(p => {
-            if (disabledLocations.includes(p.locId)) return;
-            const key = `${p.locId}_${p.actorType}`;
-            if (!groups[key]) groups[key] = [];
-            groups[key].push(p);
-        });
-
-        for (const [key, actors] of Object.entries(groups)) {
-            if (resolvedConflicts.includes(key)) continue;
-            if (actors.some(a => a.playerId === 'p1')) continue;
-
-            const [locId, actorType] = key.split('_');
-            const locDef = LOCATIONS.find(l => l.id === locId);
-            const realLocName = locDef?.name || locId.toUpperCase();
-
-            if (actors.length === 1) {
-                const bot = actors[0];
-                const botName = dynamicPlayers.find(p => p.id === bot.playerId)?.name || 'Bot';
-
-                let resource = '';
-                if (bot.actorType === 'politician') resource = 'POWER';
-                else if (bot.actorType === 'scientist') resource = 'KNOWLEDGE';
-                else if (bot.actorType === 'artist') resource = 'ART';
-                else if (bot.actorType === 'robot') resource = (locDef?.resource || 'PRODUCT').toUpperCase();
-
-                await addLog(`${botName} has no rivals at ${realLocName}. They won 1 ${resource}!`);
-
-                setOpponentsData(prev => {
-                    const next = { ...prev };
-                    if (!next[bot.playerId]) return prev;
-                    const res = { ...next[bot.playerId].resources } as any;
-                    const resKey = resource.toLowerCase();
-                    res[resKey] = (res[resKey] || 0) + 1;
-                    next[bot.playerId] = { ...next[bot.playerId], resources: res };
-                    return next;
-                });
-            } else {
-                const tokens = ['ROCK', 'PAPER', 'SCISSORS'];
-                const bot1 = actors[0];
-                const bot2 = actors[1];
-
-                const t1 = tokens[Math.floor(Math.random() * 3)];
-                const t2 = tokens[Math.floor(Math.random() * 3)];
-
-                const b1Name = dynamicPlayers.find(p => p.id === bot1.playerId)?.name || 'Bot 1';
-                const b2Name = dynamicPlayers.find(p => p.id === bot2.playerId)?.name || 'Bot 2';
-
-                await addLog(`Conflict at ${realLocName}: ${b1Name} (${t1}) vs ${b2Name} (${t2})`);
-
-                if (t1 === t2) {
-                    await addLog(`It's a DRAW at ${realLocName}! Both ${bot1.actorType}s evicted.`);
-                    setPlacedActors(prev => prev.filter(a => !(a.locId === locId && a.actorType === bot1.actorType)));
-                } else {
-                    const wins: any = { 'ROCK': 'SCISSORS', 'SCISSORS': 'PAPER', 'PAPER': 'ROCK' };
-                    const winner = wins[t1] === t2 ? bot1 : bot2;
-                    const winnerName = dynamicPlayers.find(p => p.id === winner.playerId)?.name || 'Bot';
-
-                    let resource = '';
-                    if (winner.actorType === 'politician') resource = 'POWER';
-                    else if (winner.actorType === 'scientist') resource = 'KNOWLEDGE';
-                    else if (winner.actorType === 'artist') resource = 'ART';
-                    else if (winner.actorType === 'robot') resource = (locDef?.resource || 'PRODUCT').toUpperCase();
-
-                    await addLog(`${winnerName} WON at ${realLocName} and received 1 ${resource}!`);
-
-                    setOpponentsData(prev => {
-                        const next = { ...prev };
-                        if (!next[winner.playerId]) return prev;
-                        const res = { ...next[winner.playerId].resources } as any;
-                        const resKey = resource.toLowerCase();
-                        res[resKey] = (res[resKey] || 0) + 1;
-                        next[winner.playerId] = { ...next[winner.playerId], resources: res };
-                        return next;
-                    });
-                }
-            }
-            // Mark as resolved ONLY if p1 not involved
-            setResolvedConflicts(prev => [...prev, key]);
-            await new Promise(r => setTimeout(r, 800));
-        }
-    };
-
-    const triggerOpponentPlacements = async () => {
-        if (!game) return;
-        setOpponentsReady(true);
-
-        await new Promise(r => setTimeout(r, 1500));
-
-        // Map hardcoded bot IDs to actual joined bot IDs if in test mode
-        const botMap: Record<string, string> = {};
-        if (game.isTest) {
-            botMap['p2'] = 'bot-1';
-            botMap['p3'] = 'bot-2';
-            botMap['p4'] = 'bot-3'; // Just in case
-        } else {
-            botMap['p2'] = 'p2';
-            botMap['p3'] = 'p3';
-            botMap['p4'] = 'p4';
-        }
-
-        const opponentActions = AUTO_PLACEMENTS.map(action => ({
-            ...action,
-            playerId: botMap[action.playerId] || action.playerId
-        }));
-
-        for (const action of opponentActions) {
-            setPlacedActors(prev => {
-                if (prev.some(p => p.actorId === action.actorId)) return prev;
-                return [...prev, action];
-            });
-
-            // Update opponent resources if bid is placed
-            if (action.bid) {
-                setOpponentsData(prev => {
-                    const next = { ...prev };
-                    if (!next[action.playerId]) return prev;
-                    const oppRes = { ...next[action.playerId].resources };
-                    oppRes[action.bid] = Math.max(0, (oppRes[action.bid] || 0) - 1);
-                    next[action.playerId] = { ...next[action.playerId], resources: oppRes };
-                    return next;
-                });
-            }
-            // Resolve name from game players if possible
-            const playerInfo = game.players.find((p: any) => (p.citizenId || p.address) === action.playerId);
-            const playerName = playerInfo?.name || PLAYERS.find(p => p.id === action.playerId)?.name || action.playerId;
-            const betText = action.bid ? ` (Bet on ${action.bid === 'product' ? 'WIN' : action.bid === 'energy' ? 'LOSE' : 'DRAW'})` : "";
-            await addLog(`${playerName} placed ${action.name} with ${action.type.toUpperCase()} to ${action.locId.toUpperCase()}${betText}`);
-
-            await new Promise(r => setTimeout(r, 600)); // Increased delay for stability
-        }
-
-        await addLog("Viper (p2) ready");
-        await new Promise(r => setTimeout(r, 600));
-        await addLog("Ghost (p3) ready");
+        await triggerBotPhase3Actions(step, opponents, placedActors, addLog, setDisabledLocations, setPlacedActors);
     };
 
     const addLog = async (msg: string) => {
@@ -603,7 +444,7 @@ export default function GameBoardPage() {
             // If this was the absolute last conflict, auto-advance phase
             const remaining = activeConflicts.filter(c => !updated.includes(c.locId)).length;
             if (remaining === 0) {
-                setTimeout(() => handleNextPhase(), 300); // slight delay to allow modal to close smoothly before phase transition
+                setTimeout(() => handleNextPhaseWrapper(), 300); // slight delay to allow modal to close smoothly before phase transition
             }
 
             return updated;
@@ -925,63 +766,7 @@ export default function GameBoardPage() {
         setExchangeTarget(null);
     };
 
-    // --- Phase Advancement ---
-    const handleNextPhase = () => {
-        if (turn === 7 && phase === 5) {
-            alert("GAME FINISH");
-            return;
-        }
-
-        // Phase 3 Sub-step Logic
-        if (phase === 3) {
-            if (p3Step < 4) {
-                const nextStep = (p3Step + 1) as 1 | 2 | 3 | 4;
-                setP3Step(nextStep);
-                const stepNames = ["", "BIDDING", "STOPPING LOCATIONS", "RELOCATION", "EXCHANGE"];
-                addLog(`${player.name || '080'} advanced to ${stepNames[nextStep]}`);
-
-                // Log opponents ready for the next sub-step
-                const mainPlayerId = player.citizenId || player.address || 'p1';
-                dynamicPlayers.filter(p => p.id !== mainPlayerId).forEach(opp => {
-                    addLog(`${opp.name} is ready for ${stepNames[nextStep]}`);
-                });
-
-                triggerBotPhase3Actions(nextStep);
-                return;
-            }
-        }
-
-        if (phase < 5) {
-            const nextPhase = phase + 1;
-            setPhase(nextPhase);
-            // Reset P3 step when leaving P3
-            if (nextPhase !== 3) setP3Step(1);
-            if (nextPhase === 5) setP5Step(1);
-
-            if (nextPhase === 5) {
-                // Remove all actors from the board at the end of Phase 4
-                setPlacedActors([]);
-                setResolvedConflicts([]);
-                // Clear any locations disabled by action cards this turn
-                setDisabledLocations([]);
-            }
-
-            addLog(`${player.name || '080'} ready`);
-            const mainPlayerId = player.citizenId || player.address || 'p1';
-            dynamicPlayers.filter(p => p.id !== mainPlayerId).forEach(opp => {
-                addLog(`${opp.name} ready`);
-            });
-            addLog(`PHASE ${nextPhase}`);
-        } else {
-            setPhase(1);
-            setP3Step(1);
-            setTurn(t => t + 1);
-            setPlacedActors([]); // Safety clearing for next turn
-            setDisabledLocations([]); // Safety clearing for next turn
-            addLog(`TURN ${turn + 1} BEGINS`);
-        }
-    };
-
+    // Local phase advancement removed and delegated to PhaseEngine
     // Phase 5 handlers
     const handleMarketOfferConfirm = (offer: MarketOffer | null) => {
         setPlayerMarketOffer(offer);
@@ -1059,12 +844,12 @@ export default function GameBoardPage() {
         };
         setActionHand(prev => [...prev, mappedCard]);
         addLog(`${player.name || '080'} purchased action card: ${card.title}`);
-        handleNextPhase();
+        handleNextPhaseWrapper();
     };
 
     const handleSkipBuyActionCard = () => {
         addLog(`${player.name || '080'} skipped buying action card`);
-        handleNextPhase();
+        handleNextPhaseWrapper();
     };
 
     // --- Render ---
@@ -1223,7 +1008,7 @@ export default function GameBoardPage() {
                         {/* Only show Next Phase if not in Phase 2 OR if all actors distributed. And in Phase 4, only if all conflicts are resolved. */}
                         {phase !== 5 && ((phase !== 2 || availableActors.length === 0) && (phase !== 4 || activeConflicts.filter(c => !resolvedConflicts.includes(c.locId)).length === 0)) && (
                             <button
-                                onClick={handleNextPhase}
+                                onClick={handleNextPhaseWrapper}
                                 className="px-8 py-3 bg-[#d4af37] text-black font-bold rounded-lg shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:bg-[#ffe066] transition-all transform hover:scale-105 active:scale-95 uppercase tracking-widest text-xs"
                             >
                                 {phase === 3 ? (

@@ -9,8 +9,21 @@ import { useGameState } from "../context/GameStateContext";
 import { Shield, Coins, User } from "lucide-react";
 
 export default function Home() {
-    const { player } = useGameState();
+    const { player, setPlayer } = useGameState();
     const [showOnboarding, setShowOnboarding] = useState(false);
+
+    const handleGuestLogin = () => {
+        const randomHex = Math.random().toString(16).slice(2, 10);
+        const guestAddress = `0xGUEST${randomHex}`;
+        const guestId = `guest_${randomHex}`;
+
+        setPlayer({
+            address: guestAddress,
+            name: `Guest_${randomHex.substring(0, 4)}`.toUpperCase(),
+            citizenId: guestId,
+            avatar: "/avatars/golden_avatar.png"
+        });
+    };
 
     const isLoggedIn = player.citizenId && player.citizenId !== "0000";
 
@@ -66,6 +79,9 @@ export default function Home() {
                         <div className="flex gap-6 items-center">
                             <MetarchyButton onClick={() => setShowOnboarding(true)} className="w-60 h-12 text-xl">
                                 CONNECT WALLET
+                            </MetarchyButton>
+                            <MetarchyButton onClick={handleGuestLogin} className="w-60 h-12 text-xl">
+                                PLAY AS GUEST
                             </MetarchyButton>
                         </div>
                     </>

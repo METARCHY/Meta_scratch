@@ -21,5 +21,14 @@
     "avatar": "/avatars/golden_avatar.png",
     "isOnline": true,
     "lastActive": "2026-03-02T15:11:50.564Z"
+  },
+  {
+    "address": "0x3358cbf307053264b14f60540d476c1f6cb28fe5",
+    "name": "Test1",
+    "citizenId": "466271",
+    "joinedAt": "2026-03-02T18:29:58.546Z",
+    "avatar": "/avatars/golden_avatar.png",
+    "isOnline": true,
+    "lastActive": "2026-03-02T18:30:20.299Z"
   }
 ]
