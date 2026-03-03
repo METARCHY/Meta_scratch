@@ -4,6 +4,7 @@ import { LOCATIONS, ALLOWED_MOVES } from '@/data/gameConstants';
  * Simulates bot actions during Phase 3 (Action Cards Phase).
  */
 export const triggerBotPhase3Actions = async (
+    game: any,
     step: number,
     opponents: any[],
     placedActors: any[],
@@ -11,6 +12,8 @@ export const triggerBotPhase3Actions = async (
     setDisabledLocations: (cb: (prev: string[]) => string[]) => void,
     setPlacedActors: (cb: (prev: any[]) => any[]) => void
 ) => {
+    if (!game?.isTest) return; // Only process bots in test mode
+
     for (const opp of opponents) {
         // 50% chance a bot performs an action in a sub-phase
         if (Math.random() < 0.5) {
@@ -151,7 +154,8 @@ export const triggerOpponentPlacements = async (
     setOpponentsData: (cb: (prev: any) => any) => void,
     addLog: (msg: string) => Promise<void>
 ) => {
-    if (!game) return;
+    if (!game || !game.isTest) return; // Only run bot placements in a dedicated test game
+
     setOpponentsReady(true);
 
     await new Promise(r => setTimeout(r, 1500));
@@ -162,10 +166,6 @@ export const triggerOpponentPlacements = async (
         botMap['p2'] = 'bot-1';
         botMap['p3'] = 'bot-2';
         botMap['p4'] = 'bot-3'; // Just in case
-    } else {
-        botMap['p2'] = 'p2';
-        botMap['p3'] = 'p3';
-        botMap['p4'] = 'p4';
     }
 
     const opponentActions = AUTO_PLACEMENTS.map(action => ({

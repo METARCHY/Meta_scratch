@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { ChevronUp, ChevronDown, Check, X } from "lucide-react";
 import { useGameState } from "@/context/GameStateContext";
@@ -170,7 +170,103 @@ export default function GameBoardPage() {
         }
     }, [phase]);
 
+    const localPhaseTicker = useRef(0);
+    const [isWaitingForPlayers, setIsWaitingForPlayers] = useState(false);
+    const [triggerGlobalPhaseAdvance, setTriggerGlobalPhaseAdvance] = useState(0);
+
+    const commitTurn = async () => {
+        if (!game || !player.citizenId) return;
+
+        // If this is a Test Game against bots, we bypass the multiplayer lock entirely
+        if (game.isTest) {
+            handleNextPhaseWrapper();
+            return;
+        }
+
+        setIsWaitingForPlayers(true);
+        try {
+            const mainPlayerId = player.citizenId || player.address || 'p1';
+            const myActors = placedActors.filter(a => a.playerId === mainPlayerId);
+
+            await fetch(`/api/games/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'sync-turn',
+                    citizenId: mainPlayerId,
+                    placedActors: myActors
+                })
+            });
+        } catch (e) {
+            console.error("Sync error", e);
+            setIsWaitingForPlayers(false);
+        }
+    };
+
+    // Client polling listener for global Phase Advance
+    useEffect(() => {
+        if (!game || !game.gameState) return;
+
+        if (game.gameState.phaseTicker > localPhaseTicker.current) {
+            localPhaseTicker.current = game.gameState.phaseTicker;
+
+            // Merge staged actors from everyone
+            let allStagedActors: any[] = [];
+            Object.values(game.gameState.stagedActors || {}).forEach((actors: any) => {
+                allStagedActors = [...allStagedActors, ...actors];
+            });
+
+            if (allStagedActors.length > 0) {
+                setPlacedActors(allStagedActors);
+            }
+
+            setIsWaitingForPlayers(false);
+            setTriggerGlobalPhaseAdvance(prev => prev + 1);
+        }
+    }, [game?.gameState?.phaseTicker]);
+
+    // Triggers local progression with fresh states once sync resolves
+    useEffect(() => {
+        if (triggerGlobalPhaseAdvance > 0) {
+            handleNextPhaseWrapper();
+        }
+    }, [triggerGlobalPhaseAdvance]);
+
     const handleNextPhaseWrapper = () => {
+        // --- End of Phase 4 Rewards ---
+        if (phase === 4) {
+            // Give rewards to all surviving actors that are not on disabled locations
+            placedActors.forEach(actor => {
+                const mainPlayerId = player.citizenId || player.address || 'p1';
+                if ((actor.playerId === 'p1' || actor.playerId === mainPlayerId) && !disabledLocations.includes(actor.locId)) {
+                    const actorType = actor.actorType?.toLowerCase();
+                    const locDef = LOCATIONS.find(l => l.id === actor.locId);
+                    let earnedResource = '';
+
+                    if (actorType === 'politician') earnedResource = 'power';
+                    else if (actorType === 'scientist') earnedResource = 'knowledge';
+                    else if (actorType === 'artist') earnedResource = 'art';
+                    else if (actorType === 'robot') earnedResource = locDef?.resource || '';
+
+                    if (earnedResource) {
+                        const isDouble = actor.bid === 'product'; // Product bet gives +1
+                        let baseReward = 1;
+
+                        // Rule: Robots earn 3 units normally, but only 1 if shared (Draw)
+                        if (actorType === 'robot') {
+                            const robotsAtLoc = placedActors.filter(a => a.locId === actor.locId && a.actorType?.toLowerCase() === 'robot' && !disabledLocations.includes(a.locId));
+                            baseReward = robotsAtLoc.length > 1 ? 1 : 3;
+                        }
+
+                        const finalReward = isDouble ? (baseReward + 1) : baseReward;
+
+                        updateResource(earnedResource, (resources as any)[earnedResource] + finalReward);
+                        addLog(`${player.name || '080'} won ${finalReward} ${earnedResource.toUpperCase()} from ${actorType} at ${locDef?.name}!`);
+                    }
+                }
+            });
+        }
+
         handleNextPhase(
             turn, phase, p3Step, player, dynamicPlayers,
             addLog, triggerBotPhase3ActionsWrapper, setPhase, setP3Step as any, setP5Step as any,
@@ -189,7 +285,8 @@ export default function GameBoardPage() {
         if (!game) return;
         const mainPlayerId = player.citizenId || player.address || 'p1';
         const opponents = dynamicPlayers.filter(p => p.id !== mainPlayerId);
-        await triggerBotPhase3Actions(step, opponents, placedActors, addLog, setDisabledLocations, setPlacedActors);
+        // The BotAI function now expects `game` as the first argument
+        await triggerBotPhase3Actions(game, step, opponents, placedActors, addLog, setDisabledLocations, setPlacedActors);
     };
 
     const addLog = async (msg: string) => {
@@ -214,6 +311,8 @@ export default function GameBoardPage() {
     };
 
     console.log("GameBoardPage Rendering, Phase:", phase, "Turn:", turn);
+
+    const localPlayerId = useMemo(() => player.citizenId || player.address || 'p1', [player]);
 
     // Phase 1: Events
     const [currentEvent, setCurrentEvent] = useState(EVENTS[0]);
@@ -293,10 +392,15 @@ export default function GameBoardPage() {
                 avatar: p.avatar || PLAYERS[index]?.avatar || '/avatars/ghost.png'
             }));
 
-        const opponent1 = otherPlayers.length > 0 ? otherPlayers[0] : PLAYERS[0];
-        const opponent2 = otherPlayers.length > 1 ? otherPlayers[1] : PLAYERS[1];
+        const finalPlayers = [mainPlayer, ...otherPlayers];
 
-        return [mainPlayer, opponent1, opponent2];
+        // Only enforce exact 3-player formatting if it's a test game
+        if (game?.isTest && finalPlayers.length < 3) {
+            if (finalPlayers.length === 1) finalPlayers.push(PLAYERS[0], PLAYERS[1]);
+            else if (finalPlayers.length === 2) finalPlayers.push(PLAYERS[1]);
+        }
+
+        return finalPlayers;
     }, [player.citizenId, player.address, player.name, player.avatar, game?.players, game?.isTest]);
 
     // Conflict Detection Logic (Local override of gameConstants version)
@@ -317,12 +421,12 @@ export default function GameBoardPage() {
             // Process locations where player 1 has actors, ignoring disabled locations
             if (!disabledLocations.includes(locId)) {
                 // Find all player actors at this location
-                const myActorsAtLoc = actors.filter(a => a.playerId === 'p1');
+                const myActorsAtLoc = actors.filter(a => a.playerId === localPlayerId);
 
                 myActorsAtLoc.forEach(playerActorRaw => {
                     // Find opponents of the SAME ACTOR TYPE (Role vs Role)
                     const sameTypeOpponents = actors.filter(a =>
-                        a.playerId !== 'p1' &&
+                        a.playerId !== localPlayerId &&
                         a.actorType === playerActorRaw.actorType
                     );
 
@@ -370,20 +474,83 @@ export default function GameBoardPage() {
         return activeConflicts.find(c => c.locId === activeConflictLocId);
     }, [activeConflicts, activeConflictLocId]);
 
+    // Auto-advance Phase 4 when all conflicts are resolved
+    useEffect(() => {
+        if (phase === 4 && activeConflicts.length > 0) {
+            const remaining = activeConflicts.filter(c => !resolvedConflicts.includes(c.locId)).length;
+            if (remaining === 0 && resolvedConflicts.length > 0) {
+                const timer = setTimeout(() => handleNextPhaseWrapper(), 300);
+                return () => clearTimeout(timer);
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [phase, activeConflicts, resolvedConflicts]);
+
     const handleConflictResolve = (result: ConflictResult) => {
         if (!activeConflictLocId) return;
 
         // Detailed conflict logs are passed from ConflictResolutionView
         result.logs.forEach(l => addLog(`${l}`));
 
-        // Clear used bids from the actor so they don't apply on re-rolls
-        if (result.usedBid) {
-            setPlacedActors(prev => prev.map(actor => {
-                if (actor.actorId === currentConflict?.playerActor.actorId) {
-                    return { ...actor, bid: undefined };
+        // Process successful bids (Clear them and grant immediate rewards for Product bets)
+        if (result.successfulBids && result.successfulBids.length > 0) {
+            result.successfulBids.forEach(used => {
+                // Clear the used bid from the actor so it isn't applied again on restart
+                setPlacedActors(prev => prev.map(actor => {
+                    if (actor.actorId === used.actorId) {
+                        return { ...actor, bid: undefined };
+                    }
+                    return actor;
+                }));
+
+                // If Product bet won, give +1 immediately
+                if (used.bid === 'product') {
+                    const actor = placedActors.find(a => a.actorId === used.actorId);
+                    if (actor && actor.playerId === localPlayerId) {
+                        const actorType = actor.actorType?.toLowerCase();
+                        const locDef = LOCATIONS.find(l => l.id === actor.locId);
+                        let earnedResource = '';
+                        if (actorType === 'politician') earnedResource = 'power';
+                        else if (actorType === 'scientist') earnedResource = 'knowledge';
+                        else if (actorType === 'artist') earnedResource = 'art';
+                        else if (actorType === 'robot') earnedResource = locDef?.resource || '';
+
+                        if (earnedResource) {
+                            updateResource(earnedResource, (resources as any)[earnedResource] + 1);
+                            addLog(`${player.name || '080'} secured +1 ${earnedResource.toUpperCase()} from early Product Bet!`);
+                        }
+                    } else if (actor) {
+                        // Support for Bot receiving Product Bet reward
+                        setOpponentsData((prev: any) => {
+                            const oppId = actor.playerId;
+                            const oppData = prev[oppId] || { resources: { glory: 0, power: 0, knowledge: 0, art: 0, product: 0, energy: 0, recycle: 0 } };
+
+                            const actorType = actor.actorType?.toLowerCase();
+                            const locDef = LOCATIONS.find(l => l.id === actor.locId);
+                            let earnedResource = '';
+                            if (actorType === 'politician') earnedResource = 'power';
+                            else if (actorType === 'scientist') earnedResource = 'knowledge';
+                            else if (actorType === 'artist') earnedResource = 'art';
+                            else if (actorType === 'robot') earnedResource = locDef?.resource || '';
+
+                            if (earnedResource) {
+                                return {
+                                    ...prev,
+                                    [oppId]: {
+                                        ...oppData,
+                                        resources: {
+                                            ...oppData.resources,
+                                            [earnedResource]: (oppData.resources[earnedResource] || 0) + 1
+                                        }
+                                    }
+                                };
+                            }
+                            return prev;
+                        });
+                        addLog(`Opponent secured +1 resource from early Product Bet!`);
+                    }
                 }
-                return actor;
-            }));
+            });
         }
 
         if (result.restart) {
@@ -396,57 +563,29 @@ export default function GameBoardPage() {
         const realLocId = currentConflict?.realLocId;
         const locDef = LOCATIONS.find(l => l.id === realLocId);
 
-        // Handle Tie Eviction (Only evict the specific actor types involved in the tie)
+        // Handle Evictions based on Conflict Outcome
+        const conflictActorType = currentConflict?.playerActor.actorType;
+
         if (result.evictAll) {
-            const tieActorType = currentConflict?.playerActor.actorType;
-            addLog(`Draw: All ${tieActorType}s evicted from location.`);
-            setPlacedActors(prev => prev.filter(actor => !(actor.locId === realLocId && actor.actorType === tieActorType)));
-        }
+            addLog(`Draw: All ${conflictActorType}s evicted from location.`);
+            setPlacedActors(prev => prev.filter(actor => !(actor.locId === realLocId && actor.actorType === conflictActorType)));
+        } else if (result.winnerId) {
+            // A winner was chosen, evict all other actors of this type from the location
+            setPlacedActors(prev => prev.filter(actor => {
+                // Keep the actor if it's NOT part of this specific conflict group (different location or different type)
+                if (actor.locId !== realLocId || actor.actorType !== conflictActorType) return true;
 
-        // Logic for Reward
-        if (result.winnerId === 'p1' || result.shareRewards) {
-            const actor = placedActors.find(a => a.actorId === currentConflict?.playerActor.actorId);
+                // If it IS in this conflict group, only keep it if it's the winner
+                // The winnerId could be the player marker 'p1' or an opponent's specific actorId
+                const isWinner = (result.winnerId === localPlayerId && actor.playerId === localPlayerId) || (actor.actorId === result.winnerId);
 
-            if (actor) {
-                // Determine which resource this actor should receive based on their type
-                const actorType = actor.actorType?.toLowerCase();
-                let earnedResource = '';
-
-                if (actorType === 'politician') {
-                    earnedResource = 'power';
-                } else if (actorType === 'scientist') {
-                    earnedResource = 'knowledge';
-                } else if (actorType === 'artist') {
-                    earnedResource = 'art';
-                } else if (actorType === 'robot') {
-                    // Only robots earn the resource defined by the location itself
-                    earnedResource = locDef?.resource || '';
-                }
-
-                if (earnedResource) {
-                    // Double prize only if they actually bid product and won (not just shared a draw)
-                    const isDouble = result.winnerId === 'p1' && actor.bid === 'product';
-                    const baseReward = 1;
-                    const finalReward = isDouble ? 2 : baseReward;
-
-                    updateResource(earnedResource, (resources as any)[earnedResource] + finalReward);
-                    addLog(`${player.name || '080'} won ${finalReward} ${earnedResource.toUpperCase()}!`);
-                } else {
-                    addLog(`Error: Could not determine resource reward for actor ${actorType} at ${realLocId}`);
-                }
-            }
+                return isWinner;
+            }));
         }
 
         // Mark as resolved
         setResolvedConflicts(prev => {
             const updated = [...prev, activeConflictLocId];
-
-            // If this was the absolute last conflict, auto-advance phase
-            const remaining = activeConflicts.filter(c => !updated.includes(c.locId)).length;
-            if (remaining === 0) {
-                setTimeout(() => handleNextPhaseWrapper(), 300); // slight delay to allow modal to close smoothly before phase transition
-            }
-
             return updated;
         });
         setActiveConflictLocId(null);
@@ -454,7 +593,7 @@ export default function GameBoardPage() {
 
 
     // --- Derived State ---
-    const usedRSPs = placedActors.filter(p => p.playerId === "p1").map(p => p.type);
+    const usedRSPs = placedActors.filter(p => p.playerId === localPlayerId).map(p => p.type);
     const availableActors = MY_ACTORS.filter(a => !placedActors.find(p => p.actorId === a.id));
 
 
@@ -648,7 +787,7 @@ export default function GameBoardPage() {
                 ...prev,
                 {
                     actorId: pendingPlacement.actorId,
-                    playerId: "p1",
+                    playerId: localPlayerId,
                     locId: pendingPlacement.locId,
                     type,
                     isOpponent: false,
@@ -707,7 +846,7 @@ export default function GameBoardPage() {
 
     const handleActorRecall = (actor: any) => {
         if (phase !== 2) return;
-        if (actor.playerId !== 'p1') return;
+        if (actor.playerId !== localPlayerId) return;
 
         console.log("Recalling actor:", actor.actorId);
         addLog(`Recalled ${actor.type} from map`);
@@ -870,17 +1009,18 @@ export default function GameBoardPage() {
                     selectedHex={selectedHex}
                     playerActorsV2={MY_ACTORS}
                     players={dynamicPlayers}
+                    localPlayerId={localPlayerId}
                     availableTeleportCards={teleportCardsCount}
                     availableExchangeCards={exchangeCardsCount}
                     onHexClick={handleHexClick}
                     onPlayerClick={(actor, e) => {
                         console.log("onPlayerClick triggered for actor:", actor);
                         if (phase === 2) handleActorRecall(actor);
-                        if (phase === 3 && p3Step === 1 && actor.playerId === 'p1') {
+                        if (phase === 3 && p3Step === 1 && actor.playerId === localPlayerId) {
                             // Toggle menu
                             setBiddingActorId(prev => prev === actor.actorId ? null : actor.actorId);
                         }
-                        if (phase === 3 && p3Step === 3 && actor.playerId === 'p1') {
+                        if (phase === 3 && p3Step === 3 && actor.playerId === localPlayerId) {
                             // Start Teleport if cards available
                             if (teleportCardsCount > 0) {
                                 setTeleportSource(prev => prev === actor.actorId ? null : actor.actorId);
@@ -894,7 +1034,7 @@ export default function GameBoardPage() {
                         }
 
                         // NEW: Exchange interaction on map markers
-                        if (phase === 3 && p3Step === 4 && actor.playerId !== 'p1') {
+                        if (phase === 3 && p3Step === 4 && actor.playerId !== localPlayerId) {
                             console.log("Exchange condition met, exchangeCardsCount:", exchangeCardsCount);
                             if (exchangeCardsCount > 0) {
                                 const targetPlayer = dynamicPlayers.find(p => p.id === actor.playerId);
@@ -1008,15 +1148,17 @@ export default function GameBoardPage() {
                         {/* Only show Next Phase if not in Phase 2 OR if all actors distributed. And in Phase 4, only if all conflicts are resolved. */}
                         {phase !== 5 && ((phase !== 2 || availableActors.length === 0) && (phase !== 4 || activeConflicts.filter(c => !resolvedConflicts.includes(c.locId)).length === 0)) && (
                             <button
-                                onClick={handleNextPhaseWrapper}
-                                className="px-8 py-3 bg-[#d4af37] text-black font-bold rounded-lg shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:bg-[#ffe066] transition-all transform hover:scale-105 active:scale-95 uppercase tracking-widest text-xs"
+                                onClick={isWaitingForPlayers ? undefined : commitTurn}
+                                disabled={isWaitingForPlayers}
+                                className={`px-8 py-3 font-bold rounded-lg uppercase tracking-widest text-xs transition-all ${isWaitingForPlayers ? 'bg-gray-600 text-gray-400 cursor-not-allowed border-2 border-gray-500' : 'bg-[#d4af37] text-black shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:bg-[#ffe066] transform hover:scale-105 active:scale-95'}`}
                             >
-                                {phase === 3 ? (
-                                    p3Step === 1 ? "Start Disabling" :
-                                        p3Step === 2 ? "Start Teleport" :
-                                            p3Step === 3 ? "Start Exchange" :
-                                                "Start Conflicts"
-                                ) : "Next Phase"}
+                                {isWaitingForPlayers ? "WAITING FOR OTHERS..." :
+                                    phase === 3 ? (
+                                        p3Step === 1 ? "Start Disabling" :
+                                            p3Step === 2 ? "Start Teleport" :
+                                                p3Step === 3 ? "Start Exchange" :
+                                                    "Start Conflicts"
+                                    ) : "Next Phase"}
                             </button>
                         )}
                     </div>

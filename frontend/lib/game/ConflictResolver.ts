@@ -4,7 +4,7 @@ export interface ConflictResult {
     restart: boolean;
     evictAll: boolean;
     shareRewards: boolean;
-    usedBid?: string;
+    successfulBids: { actorId: string, bid: string }[];
     logs: string[];
 }
 
@@ -26,7 +26,7 @@ export const resolveConflictLogic = (
             restart: false,
             evictAll: false,
             shareRewards: false,
-            usedBid: undefined,
+            successfulBids: [],
             logs: ["Area secured without opposition."]
         };
     }
@@ -41,33 +41,48 @@ export const resolveConflictLogic = (
         }))
     ];
 
-    const counts = { rock: 0, paper: 0, scissors: 0 };
-    choices.forEach(c => {
-        if (counts[c.choice as keyof typeof counts] !== undefined) {
-            counts[c.choice as keyof typeof counts]++;
-        }
-    });
+    const nonDummys = choices.filter(c => c.choice !== 'dummy');
 
-    const presentTypes = Object.keys(counts).filter(k => counts[k as keyof typeof counts] > 0);
-    let winnerType = null;
     let isDraw = false;
+    let winnerType: string | null = null;
+    let winners: any[] = [];
 
-    if (presentTypes.length === 1 || presentTypes.length === 3) {
+    if (nonDummys.length === 0) {
+        // Only Dummys were played
         isDraw = true;
     } else {
-        const [t1, t2] = presentTypes;
-        if (
-            (t1 === 'rock' && t2 === 'scissors') ||
-            (t1 === 'scissors' && t2 === 'paper') ||
-            (t1 === 'paper' && t2 === 'rock')
-        ) {
-            winnerType = t1;
-        } else {
-            winnerType = t2;
-        }
-    }
+        // At least one person picked R/P/S. All dummys automatically lose.
+        const counts = { rock: 0, paper: 0, scissors: 0 };
+        nonDummys.forEach(c => {
+            if (counts[c.choice as keyof typeof counts] !== undefined) {
+                counts[c.choice as keyof typeof counts]++;
+            }
+        });
 
-    const winners = isDraw ? [] : choices.filter(c => c.choice === winnerType);
+        const presentTypes = Object.keys(counts).filter(k => counts[k as keyof typeof counts] > 0);
+
+        if (presentTypes.length === 1) {
+            // Everyone (who didn't pick Dummy) picked the exact same thing
+            winnerType = presentTypes[0];
+        } else if (presentTypes.length === 3) {
+            // Rock, Paper, AND Scissors were all played
+            isDraw = true;
+        } else {
+            // Exactly two types, check RPS rules
+            const [t1, t2] = presentTypes;
+            if (
+                (t1 === 'rock' && t2 === 'scissors') ||
+                (t1 === 'scissors' && t2 === 'paper') ||
+                (t1 === 'paper' && t2 === 'rock')
+            ) {
+                winnerType = t1;
+            } else {
+                winnerType = t2;
+            }
+        }
+
+        winners = isDraw ? [] : nonDummys.filter(c => c.choice === winnerType);
+    }
 
     let finalWinnerId = winners.length === 1 ? winners[0].id : null;
     let finalIsDraw = isDraw || winners.length > 1;
@@ -87,34 +102,47 @@ export const resolveConflictLogic = (
     const locName = conflict.locationName || 'Unknown Location';
     logs.push(`Conflict at ${locName.toUpperCase()}: ${player.name || '080'} used ${p1ActorType} with ${p1ChoiceStr}. Opponents: ${oppDetails.join(', ')}.`);
 
-    const p1ChoiceObj = choices.find(c => c.id === 'p1');
-    const p1Bid = applyBids ? p1ChoiceObj?.bid : undefined;
-    let usedBid: string | undefined = undefined;
+    const successfulBids: { actorId: string, bid: string }[] = [];
 
-    let p1Won = finalWinnerId === 'p1';
-    let p1Lost = !p1Won && !finalIsDraw;
+    if (applyBids) {
+        // 1. Check Recycle (Draw) Bids
+        if (finalIsDraw) {
+            const recycleBidders = choices.filter(c => c.bid === 'recycle');
+            if (recycleBidders.length > 0) {
+                if (recycleBidders.length === 1) {
+                    const winner = recycleBidders[0];
+                    logs.push(`Recycle Bid Activated: ${winner.id === 'p1' ? 'Player' : 'Opponent'} wins the draw!`);
+                    finalWinnerId = winner.id;
+                    finalIsDraw = false;
+                } else {
+                    logs.push("Multiple Recycle Bids Activated: Conflict remains a draw!");
+                }
+                recycleBidders.forEach(b => successfulBids.push({ actorId: b.id, bid: 'recycle' }));
+            }
+        }
 
-    if (p1Bid === 'recycle' && finalIsDraw) {
-        logs.push("Recycle Bid Activated: Player wins the draw!");
-        finalWinnerId = 'p1';
-        finalIsDraw = false;
-        p1Won = true;
-        p1Lost = false;
-        usedBid = 'recycle';
+        // 2. Check Product (Win) Bids
+        if (finalWinnerId) {
+            const winnerObj = choices.find(c => c.id === finalWinnerId);
+            if (winnerObj && winnerObj.bid === 'product') {
+                logs.push(`Product Bid Activated: ${winnerObj.id === 'p1' ? 'Player' : 'Opponent'} secures +1 resource!`);
+                successfulBids.push({ actorId: winnerObj.id, bid: 'product' });
+            }
+        }
+
+        // 3. Check Energy (Lose) Bids
+        if (!finalIsDraw && finalWinnerId) {
+            const energyLosers = choices.filter(c => c.id !== finalWinnerId && c.bid === 'energy');
+            if (energyLosers.length > 0) {
+                logs.push(`Energy Bid Activated: Defeat averted, conflict restarts without bets!`);
+                energyLosers.forEach(b => successfulBids.push({ actorId: b.id, bid: 'energy' }));
+                finalRestart = true;
+                finalWinnerId = null;
+            }
+        }
     }
 
-    if (p1Bid === 'energy' && p1Lost) {
-        logs.push("Energy Bid Activated: Defeat averted, conflict restarts.");
-        finalRestart = true;
-        usedBid = 'energy';
-        return { winnerId: null, isDraw: false, restart: true, evictAll: false, shareRewards: false, usedBid, logs };
-    }
-
-    if (p1Bid === 'product' && p1Won) {
-        usedBid = 'product';
-    }
-
-    if (finalIsDraw) {
+    if (finalIsDraw && !finalRestart) {
         const actorType = conflict.playerActor.actorType.toLowerCase();
 
         if (actorType === 'politician') {
@@ -135,7 +163,7 @@ export const resolveConflictLogic = (
         restart: finalRestart,
         evictAll: finalEvictAll,
         shareRewards: finalShareRewards,
-        usedBid,
+        successfulBids: successfulBids,
         logs
     };
 };

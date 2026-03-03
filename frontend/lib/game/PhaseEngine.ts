@@ -48,7 +48,9 @@ export const handleNextPhase = (
         setPhase(nextPhase);
         // Reset P3 step when leaving P3
         if (nextPhase !== 3) setP3Step(1);
-        if (nextPhase === 5) setP5Step(1);
+
+        // MVP: Skip Player Exchange (Steps 1 & 2) and go straight to Buy Action Card (Step 3)
+        if (nextPhase === 5) setP5Step(3);
 
         if (nextPhase === 5) {
             // Remove all actors from the board at the end of Phase 4
@@ -65,7 +67,8 @@ export const handleNextPhase = (
         });
         addLog(`PHASE ${nextPhase}`);
     } else {
-        setPhase(1);
+        // MVP: Skip Phase 1 (Events) for now and go straight to Phase 2 (Distribution)
+        setPhase(2);
         setP3Step(1);
         setTurn(t => t + 1);
         setPlacedActors([]); // Safety clearing for next turn

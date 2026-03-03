@@ -40,6 +40,26 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
             game = gameService.update(params.id, {
                 logs: [...(game.logs || []), formattedMsg]
             }) || game;
+        } else if (action === 'sync-turn' && body.citizenId) {
+            const state = game.gameState || {
+                phaseTicker: 0,
+                playerReady: {},
+                stagedActors: {}
+            };
+
+            state.playerReady[body.citizenId] = true;
+            if (body.placedActors) {
+                state.stagedActors[body.citizenId] = body.placedActors;
+            }
+
+            // Check if all joined players are ready
+            const readyCount = Object.keys(state.playerReady).length;
+            if (readyCount > 0 && readyCount >= game.players.length) {
+                state.phaseTicker += 1;
+                state.playerReady = {};
+            }
+
+            game = gameService.update(params.id, { gameState: state }) || game;
         } else if (action === 'update' && updates) {
             game = gameService.update(params.id, updates) || game;
         }

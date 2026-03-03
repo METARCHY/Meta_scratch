@@ -23,6 +23,7 @@ interface MapContainerProps {
     players: any[];
     availableTeleportCards?: number;
     availableExchangeCards?: number;
+    localPlayerId: string;
     onHexClick: (locId: string) => void;
     onPlayerClick: (actor: any, event: React.MouseEvent) => void;
 }
@@ -49,6 +50,7 @@ export default function MapContainer({
     players,
     availableTeleportCards,
     availableExchangeCards,
+    localPlayerId,
     onHexClick,
     onPlayerClick
 }: MapContainerProps) {
@@ -213,7 +215,7 @@ export default function MapContainer({
                         >
                             <div className="absolute inset-0 flex items-center justify-center">
                                 {actorsHere.map((a, i) => {
-                                    const isVisible = a.playerId === 'p1' || phase >= 3;
+                                    const isVisible = a.playerId === localPlayerId || phase >= 3;
                                     if (!isVisible) return null;
 
                                     // Resolve full actor details
@@ -229,7 +231,7 @@ export default function MapContainer({
                                     const finalY = baseSlotY + opponentYOffset;
 
                                     // Opponent Marker 
-                                    if (a.playerId !== 'p1') {
+                                    if (a.playerId !== localPlayerId) {
                                         const opponent = players.find(p => p.id === a.playerId);
                                         const playerAvatar = opponent?.avatar || "";
 

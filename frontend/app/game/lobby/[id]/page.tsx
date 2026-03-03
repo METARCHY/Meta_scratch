@@ -65,8 +65,8 @@ export default function LobbyPage() {
     useEffect(() => {
         if (!game || simulationStarted.current || game.status !== 'waiting') return;
 
-        // Only trigger simulation if it's a test game OR if it's an empty "normal" game (legacy behavior)
-        if (!game.isTest && game.players.length > 1) return;
+        // ONLY trigger simulation if it's explicitly a test game
+        if (!game.isTest) return;
 
         simulationStarted.current = true;
 
@@ -145,7 +145,22 @@ export default function LobbyPage() {
     if (!game) return <div className="min-h-screen bg-black text-white flex items-center justify-center">Game not found</div>;
 
     const currentPlayer = game.players.find(p => p.citizenId === player.citizenId);
+    const hasJoined = !!currentPlayer;
     const isReady = currentPlayer?.isReady || false;
+
+    const handleJoinGame = async () => {
+        if (!game || !player.citizenId) return;
+        try {
+            await fetch(`/api/games/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'join', player: player })
+            });
+            // State update will happen on next poll
+        } catch (e) {
+            console.error("Join error", e);
+        }
+    };
 
     return (
         <main className="relative w-full h-screen overflow-hidden bg-black text-white font-sans flex items-center justify-center">
@@ -275,6 +290,14 @@ export default function LobbyPage() {
                                     </div>
                                     <div className="text-xs tracking-[0.5em] text-[#d4af37] uppercase mt-2">Starting Game</div>
                                 </div>
+                            ) : !hasJoined ? (
+                                <MetarchyButton
+                                    variant="gold"
+                                    className="w-48 h-12 text-lg tracking-widest"
+                                    onClick={handleJoinGame}
+                                >
+                                    JOIN GAME
+                                </MetarchyButton>
                             ) : (
                                 <MetarchyButton
                                     variant={isReady ? "blue" : "gold"}

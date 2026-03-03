@@ -11,8 +11,8 @@ interface NewPlayersPanelProps {
 export default function NewPlayersPanel({ players = [], p3Step, availableExchangeCards, onExchangeClick }: NewPlayersPanelProps) {
     // Data unpacking: p1 is Index 0 (User), p2/p3 are Index 1/2 (Opponents)
     const userPlayer = players[0] || { name: 'Citizen', avatar: '/avatars/golden_avatar.png' };
-    const p2 = players[1] || { id: 'p2', name: 'Viper', avatar: '/avatars/viper.png' };
-    const p3 = players[2] || { id: 'p3', name: 'Ghost', avatar: '/avatars/ghost.png' };
+    const p2 = players.length > 1 ? players[1] : null;
+    const p3 = players.length > 2 ? players[2] : null;
 
     const showExchange = p3Step === 4 && availableExchangeCards && availableExchangeCards > 0;
 
@@ -151,15 +151,19 @@ export default function NewPlayersPanel({ players = [], p3Step, availableExchang
                     <span className="text-[#A08C5C] font-bold text-sm uppercase tracking-widest">{userPlayer.name}</span>
                 </div>
 
-                {/* 4. Player 2 (Viper) */}
-                <div className="pointer-events-auto">
-                    <AvatarCircle x={151} y={75.16} r={21.7} img={p2.avatar} alt="Viper" player={p2} />
-                </div>
+                {/* 4. Player 2 */}
+                {p2 && (
+                    <div className="pointer-events-auto">
+                        <AvatarCircle x={151} y={75.16} r={21.7} img={p2.avatar} alt={p2.name} player={p2} />
+                    </div>
+                )}
 
-                {/* 5. Player 3 (Ghost) */}
-                <div className="pointer-events-auto">
-                    <AvatarCircle x={232.2} y={73.4} r={22} img={p3.avatar} alt="Ghost" player={p3} />
-                </div>
+                {/* 5. Player 3 */}
+                {p3 && (
+                    <div className="pointer-events-auto">
+                        <AvatarCircle x={232.2} y={73.4} r={22} img={p3.avatar} alt={p3.name} player={p3} />
+                    </div>
+                )}
 
             </div>
         </div>

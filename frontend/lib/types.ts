@@ -38,4 +38,9 @@ export interface Game {
     startTime?: number; // New: Game start timestamp
     isTest?: boolean;
     deletedAt?: number; // Soft delete timestamp
+    gameState?: {
+        phaseTicker: number;
+        playerReady: Record<string, boolean>;
+        stagedActors: Record<string, any[]>;
+    };
 }

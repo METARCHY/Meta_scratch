@@ -99,6 +99,7 @@ export const ACTION_CARDS = [
 ];
 
 // Helper to check for conflicts
+// Helper to check for conflicts
 export const getConflicts = (actors: any[]) => {
     const locations = Array.from(new Set(actors.map(a => a.locId)));
     const conflicts: any[] = [];
@@ -107,22 +108,24 @@ export const getConflicts = (actors: any[]) => {
         const atLoc = actors.filter(a => a.locId === locId);
         if (atLoc.length < 2) return;
 
-        const types: { [key: string]: number } = {};
+        const actorsByType: { [key: string]: any[] } = {};
         atLoc.forEach(a => {
-            const type = a.type || 'unknown';
-            types[type] = (types[type] || 0) + 1;
+            const actorType = a.actorType || 'unknown';
+            if (!actorsByType[actorType]) actorsByType[actorType] = [];
+            actorsByType[actorType].push(a);
         });
 
-        const hasConflict = Object.values(types).some(count => count > 1);
-
-        if (hasConflict) {
-            conflicts.push({
-                id: `conflict_${locId}`,
-                locId,
-                actors: atLoc,
-                status: 'pending'
-            });
-        }
+        Object.entries(actorsByType).forEach(([actorType, actorsOfType]) => {
+            if (actorsOfType.length > 1) {
+                conflicts.push({
+                    id: `conflict_${locId}_${actorType}`,
+                    locId,
+                    actorType, // Keep track of which class is fighting
+                    actors: actorsOfType, // ONLY the actors of this type
+                    status: 'pending'
+                });
+            }
+        });
     });
     return conflicts;
 };
