@@ -61,11 +61,14 @@ The application will be available at [http://localhost:3000](http://localhost:30
 - **Narrative Asset Interface**: Re-engineered the **Action Cards** from a standard UI panel into a high-fidelity narrative asset. Shifted the focus to borderless 520px artwork, golden flavor text plates, and a centered, premium typography hierarchy that prioritizes immersion over raw information.
 - **Dynamic Strategic Logic**: Implemented the **Relocation & Exchange** framework, introducing non-linear movement and resource-swapping as core tactical levers for endgame dominance.
 - **Workflow Solidification**: Fixed the 4-step Action Phase sequence (Bidding → Denial → Mobility → Exchange), eliminating state ambiguity and enforcing a strict tactical rhythm.
+- **Conflict Visibility & Manual Flow**: Disabled auto-advance in Phase 4 to give players time to review logs. Created a player-focused sidebar that tracks unresolved and viewed conflicts, allowing manual review of peaceful resolutions and drawn out battles.
+- **Enhanced End Game State**: Built a dynamic Game Over sequence that calculates final Victory Points (VP). Rewards the winner with a glowing "VICTORY" overlay and laurels (Crown icon), while providing a clear "Return to Lobby" pathway.
 
 ### Phase 3: Conflict & Resolution Architecture
 - **Cinematic Resolution Arena**: Designed a full-screen battle environment featuring actor tinting, location-specific dynamic backdrops, and animated "VS" reveal sequences.
 - **Role-Based Tactical Isolation**: Engineered conflict detection to match actors by role (Politician vs. Politician), ensuring that location dominance is a matter of professional rivalry, not just resource bidding.
 - **Visual Feedback desaturation**: Integrated a global "disabled" state that desaturates locations and actors, providing instant, map-wide reconnaissance of active vs. inactive zones.
+- **Multi-Agent Readiness**: Implemented strict turn-based progression, ensuring game stages advance only when all real players and intelligent bots report "ready" in the global log stream.
 
 ### Phase 2: Project Governance & Live Telemetry
 - **Admin Nerve Center**: Developed a real-time telemetry dashboard for live session monitoring, high-precision auditing (UTC-synced logs), and citizen record management.
