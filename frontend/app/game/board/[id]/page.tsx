@@ -614,52 +614,39 @@ export default function GameBoardPage() {
                 // If Product bet won, give +1 immediately
                 if (used.bid === 'product') {
                     const actor = placedActors.find(a => a.actorId === used.actorId);
-                    if (actor && actor.playerId === localPlayerId) {
+                    if (actor) {
+                        const isMain = actor.playerId === localPlayerId;
                         const actorType = actor.actorType?.toLowerCase();
-                        const locDef = LOCATIONS.find(l => l.id === actor.locId);
+                        const currentLocDef = LOCATIONS.find(l => l.id === actor.locId);
                         let earnedResource = '';
+
                         if (actorType === 'politician') earnedResource = 'power';
                         else if (actorType === 'scientist') earnedResource = 'knowledge';
                         else if (actorType === 'artist') earnedResource = 'art';
-                        else if (actorType === 'robot') earnedResource = locDef?.resource || '';
+                        else if (actorType === 'robot') earnedResource = currentLocDef?.resource || '';
 
                         if (earnedResource) {
-                            updateResource(earnedResource, (resources as any)[earnedResource] + 1);
-                            addLog(`${player.name || '080'}'s ${actor.actorType.toUpperCase()} secured +1 ${earnedResource.toUpperCase()} from early Product Bet!`);
-                        }
-
-                    } else if (actor) {
-                        // Support for Bot receiving Product Bet reward
-                        setOpponentsData((prev: any) => {
-                            const oppId = actor.playerId;
-                            const oppData = prev[oppId] || { resources: { glory: 0, power: 0, knowledge: 0, art: 0, product: 0, energy: 0, recycle: 0 } };
-
-                            const actorType = actor.actorType?.toLowerCase();
-                            const locDef = LOCATIONS.find(l => l.id === actor.locId);
-                            let earnedResource = '';
-                            if (actorType === 'politician') earnedResource = 'power';
-                            else if (actorType === 'scientist') earnedResource = 'knowledge';
-                            else if (actorType === 'artist') earnedResource = 'art';
-                            else if (actorType === 'robot') earnedResource = locDef?.resource || '';
-
-                            if (earnedResource) {
-                                return {
-                                    ...prev,
-                                    [oppId]: {
-                                        ...oppData,
-                                        resources: {
-                                            ...oppData.resources,
-                                            [earnedResource]: (oppData.resources[earnedResource] || 0) + 1
+                            if (isMain) {
+                                updateResource(earnedResource, (resources as any)[earnedResource] + 1);
+                                addLog(`${player.name || '080'}'s ${actor.actorType.toUpperCase()} secured +1 ${earnedResource.toUpperCase()} from early Product Bet!`);
+                            } else {
+                                setOpponentsData((prev: any) => {
+                                    const oppId = actor.playerId;
+                                    const oppData = prev[oppId] || { resources: { glory: 0, power: 0, knowledge: 0, art: 0, product: 0, energy: 0, recycle: 0 } };
+                                    return {
+                                        ...prev,
+                                        [oppId]: {
+                                            ...oppData,
+                                            resources: {
+                                                ...oppData.resources,
+                                                [earnedResource]: (oppData.resources[earnedResource] || 0) + 1
+                                            }
                                         }
-                                    }
-                                };
+                                    };
+                                });
+                                addLog(`${actor.name}'s ${actor.actorType.toUpperCase()} secured +1 ${earnedResource.toUpperCase()} from early Product Bet!`);
                             }
-                            return prev;
-                        });
-                        const resource = (locDef?.resource || 'glory').toLowerCase();
-                        addLog(`${actor.name}'s ${actor.actorType.toUpperCase()} secured +1 ${resource.toUpperCase()} from early Product Bet!`);
-
-
+                        }
                     }
                 }
             });
