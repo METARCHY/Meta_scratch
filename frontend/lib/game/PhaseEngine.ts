@@ -21,7 +21,8 @@ export const handleNextPhase = (
     setPlacedActors: Dispatch<SetStateAction<any[]>>,
     setResolvedConflicts: Dispatch<SetStateAction<string[]>>,
     setDisabledLocations: Dispatch<SetStateAction<string[]>>,
-    setOpponentsReady: Dispatch<SetStateAction<boolean>>
+    setOpponentsReady: Dispatch<SetStateAction<boolean>>,
+    isTest?: boolean
 ): { newPhase: number, newTurn: number, isGameOver: boolean } => {
     let newPhase = phase;
     let newTurn = turn;
@@ -29,6 +30,7 @@ export const handleNextPhase = (
 
     // Calculate max turns based on player count
     const maxTurns = (() => {
+        if (isTest) return 3; // Test games end after 3 turns
         const playerCount = dynamicPlayers.length;
         if (playerCount === 4) return 8;
         if (playerCount === 5) return 6;

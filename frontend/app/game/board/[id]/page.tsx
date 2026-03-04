@@ -453,7 +453,8 @@ export default function GameBoardPage() {
             setPlacedActors,
             setResolvedConflicts,
             setDisabledLocations,
-            setOpponentsReady
+            setOpponentsReady,
+            game?.isTest
         );
 
 
