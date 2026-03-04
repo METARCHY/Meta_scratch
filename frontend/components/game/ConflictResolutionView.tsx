@@ -15,6 +15,7 @@ interface ConflictResolutionViewProps {
         opponents: any[]; // { actorId, name, avatar, type, bid? }
         resourceType: string;
     };
+    isResolved?: boolean;
     hasNextConflict?: boolean;
     onResolve: (result: ConflictResult) => void;
     onClose: () => void;
@@ -24,7 +25,7 @@ import { LOCATION_IMAGES, RSP_ICONS, BID_ICONS, RESOURCE_ICONS, ACTOR_IMAGES } f
 
 import { useGameState } from '@/context/GameStateContext';
 
-export default function ConflictResolutionView({ conflict, hasNextConflict, onResolve, onClose }: ConflictResolutionViewProps) {
+export default function ConflictResolutionView({ conflict, isResolved, hasNextConflict, onResolve, onClose }: ConflictResolutionViewProps) {
     const { player } = useGameState();
     const [step, setStep] = useState<'intro' | 'reveal' | 'outcome_rsp' | 'outcome_bid'>('intro');
 
@@ -37,8 +38,8 @@ export default function ConflictResolutionView({ conflict, hasNextConflict, onRe
 
     // 1. Initialize Opponent Choices (Random for now)
     useEffect(() => {
-        if (conflict.opponents.length === 0) {
-            // Peaceful Mining: No opponents, auto-resolve
+        if (conflict.opponents.length === 0 || isResolved) {
+            // Peaceful Mining or already resolved: auto-resolve and show outcome
             const res = resolveConflict(playerChoice);
             setResult(res);
             setStep('outcome_rsp');
@@ -53,7 +54,7 @@ export default function ConflictResolutionView({ conflict, hasNextConflict, onRe
         setOpponentChoices(choices);
         setStep('intro');
         setResult(null);
-    }, [conflict.locId]);
+    }, [conflict.locId, isResolved]);
 
     // 2. Logic: Resolve the Conflict
     const resolveConflict = (pChoice: string, applyBids: boolean = true): ConflictResult => {

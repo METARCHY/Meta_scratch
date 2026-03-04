@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Image from 'next/image';
-import { ChevronUp, ChevronDown, Check, X } from "lucide-react";
+import { ChevronUp, ChevronDown, Check, X, Crown, Trophy } from "lucide-react";
 import { useGameState } from "@/context/GameStateContext";
 import { TooltipProvider } from "@/context/TooltipContext";
 import CursorTooltip from "@/components/ui/CursorTooltip";
@@ -24,7 +24,7 @@ import MarketOfferModal, { MarketOffer } from '@/components/game/MarketOfferModa
 import MarketRevealModal from '@/components/game/MarketRevealModal';
 import BuyActionCardModal from '@/components/game/BuyActionCardModal';
 import { formatLog } from '@/lib/logUtils';
-import { triggerBotPhase3Actions, resolveBotOnlyConflicts, triggerOpponentPlacements } from '@/lib/game/BotAI';
+import { triggerBotPhase3Actions, triggerOpponentPlacements } from '@/lib/game/BotAI';
 import { handleNextPhase } from '@/lib/game/PhaseEngine';
 
 // Constants
@@ -73,11 +73,20 @@ export default function GameBoardPage() {
     const { id } = useParams();
     // --- State Management ---
     const { resources, updateResource, player } = useGameState();
+    // --- Core Game State ---
     const [game, setGame] = useState<any>(null);
     const [phase, setPhase] = useState(2); // Game starts at T1P2
     const [turn, setTurn] = useState(1);
+    const [placedActors, setPlacedActors] = useState<any[]>([]);
+    const [disabledLocations, setDisabledLocations] = useState<string[]>([]);
     const [opponentsReady, setOpponentsReady] = useState(false);
     const [opponentsData, setOpponentsData] = useState<Record<string, OpponentData>>({});
+    const [isGameOver, setIsGameOver] = useState(false);
+    const [activeConflictLocId, setActiveConflictLocId] = useState<string | null>(null);
+    const [resolvedConflicts, setResolvedConflicts] = useState<string[]>([]);
+    const localPlayerId = player.citizenId || player.address || 'p1';
+
+
 
     // Initialize opponents data dynamically
     useEffect(() => {
@@ -164,207 +173,6 @@ export default function GameBoardPage() {
         return () => clearInterval(interval);
     }, [id, game, player.citizenId, updateResource]);
 
-    useEffect(() => {
-        if (phase === 4) {
-            resolveBotOnlyConflicts(placedActors, disabledLocations, resolvedConflicts, dynamicPlayers, addLog, setOpponentsData, setPlacedActors, setResolvedConflicts);
-        }
-    }, [phase]);
-
-    const localPhaseTicker = useRef(0);
-    const [isWaitingForPlayers, setIsWaitingForPlayers] = useState(false);
-    const [triggerGlobalPhaseAdvance, setTriggerGlobalPhaseAdvance] = useState(0);
-
-    const commitTurn = async () => {
-        if (!game || !player.citizenId) return;
-
-        // If this is a Test Game against bots, we bypass the multiplayer lock entirely
-        if (game.isTest) {
-            handleNextPhaseWrapper();
-            return;
-        }
-
-        setIsWaitingForPlayers(true);
-        try {
-            const mainPlayerId = player.citizenId || player.address || 'p1';
-            const myActors = placedActors.filter(a => a.playerId === mainPlayerId);
-
-            await fetch(`/api/games/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    action: 'sync-turn',
-                    citizenId: mainPlayerId,
-                    placedActors: myActors
-                })
-            });
-        } catch (e) {
-            console.error("Sync error", e);
-            setIsWaitingForPlayers(false);
-        }
-    };
-
-    // Client polling listener for global Phase Advance
-    useEffect(() => {
-        if (!game || !game.gameState) return;
-
-        if (game.gameState.phaseTicker > localPhaseTicker.current) {
-            localPhaseTicker.current = game.gameState.phaseTicker;
-
-            // Merge staged actors from everyone
-            let allStagedActors: any[] = [];
-            Object.values(game.gameState.stagedActors || {}).forEach((actors: any) => {
-                allStagedActors = [...allStagedActors, ...actors];
-            });
-
-            if (allStagedActors.length > 0) {
-                setPlacedActors(allStagedActors);
-            }
-
-            setIsWaitingForPlayers(false);
-            setTriggerGlobalPhaseAdvance(prev => prev + 1);
-        }
-    }, [game?.gameState?.phaseTicker]);
-
-    // Triggers local progression with fresh states once sync resolves
-    useEffect(() => {
-        if (triggerGlobalPhaseAdvance > 0) {
-            handleNextPhaseWrapper();
-        }
-    }, [triggerGlobalPhaseAdvance]);
-
-    const handleNextPhaseWrapper = () => {
-        // --- End of Phase 4 Rewards ---
-        if (phase === 4) {
-            // Give rewards to all surviving actors that are not on disabled locations
-            placedActors.forEach(actor => {
-                const mainPlayerId = player.citizenId || player.address || 'p1';
-                if ((actor.playerId === 'p1' || actor.playerId === mainPlayerId) && !disabledLocations.includes(actor.locId)) {
-                    const actorType = actor.actorType?.toLowerCase();
-                    const locDef = LOCATIONS.find(l => l.id === actor.locId);
-                    let earnedResource = '';
-
-                    if (actorType === 'politician') earnedResource = 'power';
-                    else if (actorType === 'scientist') earnedResource = 'knowledge';
-                    else if (actorType === 'artist') earnedResource = 'art';
-                    else if (actorType === 'robot') earnedResource = locDef?.resource || '';
-
-                    if (earnedResource) {
-                        const isDouble = actor.bid === 'product'; // Product bet gives +1
-                        let baseReward = 1;
-
-                        // Rule: Robots earn 3 units normally, but only 1 if shared (Draw)
-                        if (actorType === 'robot') {
-                            const robotsAtLoc = placedActors.filter(a => a.locId === actor.locId && a.actorType?.toLowerCase() === 'robot' && !disabledLocations.includes(a.locId));
-                            baseReward = robotsAtLoc.length > 1 ? 1 : 3;
-                        }
-
-                        const finalReward = isDouble ? (baseReward + 1) : baseReward;
-
-                        updateResource(earnedResource, (resources as any)[earnedResource] + finalReward);
-                        addLog(`${player.name || '080'} won ${finalReward} ${earnedResource.toUpperCase()} from ${actorType} at ${locDef?.name}!`);
-                    }
-                }
-            });
-        }
-
-        handleNextPhase(
-            turn, phase, p3Step, player, dynamicPlayers,
-            addLog, triggerBotPhase3ActionsWrapper, setPhase, setP3Step as any, setP5Step as any,
-            setTurn, setPlacedActors, setResolvedConflicts, setDisabledLocations
-        );
-    };
-
-    // --- Opponent Emulation ---
-    useEffect(() => {
-        if (phase === 2 && !opponentsReady && game) {
-            triggerOpponentPlacements(game, AUTO_PLACEMENTS, PLAYERS, setOpponentsReady, setPlacedActors, setOpponentsData, addLog);
-        }
-    }, [phase, game, opponentsReady]);
-
-    const triggerBotPhase3ActionsWrapper = async (step: number) => {
-        if (!game) return;
-        const mainPlayerId = player.citizenId || player.address || 'p1';
-        const opponents = dynamicPlayers.filter(p => p.id !== mainPlayerId);
-        // The BotAI function now expects `game` as the first argument
-        await triggerBotPhase3Actions(game, step, opponents, placedActors, addLog, setDisabledLocations, setPlacedActors);
-    };
-
-    const addLog = async (msg: string) => {
-        if (!id || !game) return;
-
-        // Optimistically update local state with a functional update to avoid stale closures
-        const formattedMsg = formatLog(game.displayId || game.id as string, msg);
-        setGame((prev: any) => ({
-            ...prev,
-            logs: [...(prev?.logs || []), formattedMsg]
-        }));
-
-        try {
-            await fetch(`/api/games/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'add-log', message: msg })
-            });
-        } catch (e) {
-            console.error("Failed to sync log", e);
-        }
-    };
-
-    console.log("GameBoardPage Rendering, Phase:", phase, "Turn:", turn);
-
-    const localPlayerId = useMemo(() => player.citizenId || player.address || 'p1', [player]);
-
-    // Phase 1: Events
-    const [currentEvent, setCurrentEvent] = useState(EVENTS[0]);
-    const [discardAmount, setDiscardAmount] = useState(0);
-    const [eventResult, setEventResult] = useState<{ msg: string, win: boolean } | null>(null);
-
-    // Phase 2: Distribution / Placement
-    const [selectedActorId, setSelectedActorId] = useState<string | null>(null);
-    const [hoveredActorId, setHoveredActorId] = useState<string | null>(null);
-    const [selectedHex, setSelectedHex] = useState<string | null>(null);
-    const [isWaiting, setIsWaiting] = useState(false);
-    const [placedActors, setPlacedActors] = useState<any[]>([]);
-    const [pendingPlacement, setPendingPlacement] = useState<{ actorId: string, locId: string } | null>(null);
-
-    // Phase 3: Action Phase
-    const [activeCardId, setActiveCardId] = useState<string | null>(null);
-    const [activatedCards, setActivatedCards] = useState<string[]>([]);
-    const [disabledLocations, setDisabledLocations] = useState<string[]>([]);
-    const [exchangeTarget, setExchangeTarget] = useState<{ id: string, name: string, avatar: string } | null>(null);
-    const [teleportSource, setTeleportSource] = useState<string | null>(null);
-    const [biddingActorId, setBiddingActorId] = useState<string | null>(null);
-    const [p3Step, setP3Step] = useState<1 | 2 | 3 | 4>(1); // 1: Bidding, 2: Stop, 3: Teleport, 4: Exchange
-    const [p5Step, setP5Step] = useState<1 | 2 | 3>(1); // 1: Market Offer, 2: Market Reveal, 3: Buy Cards
-    const [playerMarketOffer, setPlayerMarketOffer] = useState<MarketOffer | null>(null);
-    const [botMarketOffers, setBotMarketOffers] = useState<{ [id: string]: MarketOffer | null }>({});
-    const [marketMatchId, setMarketMatchId] = useState<string | null>(null);
-    const [actionHand, setActionHand] = useState<any[]>([]);
-    const [activationEffect, setActivationEffect] = useState<string | null>(null);
-
-    const filteredActionHand = useMemo(() => {
-        if (p3Step === 1) return [];
-        if (p3Step === 2) return actionHand.filter(c => c.type === 'turn off location');
-        if (p3Step === 3) return actionHand.filter(c => c.id.includes('relocation') || c.id.includes('teleport'));
-        if (p3Step === 4) return actionHand.filter(c => c.id.includes('change_values') || c.id.includes('exchange'));
-        return [];
-    }, [p3Step, actionHand]);
-
-    // Count available teleport cards
-    const teleportCardsCount = useMemo(() => {
-        return actionHand.filter(c => c.id.includes('relocation') || c.id.includes('teleport')).length;
-    }, [actionHand]);
-
-    // Count available exchange cards
-    const exchangeCardsCount = useMemo(() => {
-        return actionHand.filter(c => c.id.includes('change_values') || c.id.includes('exchange')).length;
-    }, [actionHand]);
-
-
-    // Phase 4: Conflicts
-    const [activeConflictLocId, setActiveConflictLocId] = useState<string | null>(null);
-    const [resolvedConflicts, setResolvedConflicts] = useState<string[]>([]);
-
     // Construct dynamic player list
     const dynamicPlayers = useMemo(() => {
         const mainPlayer = {
@@ -403,6 +211,31 @@ export default function GameBoardPage() {
         return finalPlayers;
     }, [player.citizenId, player.address, player.name, player.avatar, game?.players, game?.isTest]);
 
+    useEffect(() => {
+        if (phase === 4) {
+            import('@/lib/game/BotAI').then(m => {
+                m.resolveBotOnlyConflicts(
+                    placedActors,
+                    disabledLocations,
+                    resolvedConflicts,
+                    dynamicPlayers,
+                    localPlayerId,
+                    addLog,
+                    setOpponentsData,
+                    setPlacedActors,
+                    setResolvedConflicts
+                );
+            });
+        }
+    }, [phase, localPlayerId]);
+
+    const localPhaseTicker = useRef(0);
+    const isPlacingRef = useRef(false);
+    const isStepActionRef = useRef(false);
+
+    const [isWaitingForPlayers, setIsWaitingForPlayers] = useState(false);
+    const [triggerGlobalPhaseAdvance, setTriggerGlobalPhaseAdvance] = useState(0);
+
     // Conflict Detection Logic (Local override of gameConstants version)
     const activeConflicts = useMemo(() => {
         if (phase !== 4) return [];
@@ -415,94 +248,368 @@ export default function GameBoardPage() {
 
         const conflicts: any[] = [];
         Object.entries(locsWithActors).forEach(([locId, actors]) => {
-            // if (activeConflictLocId === locId) return; // Removed to allow all conflicts
-
-            // Conflict if > 1 actor AND location not disabled
-            // Process locations where player 1 has actors, ignoring disabled locations
+            // Process ALL locations where actors exist, ignoring disabled locations
             if (!disabledLocations.includes(locId)) {
-                // Find all player actors at this location
-                const myActorsAtLoc = actors.filter(a => a.playerId === localPlayerId);
+                // Determine all actor types present at this location to identify conflicts/peaceful resolutions
+                const actorTypesAtLoc = Array.from(new Set(actors.map(a => a.actorType)));
 
-                myActorsAtLoc.forEach(playerActorRaw => {
-                    // Find opponents of the SAME ACTOR TYPE (Role vs Role)
-                    const sameTypeOpponents = actors.filter(a =>
-                        a.playerId !== localPlayerId &&
-                        a.actorType === playerActorRaw.actorType
-                    );
+                actorTypesAtLoc.forEach(actorType => {
+                    // Find all actors of this type at this location
+                    const actorsOfType = actors.filter(a => a.actorType === actorType);
 
-                    // We now process both Conflicts (>0 opponents) and Peaceful Resolutions (0 opponents)
-                    const playerActorSource = MY_ACTORS.find(p => p.id === playerActorRaw.actorId);
+                    // A "conflict" object is created if there's at least one actor (Peaceful or VS)
+                    const locDef = LOCATIONS.find(l => l.id === locId);
+                    const uniqueConflictId = `${locId}_${actorType}`;
+
+                    // Don't duplicate
+                    if (conflicts.find(c => c.locId === uniqueConflictId)) return;
+
+                    // Divide into player and opponents for consistent modal display
+                    const playerActorRaw = actorsOfType.find(a => a.playerId === localPlayerId) || actorsOfType[0];
+                    const opponentsRaw = actorsOfType.filter(a => a.actorId !== playerActorRaw.actorId);
+
+                    const playerActorSource = MY_ACTORS.find(p => p.id === playerActorRaw.actorId) ||
+                        { avatar: playerActorRaw.avatar, headAvatar: playerActorRaw.headAvatar, type: playerActorRaw.actorType, name: playerActorRaw.name };
+
                     const playerActor = {
                         ...playerActorRaw,
                         avatar: playerActorSource?.avatar || '',
                         headAvatar: playerActorSource?.headAvatar || '',
-                        // playerActorRaw.type holds the RSP token (rock/paper/scissors)
                         type: playerActorRaw.type || playerActorSource?.type || 'unknown',
-                        actorType: playerActorSource?.type || 'unknown'
+                        actorType: playerActorRaw.actorType || 'unknown'
                     };
-
-                    const locDef = LOCATIONS.find(l => l.id === locId);
-
-                    // Unique ID per conflict instance (Location + ActorType)
-                    const uniqueConflictId = `${locId}_${playerActor.type}`;
-
-                    // Don't duplicate if already added OR resolved
-                    if (conflicts.find(c => c.locId === uniqueConflictId)) return;
-                    if (resolvedConflicts.includes(uniqueConflictId)) return;
 
                     conflicts.push({
                         locId: uniqueConflictId,
                         realLocId: locId,
                         locationName: locDef?.name || locId,
                         playerActor,
-                        opponents: sameTypeOpponents.map(o => ({
+                        opponents: opponentsRaw.map(o => ({
                             ...o,
                             name: dynamicPlayers.find(p => p.id === o.playerId)?.name || PLAYERS.find(p => p.id === o.playerId)?.name || 'Unknown',
                             playerAvatar: dynamicPlayers.find(p => p.id === o.playerId)?.avatar || PLAYERS.find(p => p.id === o.playerId)?.avatar || '',
                         })),
                         resourceType: locDef?.resource || 'glory',
-                        isPeaceful: sameTypeOpponents.length === 0
+                        isPeaceful: opponentsRaw.length === 0,
+                        hasPlayer: actorsOfType.some(a => a.playerId === localPlayerId)
                     });
                 });
             }
+
         });
         return conflicts;
-    }, [phase, placedActors, disabledLocations, resolvedConflicts, dynamicPlayers]);
+    }, [phase, placedActors, disabledLocations, resolvedConflicts, dynamicPlayers, localPlayerId]);
+
+    const [stickyConflicts, setStickyConflicts] = useState<any[]>([]);
+
+    // Logic to lock in conflicts when Phase 4 starts
+    useEffect(() => {
+        if (phase === 4 && activeConflicts.length > 0 && stickyConflicts.length === 0) {
+            setStickyConflicts(activeConflicts);
+        } else if (phase !== 4) {
+            setStickyConflicts([]);
+        }
+    }, [phase, activeConflicts, stickyConflicts.length]);
+
+    const commitTurn = async () => {
+        if (!game || !player.citizenId) return;
+
+        // If this is a Test Game against bots, we bypass the multiplayer lock entirely
+        // NEW: But WE MUST wait for bots to be ready if they are performing actions!
+        if (game.isTest) {
+            if (!opponentsReady && phase !== 4) { // Phase 4 has its own resolution logic
+                addLog("Wait for others to be ready...");
+                return;
+            }
+            handleNextPhaseWrapper();
+            addLog("All players are ready");
+            return;
+        }
+
+        setIsWaitingForPlayers(true);
+        try {
+            const mainPlayerId = player.citizenId || player.address || 'p1';
+            const myActors = placedActors.filter(a => a.playerId === mainPlayerId);
+
+            await fetch(`/api/games/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'sync-turn',
+                    citizenId: mainPlayerId,
+                    placedActors: myActors
+                })
+            });
+        } catch (e) {
+            console.error("Sync error", e);
+            setIsWaitingForPlayers(false);
+        }
+    };
+
+
+    // Client polling listener for global Phase Advance
+    useEffect(() => {
+        if (!game || !game.gameState) return;
+
+        if (game.gameState.phaseTicker > localPhaseTicker.current) {
+            localPhaseTicker.current = game.gameState.phaseTicker;
+
+            // Merge staged actors from everyone
+            let allStagedActors: any[] = [];
+            Object.values(game.gameState.stagedActors || {}).forEach((actors: any) => {
+                allStagedActors = [...allStagedActors, ...actors];
+            });
+
+            if (allStagedActors.length > 0) {
+                setPlacedActors(allStagedActors);
+            }
+
+            setIsWaitingForPlayers(false);
+            setTriggerGlobalPhaseAdvance(prev => prev + 1);
+        }
+    }, [game?.gameState?.phaseTicker]);
+
+    // Triggers local progression with fresh states once sync resolves
+    useEffect(() => {
+        if (triggerGlobalPhaseAdvance > 0) {
+            handleNextPhaseWrapper();
+        }
+    }, [triggerGlobalPhaseAdvance]);
+
+    const handleNextPhaseWrapper = async () => {
+        // --- End of Phase 4 Rewards ---
+        if (phase === 4) {
+            // Give rewards to all surviving actors that are not on disabled locations
+            placedActors.forEach(actor => {
+                const mainPlayerId = player.citizenId || player.address || 'p1';
+                if ((actor.playerId === 'p1' || actor.playerId === mainPlayerId) && !disabledLocations.includes(actor.locId)) {
+                    const actorType = actor.actorType?.toLowerCase();
+                    const locDef = LOCATIONS.find(l => l.id === actor.locId);
+                    let earnedResource = '';
+
+                    if (actorType === 'politician') earnedResource = 'power';
+                    else if (actorType === 'scientist') earnedResource = 'knowledge';
+                    else if (actorType === 'artist') earnedResource = 'art';
+                    else if (actorType === 'robot') earnedResource = locDef?.resource || '';
+
+                    if (earnedResource) {
+                        const isDouble = actor.bid === 'product'; // Product bet gives +1
+                        let baseReward = 1;
+
+                        // Rule: Robots earn 3 units normally, but only 1 if shared (Draw)
+                        if (actorType === 'robot') {
+                            const robotsAtLoc = placedActors.filter(a => a.locId === actor.locId && a.actorType?.toLowerCase() === 'robot' && !disabledLocations.includes(a.locId));
+                            baseReward = robotsAtLoc.length > 1 ? 1 : 3;
+                        }
+
+                        const finalReward = isDouble ? (baseReward + 1) : baseReward;
+
+                        updateResource(earnedResource, (resources as any)[earnedResource] + finalReward);
+                        addLog(`${player.name || '080'} won ${finalReward} ${earnedResource.toUpperCase()} from ${actorType} at ${locDef?.name}!`);
+                    }
+                }
+            });
+        }
+
+        const { handleNextPhase } = await import('@/lib/game/PhaseEngine');
+
+        // Reset readiness if we are staying in Phase 3 or moving to a synced phase
+        if (game?.isTest && (phase === 3 || (phase === 2 && availableActors.length === 0))) {
+            setOpponentsReady(false);
+        }
+
+        // Custom wrapper for bot actions
+        const triggerBotPhase3ActionsWrapper = async (step: number) => {
+            if (isStepActionRef.current) return;
+            isStepActionRef.current = true;
+            try {
+                const { triggerBotPhase3Actions } = await import('@/lib/game/BotAI');
+                await triggerBotPhase3Actions(
+                    game, step,
+                    dynamicPlayers.filter(p => (p.citizenId || p.address || 'p1') !== (player.citizenId || player.address || 'p1')),
+                    placedActors, addLog, setDisabledLocations, setPlacedActors,
+                    setOpponentsReady // Pass readiness setter
+                );
+            } finally {
+                isStepActionRef.current = false;
+            }
+        };
+
+
+        const { isGameOver: gameEnded } = handleNextPhase(
+            turn,
+            phase,
+            p3Step,
+            player,
+            dynamicPlayers,
+            placedActors,
+            disabledLocations,
+            addLog,
+            triggerBotPhase3ActionsWrapper,
+            setPhase,
+            setP3Step as any,
+            setP5Step as any,
+            setTurn,
+            setPlacedActors,
+            setResolvedConflicts,
+            setDisabledLocations,
+            setOpponentsReady
+        );
+
+
+        if (gameEnded) {
+            setIsGameOver(true);
+        }
+
+
+    };
+
+    // --- Opponent Emulation ---
+    useEffect(() => {
+        if (phase === 2 && !opponentsReady && game) {
+            triggerOpponentPlacements();
+        }
+    }, [phase, game, opponentsReady]);
+
+    const triggerOpponentPlacements = async () => {
+        if (isPlacingRef.current) return;
+        isPlacingRef.current = true;
+        try {
+            const { triggerOpponentPlacements } = await import('@/lib/game/BotAI');
+            await triggerOpponentPlacements(
+                game,
+                AUTO_PLACEMENTS,
+                PLAYERS,
+                setOpponentsReady,
+                setPlacedActors,
+                setOpponentsData,
+                addLog
+            );
+        } finally {
+            isPlacingRef.current = false;
+        }
+    };
+
+
+    const triggerBotPhase3ActionsWrapper = async (step: number) => {
+        if (!game) return;
+        const mainPlayerId = player.citizenId || player.address || 'p1';
+        const opponents = dynamicPlayers.filter(p => p.id !== mainPlayerId);
+
+        const { triggerBotPhase3Actions } = await import('@/lib/game/BotAI');
+        await triggerBotPhase3Actions(
+            game, step, opponents, placedActors, addLog,
+            setDisabledLocations, setPlacedActors, setOpponentsReady
+        );
+    };
+
+
+    const addLog = async (msg: string) => {
+        if (!id || !game) return;
+
+        // Optimistically update local state with a functional update to avoid stale closures
+        const formattedMsg = formatLog(game.displayId || game.id as string, msg);
+        setGame((prev: any) => ({
+            ...prev,
+            logs: [...(prev?.logs || []), formattedMsg]
+        }));
+
+        try {
+            await fetch(`/api/games/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'add-log', message: msg })
+            });
+        } catch (e) {
+            console.error("Failed to sync log", e);
+        }
+    };
+
+    console.log("GameBoardPage Rendering, Phase:", phase, "Turn:", turn);
+
+    // Phase 1: Events
+    const [currentEvent, setCurrentEvent] = useState(EVENTS[0]);
+    const [discardAmount, setDiscardAmount] = useState(0);
+    const [eventResult, setEventResult] = useState<{ msg: string, win: boolean } | null>(null);
+
+    // Phase 2: Distribution / Placement
+    const [selectedActorId, setSelectedActorId] = useState<string | null>(null);
+    const [hoveredActorId, setHoveredActorId] = useState<string | null>(null);
+    const [selectedHex, setSelectedHex] = useState<string | null>(null);
+    const [isWaiting, setIsWaiting] = useState(false);
+    const [pendingPlacement, setPendingPlacement] = useState<{ actorId: string, locId: string } | null>(null);
+
+    // Phase 3: Action Phase
+    const [activeCardId, setActiveCardId] = useState<string | null>(null);
+    const [activatedCards, setActivatedCards] = useState<string[]>([]);
+    const [exchangeTarget, setExchangeTarget] = useState<{ id: string, name: string, avatar: string } | null>(null);
+    const [teleportSource, setTeleportSource] = useState<string | null>(null);
+    const [biddingActorId, setBiddingActorId] = useState<string | null>(null);
+    const [p3Step, setP3Step] = useState<1 | 2 | 3 | 4>(1); // 1: Bidding, 2: Stop, 3: Teleport, 4: Exchange
+    const [p5Step, setP5Step] = useState<1 | 2 | 3>(1); // 1: Market Offer, 2: Market Reveal, 3: Buy Cards
+    const [playerMarketOffer, setPlayerMarketOffer] = useState<MarketOffer | null>(null);
+    const [botMarketOffers, setBotMarketOffers] = useState<{ [id: string]: MarketOffer | null }>({});
+    const [marketMatchId, setMarketMatchId] = useState<string | null>(null);
+    const [actionHand, setActionHand] = useState<any[]>([]);
+    const [activationEffect, setActivationEffect] = useState<string | null>(null);
+
+    const filteredActionHand = useMemo(() => {
+        if (p3Step === 1) return [];
+        if (p3Step === 2) return actionHand.filter(c => c.type === 'turn off location');
+        if (p3Step === 3) return actionHand.filter(c => c.id.includes('relocation') || c.id.includes('teleport'));
+        if (p3Step === 4) return actionHand.filter(c => c.id.includes('change_values') || c.id.includes('exchange'));
+        return [];
+    }, [p3Step, actionHand]);
+
+    // Count available teleport cards
+    const teleportCardsCount = useMemo(() => {
+        return actionHand.filter(c => c.id.includes('relocation') || c.id.includes('teleport')).length;
+    }, [actionHand]);
+
+    // Count available exchange cards
+    const exchangeCardsCount = useMemo(() => {
+        return actionHand.filter(c => c.id.includes('change_values') || c.id.includes('exchange')).length;
+    }, [actionHand]);
+
 
     // Derived: Current Active Conflict Object
     const currentConflict = useMemo(() => {
-        return activeConflicts.find(c => c.locId === activeConflictLocId);
-    }, [activeConflicts, activeConflictLocId]);
+        return stickyConflicts.find(c => c.locId === activeConflictLocId);
+    }, [stickyConflicts, activeConflictLocId]);
 
-    // Auto-advance Phase 4 when all conflicts are resolved
-    useEffect(() => {
-        if (phase === 4 && activeConflicts.length > 0) {
-            const remaining = activeConflicts.filter(c => !resolvedConflicts.includes(c.locId)).length;
-            if (remaining === 0 && resolvedConflicts.length > 0) {
-                const timer = setTimeout(() => handleNextPhaseWrapper(), 300);
-                return () => clearTimeout(timer);
-            }
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [phase, activeConflicts, resolvedConflicts]);
+
+    // Auto-advance Phase 4 removed per user request:
+    // Players must manually click "Next Phase" after resolving their own conflicts.
+
+
 
     const handleConflictResolve = (result: ConflictResult) => {
         if (!activeConflictLocId) return;
 
+        // --- Burning Bets Rule ---
+        // Clear the 'bid' property of all actors involved in this specific conflict immediately.
+        // This ensures bets are lost even on restart/draw/loss.
+        const involvedActorIds = [
+            currentConflict?.playerActor.actorId,
+            ...(currentConflict?.opponents.map((o: any) => o.actorId) || [])
+        ].filter(Boolean);
+
+        setPlacedActors(prev => prev.map(actor => {
+            if (involvedActorIds.includes(actor.actorId)) {
+                if (actor.bid) {
+                    addLog(`The bet on ${actor.actorType} was burned during the conflict.`);
+                }
+                return { ...actor, bid: undefined };
+            }
+            return actor;
+        }));
+
         // Detailed conflict logs are passed from ConflictResolutionView
         result.logs.forEach(l => addLog(`${l}`));
 
-        // Process successful bids (Clear them and grant immediate rewards for Product bets)
+        // Process successful bids (grant immediate rewards for Product bets)
         if (result.successfulBids && result.successfulBids.length > 0) {
             result.successfulBids.forEach(used => {
-                // Clear the used bid from the actor so it isn't applied again on restart
-                setPlacedActors(prev => prev.map(actor => {
-                    if (actor.actorId === used.actorId) {
-                        return { ...actor, bid: undefined };
-                    }
-                    return actor;
-                }));
-
                 // If Product bet won, give +1 immediately
                 if (used.bid === 'product') {
                     const actor = placedActors.find(a => a.actorId === used.actorId);
@@ -517,8 +624,9 @@ export default function GameBoardPage() {
 
                         if (earnedResource) {
                             updateResource(earnedResource, (resources as any)[earnedResource] + 1);
-                            addLog(`${player.name || '080'} secured +1 ${earnedResource.toUpperCase()} from early Product Bet!`);
+                            addLog(`${player.name || '080'}'s ${actor.actorType.toUpperCase()} secured +1 ${earnedResource.toUpperCase()} from early Product Bet!`);
                         }
+
                     } else if (actor) {
                         // Support for Bot receiving Product Bet reward
                         setOpponentsData((prev: any) => {
@@ -547,18 +655,22 @@ export default function GameBoardPage() {
                             }
                             return prev;
                         });
-                        addLog(`Opponent secured +1 resource from early Product Bet!`);
+                        const resource = (locDef?.resource || 'glory').toLowerCase();
+                        addLog(`${actor.name}'s ${actor.actorType.toUpperCase()} secured +1 ${resource.toUpperCase()} from early Product Bet!`);
+
+
                     }
                 }
             });
         }
 
         if (result.restart) {
-            // Logic to restart: Close modal so user can click sidebar again
+            // Logic to restart: Log but DON'T close modal
             addLog("Conflict is restarting due to Lose Bid or Politician Draw...");
-            setActiveConflictLocId(null);
+            // setActiveConflictLocId(null); // REMOVED: Keep modal open for re-roll choice
             return;
         }
+
 
         const realLocId = currentConflict?.realLocId;
         const locDef = LOCATIONS.find(l => l.id === realLocId);
@@ -677,6 +789,7 @@ export default function GameBoardPage() {
 
     const closeEvent = () => {
         setEventResult(null);
+        addLog("All players are ready");
         setPhase(2);
     };
 
@@ -968,8 +1081,10 @@ export default function GameBoardPage() {
         } else {
             addLog(`${player.name || '080'} continued without a trade`);
         }
+        addLog("All players are ready");
         setP5Step(3);
     };
+
 
     const handleBuyActionCard = (card: any) => {
         updateResource('product', -1);
@@ -983,13 +1098,17 @@ export default function GameBoardPage() {
         };
         setActionHand(prev => [...prev, mappedCard]);
         addLog(`${player.name || '080'} purchased action card: ${card.title}`);
+        addLog("All players are ready");
         handleNextPhaseWrapper();
     };
 
+
     const handleSkipBuyActionCard = () => {
         addLog(`${player.name || '080'} skipped buying action card`);
+        addLog("All players are ready");
         handleNextPhaseWrapper();
     };
+
 
     // --- Render ---
     return (
@@ -1073,10 +1192,12 @@ export default function GameBoardPage() {
                     {/* Phase 4: Conflicts Sidebar */}
                     {phase === 4 && (
                         <ConflictsSidebar
-                            conflicts={activeConflicts.filter(c => !resolvedConflicts.includes(c.locId))}
+                            conflicts={stickyConflicts.filter(c => c.hasPlayer)}
+                            resolvedIds={resolvedConflicts}
                             activeConflictLocId={activeConflictLocId}
                             onSelectConflict={setActiveConflictLocId}
                         />
+
                     )}
 
                     {/* Phase 4: Conflict Resolution Modal */}
@@ -1086,10 +1207,11 @@ export default function GameBoardPage() {
                                 conflict={currentConflict}
                                 onResolve={handleConflictResolve}
                                 onClose={() => setActiveConflictLocId(null)}
-                                hasNextConflict={activeConflicts.filter(c => !resolvedConflicts.includes(c.locId)).length > 1}
+                                hasNextConflict={stickyConflicts.filter(c => c.hasPlayer && !resolvedConflicts.includes(c.locId)).length > 1}
                             />
                         </div>
                     )}
+
 
                     {/* Top Center: Resources (Layered ABOVE Header) */}
                     <GameResources resources={resources} vp={vp} />
@@ -1145,14 +1267,14 @@ export default function GameBoardPage() {
 
                     {/* Bottom Right: Next Phase Button */}
                     <div className="absolute bottom-10 right-10 z-[300] pointer-events-auto">
-                        {/* Only show Next Phase if not in Phase 2 OR if all actors distributed. And in Phase 4, only if all conflicts are resolved. */}
-                        {phase !== 5 && ((phase !== 2 || availableActors.length === 0) && (phase !== 4 || activeConflicts.filter(c => !resolvedConflicts.includes(c.locId)).length === 0)) && (
+                        {/* Only show Next Phase if not in Phase 2 OR if all actors distributed. And in Phase 4, only if all player conflicts are resolved. */}
+                        {phase !== 5 && ((phase !== 2 || availableActors.length === 0) && (phase !== 4 || stickyConflicts.filter(c => c.hasPlayer && !resolvedConflicts.includes(c.locId)).length === 0)) && (
                             <button
-                                onClick={isWaitingForPlayers ? undefined : commitTurn}
-                                disabled={isWaitingForPlayers}
-                                className={`px-8 py-3 font-bold rounded-lg uppercase tracking-widest text-xs transition-all ${isWaitingForPlayers ? 'bg-gray-600 text-gray-400 cursor-not-allowed border-2 border-gray-500' : 'bg-[#d4af37] text-black shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:bg-[#ffe066] transform hover:scale-105 active:scale-95'}`}
+                                onClick={(isWaitingForPlayers || (game?.isTest && !opponentsReady)) ? undefined : commitTurn}
+                                disabled={isWaitingForPlayers || (game?.isTest && !opponentsReady)}
+                                className={`px-8 py-3 font-bold rounded-lg uppercase tracking-widest text-xs transition-all ${(isWaitingForPlayers || (game?.isTest && !opponentsReady)) ? 'bg-gray-600 text-gray-400 cursor-not-allowed border-2 border-gray-500' : 'bg-[#d4af37] text-black shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:bg-[#ffe066] transform hover:scale-105 active:scale-95'}`}
                             >
-                                {isWaitingForPlayers ? "WAITING FOR OTHERS..." :
+                                {(isWaitingForPlayers || (game?.isTest && !opponentsReady)) ? "WAITING FOR OTHERS..." :
                                     phase === 3 ? (
                                         p3Step === 1 ? "Start Disabling" :
                                             p3Step === 2 ? "Start Teleport" :
@@ -1162,6 +1284,8 @@ export default function GameBoardPage() {
                             </button>
                         )}
                     </div>
+
+
 
                     {/* --- Radial RSP Menu for Phase 2 --- */}
                     {phase === 2 && pendingPlacement && (
@@ -1315,6 +1439,86 @@ export default function GameBoardPage() {
                             availableCards={ACTION_CARDS}
                         />
                     )}
+
+                    {/* --- Game Over Overlay --- */}
+                    {isGameOver && (() => {
+                        // 1. Calculate final VPs for everyone
+                        const playersWithVP = dynamicPlayers.map((p) => {
+                            const isMain = p.id === localPlayerId;
+                            const res = isMain ? resources : (opponentsData[p.id]?.resources || {});
+                            const { power = 0, knowledge = 0, art = 0, glory = 0 } = res as any;
+
+                            let currP = power, currK = knowledge, currA = art, currG = glory;
+                            while (currG > 0) {
+                                if (currP <= currK && currP <= currA) currP++;
+                                else if (currK <= currP && currK <= currA) currK++;
+                                else currA++;
+                                currG--;
+                            }
+                            const finalVP = Math.min(currP, currK, currA);
+                            return { ...p, finalVP, isMain };
+                        });
+
+                        // 2. Find Max VP
+                        const maxVP = Math.max(...playersWithVP.map(p => p.finalVP));
+
+                        // 3. Check if local player won
+                        const localPlayerResults = playersWithVP.find(p => p.isMain);
+                        const playerWon = localPlayerResults && localPlayerResults.finalVP === maxVP;
+
+                        return (
+                            <div className="absolute inset-0 z-[2000] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-1000">
+                                <div className="flex flex-col items-center gap-10 p-16 border-[3px] border-[#d4af37]/50 bg-gradient-to-b from-[#1a1a24] to-[#0d0d12] rounded-[3rem] shadow-[0_0_150px_rgba(212,175,55,0.2)]">
+                                    <div className="text-center relative">
+                                        <h1 className={`text-8xl font-black uppercase tracking-[0.2em] animate-in slide-in-from-bottom-5 duration-700 ${playerWon ? 'text-[#d4af37] drop-shadow-[0_0_40px_rgba(212,175,55,0.8)]' : 'text-red-500 drop-shadow-[0_0_40px_rgba(255,0,0,0.8)]'}`}>
+                                            {playerWon ? 'VICTORY' : 'DEFEAT'}
+                                        </h1>
+                                        <p className="text-white/50 text-xl font-rajdhani uppercase tracking-[0.4em] mt-4">Simulation Concluded</p>
+                                    </div>
+
+                                    <div className="flex gap-16 mt-8">
+                                        {playersWithVP.sort((a, b) => b.finalVP - a.finalVP).map((p, idx) => {
+                                            const isWinner = p.finalVP === maxVP;
+                                            return (
+                                                <div key={p.id} className={`relative flex flex-col items-center gap-6 p-8 rounded-3xl border-2 transition-all duration-700 animate-in zoom-in-95 delay-${idx * 200} ${isWinner ? 'border-[#d4af37] bg-[#d4af37]/10 shadow-[0_0_50px_rgba(212,175,55,0.5)] scale-110 z-10' : 'border-white/10 bg-black/40 opacity-70 scale-95'}`}>
+
+                                                    {/* Laurels / Crown for Winner */}
+                                                    {isWinner && (
+                                                        <div className="absolute -top-10 text-[#d4af37] animate-bounce drop-shadow-[0_0_20px_rgba(212,175,55,1)]">
+                                                            <Crown size={64} strokeWidth={2.5} />
+                                                        </div>
+                                                    )}
+
+                                                    <div className={`relative w-28 h-28 rounded-full border-4 p-1 ${isWinner ? 'border-[#d4af37]' : 'border-white/20'}`}>
+                                                        <Image src={p.avatar} fill className="object-cover rounded-full" alt={p.name} />
+                                                    </div>
+
+                                                    <div className="text-center">
+                                                        <p className="font-bold font-rajdhani text-white/80 uppercase tracking-widest text-lg">{p.name}</p>
+                                                        <p className={`text-5xl font-black mt-2 ${isWinner ? 'text-[#d4af37] drop-shadow-[0_0_15px_rgba(212,175,55,0.8)]' : 'text-white/60'}`}>{p.finalVP} <span className="text-2xl opacity-50">VP</span></p>
+                                                    </div>
+
+                                                    {p.isMain && (
+                                                        <div className="absolute -bottom-4 bg-black px-4 py-1 rounded-full border border-white/20 text-xs text-white/60 tracking-widest uppercase">
+                                                            You
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    <button
+                                        onClick={() => window.location.href = '/dashboard'}
+                                        className="mt-12 px-16 py-5 bg-gradient-to-r from-[#d4af37] to-[#f3bd48] text-black font-black text-xl uppercase tracking-[0.4em] rounded-2xl hover:from-[#ffe066] hover:to-[#ffd700] shadow-[0_0_40px_rgba(212,175,55,0.5)] transition-all transform hover:scale-105 active:scale-95"
+                                    >
+                                        Return to Lobby
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
 
                 </div >
             </main >

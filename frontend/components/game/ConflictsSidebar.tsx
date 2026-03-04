@@ -15,6 +15,7 @@ interface Conflict {
 
 interface ConflictsSidebarProps {
     conflicts: Conflict[];
+    resolvedIds: string[];
     activeConflictLocId: string | null;
     onSelectConflict: (locId: string) => void;
 }
@@ -47,7 +48,7 @@ function PlayerCircle({ avatar, size = 32 }: { avatar: string; size?: number }) 
     );
 }
 
-export default function ConflictsSidebar({ conflicts, activeConflictLocId, onSelectConflict }: ConflictsSidebarProps) {
+export default function ConflictsSidebar({ conflicts, resolvedIds, activeConflictLocId, onSelectConflict }: ConflictsSidebarProps) {
     if (conflicts.length === 0) return null;
 
     return (
@@ -64,6 +65,7 @@ export default function ConflictsSidebar({ conflicts, activeConflictLocId, onSel
             <div className="flex flex-col gap-3">
                 {conflicts.map((conflict) => {
                     const isActive = activeConflictLocId === conflict.locId;
+                    const isResolved = resolvedIds.includes(conflict.locId);
                     return (
                         <button
                             key={conflict.locId}
@@ -72,7 +74,9 @@ export default function ConflictsSidebar({ conflicts, activeConflictLocId, onSel
                                 relative group flex items-center gap-4 p-4 rounded-xl border transition-all duration-300 w-full text-left cursor-pointer
                                 ${isActive
                                     ? 'bg-[#d4af37]/20 border-[#d4af37] shadow-[0_0_15px_rgba(212,175,55,0.2)]'
-                                    : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/20'
+                                    : isResolved
+                                        ? 'bg-white/5 border-white/5 opacity-60'
+                                        : 'bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/20'
                                 }
                             `}
                         >
@@ -80,9 +84,14 @@ export default function ConflictsSidebar({ conflicts, activeConflictLocId, onSel
                             <ActorCircle avatar={conflict.playerActor.headAvatar || conflict.playerActor.avatar} size={64} />
 
                             <div className="flex flex-col gap-1 flex-grow min-w-0">
-                                <span className={`text-[11px] font-bold uppercase tracking-wider truncate ${isActive ? 'text-[#d4af37]' : 'text-gray-300'}`}>
-                                    {conflict.locationName}
-                                </span>
+                                <div className="flex items-center justify-between">
+                                    <span className={`text-[11px] font-bold uppercase tracking-wider truncate ${isActive ? 'text-[#d4af37]' : 'text-gray-300'}`}>
+                                        {conflict.locationName}
+                                    </span>
+                                    {isResolved && (
+                                        <span className="text-[9px] font-black text-[#d4af37] bg-[#d4af37]/20 px-1.5 py-0.5 rounded border border-[#d4af37]/40">VIEWED</span>
+                                    )}
+                                </div>
 
                                 {/* Opponents row */}
                                 <div className="flex items-center gap-3 mt-1">

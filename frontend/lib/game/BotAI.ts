@@ -10,7 +10,8 @@ export const triggerBotPhase3Actions = async (
     placedActors: any[],
     addLog: (msg: string) => Promise<void>,
     setDisabledLocations: (cb: (prev: string[]) => string[]) => void,
-    setPlacedActors: (cb: (prev: any[]) => any[]) => void
+    setPlacedActors: (cb: (prev: any[]) => any[]) => void,
+    setOpponentsReady: (ready: boolean) => void
 ) => {
     if (!game?.isTest) return; // Only process bots in test mode
 
@@ -44,6 +45,8 @@ export const triggerBotPhase3Actions = async (
         }
         await new Promise(r => setTimeout(r, 800));
     }
+    // Signal that all bots are done with this step
+    setOpponentsReady(true);
 };
 
 /**
@@ -54,6 +57,7 @@ export const resolveBotOnlyConflicts = async (
     disabledLocations: string[],
     resolvedConflicts: string[],
     dynamicPlayers: any[],
+    localPlayerId: string,
     addLog: (msg: string) => Promise<void>,
     setOpponentsData: (cb: (prev: any) => any) => void,
     setPlacedActors: (cb: (prev: any[]) => any[]) => void,
@@ -69,7 +73,7 @@ export const resolveBotOnlyConflicts = async (
 
     for (const [key, actors] of Object.entries(groups)) {
         if (resolvedConflicts.includes(key)) continue;
-        if (actors.some(a => a.playerId === 'p1')) continue;
+        if (actors.some(a => a.playerId === localPlayerId)) continue;
 
         const [locId, actorType] = key.split('_');
         const locDef = LOCATIONS.find(l => l.id === locId);
@@ -78,14 +82,15 @@ export const resolveBotOnlyConflicts = async (
         if (actors.length === 1) {
             const bot = actors[0];
             const botName = dynamicPlayers.find(p => p.id === bot.playerId)?.name || 'Bot';
+            const actorTypeName = bot.actorType.charAt(0).toUpperCase() + bot.actorType.slice(1);
 
             let resource = '';
-            if (bot.actorType === 'politician') resource = 'POWER';
-            else if (bot.actorType === 'scientist') resource = 'KNOWLEDGE';
-            else if (bot.actorType === 'artist') resource = 'ART';
-            else if (bot.actorType === 'robot') resource = (locDef?.resource || 'PRODUCT').toUpperCase();
+            if (bot.actorType === 'politician') resource = 'Power';
+            else if (bot.actorType === 'scientist') resource = 'Knowledge';
+            else if (bot.actorType === 'artist') resource = 'Art';
+            else if (bot.actorType === 'robot') resource = (locDef?.resource || 'Product').charAt(0).toUpperCase() + (locDef?.resource || 'Product').slice(1);
 
-            await addLog(`${botName} has no rivals at ${realLocName}. They won 1 ${resource}!`);
+            await addLog(`${botName}'s ${actorTypeName} has no rivals at ${realLocName}. They secured 1 ${resource}!`);
 
             setOpponentsData(prev => {
                 const next = { ...prev };
@@ -107,10 +112,12 @@ export const resolveBotOnlyConflicts = async (
             const b1Name = dynamicPlayers.find(p => p.id === bot1.playerId)?.name || 'Bot 1';
             const b2Name = dynamicPlayers.find(p => p.id === bot2.playerId)?.name || 'Bot 2';
 
-            await addLog(`Conflict at ${realLocName}: ${b1Name} (${t1}) vs ${b2Name} (${t2})`);
+            const actorTypeName = bot1.actorType.charAt(0).toUpperCase() + bot1.actorType.slice(1);
+
+            await addLog(`Conflict at ${realLocName}: ${b1Name}'s ${actorTypeName} (${t1}) vs ${b2Name}'s ${actorTypeName} (${t2})`);
 
             if (t1 === t2) {
-                await addLog(`It's a DRAW at ${realLocName}! Both ${bot1.actorType}s evicted.`);
+                await addLog(`It's a DRAW at ${realLocName}! Both ${actorTypeName}s were evicted.`);
                 setPlacedActors(prev => prev.filter(a => !(a.locId === locId && a.actorType === bot1.actorType)));
             } else {
                 const wins: any = { 'ROCK': 'SCISSORS', 'SCISSORS': 'PAPER', 'PAPER': 'ROCK' };
@@ -118,12 +125,12 @@ export const resolveBotOnlyConflicts = async (
                 const winnerName = dynamicPlayers.find(p => p.id === winner.playerId)?.name || 'Bot';
 
                 let resource = '';
-                if (winner.actorType === 'politician') resource = 'POWER';
-                else if (winner.actorType === 'scientist') resource = 'KNOWLEDGE';
-                else if (winner.actorType === 'artist') resource = 'ART';
-                else if (winner.actorType === 'robot') resource = (locDef?.resource || 'PRODUCT').toUpperCase();
+                if (winner.actorType === 'politician') resource = 'Power';
+                else if (winner.actorType === 'scientist') resource = 'Knowledge';
+                else if (winner.actorType === 'artist') resource = 'Art';
+                else if (winner.actorType === 'robot') resource = (locDef?.resource || 'Product').charAt(0).toUpperCase() + (locDef?.resource || 'Product').slice(1);
 
-                await addLog(`${winnerName} WON at ${realLocName} and received 1 ${resource}!`);
+                await addLog(`${winnerName}'s ${actorTypeName} WON at ${realLocName} and secured 1 ${resource}!`);
 
                 setOpponentsData(prev => {
                     const next = { ...prev };
@@ -156,7 +163,7 @@ export const triggerOpponentPlacements = async (
 ) => {
     if (!game || !game.isTest) return; // Only run bot placements in a dedicated test game
 
-    setOpponentsReady(true);
+    setOpponentsReady(false); // Reset before starting
 
     await new Promise(r => setTimeout(r, 1500));
 
@@ -199,7 +206,9 @@ export const triggerOpponentPlacements = async (
         await new Promise(r => setTimeout(r, 600)); // Increased delay for stability
     }
 
-    await addLog("Viper (p2) ready");
     await new Promise(r => setTimeout(r, 600));
-    await addLog("Ghost (p3) ready");
+    await new Promise(r => setTimeout(r, 600));
+
+    // Signal readiness ONLY at the end
+    setOpponentsReady(true);
 };

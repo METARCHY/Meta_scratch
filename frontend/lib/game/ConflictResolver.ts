@@ -5,6 +5,7 @@ export interface ConflictResult {
     evictAll: boolean;
     shareRewards: boolean;
     successfulBids: { actorId: string, bid: string }[];
+    usedBid?: string;
     logs: string[];
 }
 
@@ -111,7 +112,9 @@ export const resolveConflictLogic = (
             if (recycleBidders.length > 0) {
                 if (recycleBidders.length === 1) {
                     const winner = recycleBidders[0];
-                    logs.push(`Recycle Bid Activated: ${winner.id === 'p1' ? 'Player' : 'Opponent'} wins the draw!`);
+                    const winnerName = winner.id === 'p1' ? (player.name || '080') : (conflict.opponents.find(o => o.actorId === winner.id)?.name || 'Opponent');
+                    const actorType = winner.id === 'p1' ? p1ActorType : (conflict.opponents.find(o => o.actorId === winner.id)?.actorType?.toUpperCase() || 'ACTOR');
+                    logs.push(`Recycle Bid Activated: ${winnerName}'s ${actorType} wins the draw!`);
                     finalWinnerId = winner.id;
                     finalIsDraw = false;
                 } else {
@@ -121,25 +124,34 @@ export const resolveConflictLogic = (
             }
         }
 
+
         // 2. Check Product (Win) Bids
         if (finalWinnerId) {
             const winnerObj = choices.find(c => c.id === finalWinnerId);
             if (winnerObj && winnerObj.bid === 'product') {
-                logs.push(`Product Bid Activated: ${winnerObj.id === 'p1' ? 'Player' : 'Opponent'} secures +1 resource!`);
+                const winnerName = winnerObj.id === 'p1' ? (player.name || '080') : (conflict.opponents.find(o => o.actorId === winnerObj.id)?.name || 'Opponent');
+                const actorType = winnerObj.id === 'p1' ? p1ActorType : (conflict.opponents.find(o => o.actorId === winnerObj.id)?.actorType?.toUpperCase() || 'ACTOR');
+                logs.push(`Product Bid Activated: ${winnerName}'s ${actorType} secures +1 resource!`);
                 successfulBids.push({ actorId: winnerObj.id, bid: 'product' });
             }
         }
+
 
         // 3. Check Energy (Lose) Bids
         if (!finalIsDraw && finalWinnerId) {
             const energyLosers = choices.filter(c => c.id !== finalWinnerId && c.bid === 'energy');
             if (energyLosers.length > 0) {
-                logs.push(`Energy Bid Activated: Defeat averted, conflict restarts without bets!`);
-                energyLosers.forEach(b => successfulBids.push({ actorId: b.id, bid: 'energy' }));
+                energyLosers.forEach(b => {
+                    const loserName = b.id === 'p1' ? (player.name || '080') : (conflict.opponents.find(o => o.actorId === b.id)?.name || 'Opponent');
+                    const actorType = b.id === 'p1' ? p1ActorType : (conflict.opponents.find(o => o.actorId === b.id)?.actorType?.toUpperCase() || 'ACTOR');
+                    logs.push(`Energy Bid Activated: ${loserName}'s ${actorType} averted defeat! Conflict restarts without bets.`);
+                    successfulBids.push({ actorId: b.id, bid: 'energy' });
+                });
                 finalRestart = true;
                 finalWinnerId = null;
             }
         }
+
     }
 
     if (finalIsDraw && !finalRestart) {
@@ -164,6 +176,7 @@ export const resolveConflictLogic = (
         evictAll: finalEvictAll,
         shareRewards: finalShareRewards,
         successfulBids: successfulBids,
+        usedBid: successfulBids.length > 0 ? successfulBids[0].bid : undefined,
         logs
     };
 };
