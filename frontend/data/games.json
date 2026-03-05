@@ -29830,5 +29830,155 @@
       }
     ],
     "startTime": 1772629271126
+  },
+  {
+    "id": "d3bafdd9-281c-4c34-bbab-370f48ee93c5",
+    "displayId": "030",
+    "roomId": "Neural_Nexus",
+    "status": "playing",
+    "isPrivate": false,
+    "isTest": false,
+    "createdAt": 1772723817372,
+    "players": [
+      {
+        "address": "0xGUESTda340f39",
+        "name": "GUEST_DA34",
+        "citizenId": "guest_da340f39",
+        "avatar": "/avatars/golden_avatar.png",
+        "joinedAt": 1772723817372,
+        "isReady": true
+      },
+      {
+        "address": "0xGUEST56d10552",
+        "name": "GUEST_56D1",
+        "citizenId": "guest_56d10552",
+        "avatar": "/avatars/golden_avatar.png",
+        "joinedAt": 1772723823859,
+        "isReady": true
+      }
+    ],
+    "maxPlayers": 2,
+    "bidAmount": 0,
+    "logs": [
+      "[030] [15:16:57 UTC] GAME CREATED BY GUEST_DA34",
+      "[030] [15:17:03 UTC] GUEST_56D1 joined",
+      "[030] [15:17:22 UTC] GUEST_56D1 placed Politician with ROCK to SQUARE",
+      "[030] [15:17:25 UTC] GUEST_56D1 placed Scientist with PAPER to UNIVERSITY",
+      "[030] [15:17:28 UTC] GUEST_56D1 placed Artist with SCISSORS to THEATRE",
+      "[030] [15:17:31 UTC] GUEST_56D1 placed Robot with DUMMY to DUMP",
+      "[030] [15:17:38 UTC] GUEST_DA34 placed Politician with ROCK to SQUARE",
+      "[030] [15:17:41 UTC] GUEST_DA34 placed Scientist with PAPER to UNIVERSITY",
+      "[030] [15:17:44 UTC] GUEST_DA34 placed Artist with SCISSORS to THEATRE",
+      "[030] [15:17:47 UTC] GUEST_DA34 placed Robot with DUMMY to DUMP",
+      "[030] [15:17:55 UTC] Recalled scissors from map",
+      "[030] [15:17:59 UTC] GUEST_56D1 placed Artist with SCISSORS to THEATRE",
+      "[030] [15:18:04 UTC] STEP: BIDDING",
+      "[030] [15:18:04 UTC] PHASE 3 BEGINS",
+      "[030] [15:18:04 UTC] STEP: BIDDING",
+      "[030] [15:18:04 UTC] PHASE 3 BEGINS",
+      "[030] [15:18:04 UTC] STEP: BIDDING",
+      "[030] [15:18:04 UTC] PHASE 3 BEGINS",
+      "[030] [15:18:04 UTC] STEP: BIDDING",
+      "[030] [15:18:04 UTC] PHASE 3 BEGINS",
+      "[030] [15:18:17 UTC] All players are ready",
+      "[030] [15:18:17 UTC] STEP: STOPPING LOCATIONS",
+      "[030] [15:18:18 UTC] All players are ready",
+      "[030] [15:18:18 UTC] STEP: STOPPING LOCATIONS",
+      "[030] [15:18:24 UTC] All players are ready",
+      "[030] [15:18:24 UTC] STEP: RELOCATION",
+      "[030] [15:18:24 UTC] All players are ready",
+      "[030] [15:18:24 UTC] STEP: RELOCATION",
+      "[030] [15:18:31 UTC] All players are ready",
+      "[030] [15:18:31 UTC] STEP: EXCHANGE",
+      "[030] [15:18:31 UTC] All players are ready",
+      "[030] [15:18:31 UTC] STEP: EXCHANGE",
+      "[030] [15:18:36 UTC] Confrontation at THE SQUARE: GUEST_56D1's POLITICIAN faces opposition from GUEST_DA34.",
+      "[030] [15:18:37 UTC] Confrontation at UNIVERSITY: GUEST_56D1's SCIENTIST faces opposition from GUEST_DA34.",
+      "[030] [15:18:37 UTC] Confrontation at DUMP: GUEST_56D1's ROBOT faces opposition from GUEST_DA34.",
+      "[030] [15:18:37 UTC] Confrontation at THE THEATRE: GUEST_56D1's ARTIST faces opposition from GUEST_DA34.",
+      "[030] [15:18:37 UTC] PHASE 4 BEGINS",
+      "[030] [15:18:37 UTC] Confrontation at THE SQUARE: GUEST_56D1's POLITICIAN faces opposition from GUEST_DA34.",
+      "[030] [15:18:37 UTC] Confrontation at UNIVERSITY: GUEST_56D1's SCIENTIST faces opposition from GUEST_DA34.",
+      "[030] [15:18:37 UTC] Confrontation at DUMP: GUEST_56D1's ROBOT faces opposition from GUEST_DA34.",
+      "[030] [15:18:37 UTC] Confrontation at THE THEATRE: GUEST_56D1's ARTIST faces opposition from GUEST_DA34.",
+      "[030] [15:18:37 UTC] PHASE 4 BEGINS",
+      "[030] [15:18:49 UTC] Area secured without opposition.",
+      "[030] [15:18:52 UTC] Area secured without opposition.",
+      "[030] [15:18:54 UTC] Area secured without opposition.",
+      "[030] [15:18:59 UTC] Area secured without opposition.",
+      "[030] [15:19:01 UTC] Area secured without opposition.",
+      "[030] [15:19:03 UTC] Area secured without opposition.",
+      "[030] [15:19:04 UTC] Area secured without opposition.",
+      "[030] [15:19:09 UTC] Area secured without opposition.",
+      "[030] [15:19:10 UTC] Area secured without opposition.",
+      "[030] [15:19:12 UTC] PHASE 5 BEGINS",
+      "[030] [15:19:14 UTC] PHASE 5 BEGINS",
+      "[030] [15:19:22 UTC] GUEST_DA34 purchased action card: Sabotage",
+      "[030] [15:19:22 UTC] All players are ready",
+      "[030] [15:19:22 UTC] GUEST_DA34 skipped buying action card",
+      "[030] [15:19:22 UTC] All players are ready",
+      "[030] [15:19:22 UTC] TURN 2 BEGINS",
+      "[030] [15:19:22 UTC] TURN 2 BEGINS",
+      "[030] [15:19:50 UTC] GUEST_56D1 purchased action card: Student Strikes",
+      "[030] [15:19:50 UTC] All players are ready",
+      "[030] [15:19:50 UTC] GUEST_56D1 skipped buying action card",
+      "[030] [15:19:50 UTC] All players are ready",
+      "[030] [15:19:50 UTC] TURN 2 BEGINS",
+      "[030] [15:19:50 UTC] TURN 2 BEGINS",
+      "[030] [15:19:55 UTC] GUEST_56D1 placed Robot with DUMMY to DUMP",
+      "[030] [15:20:00 UTC] GUEST_56D1 placed Artist with SCISSORS to THEATRE",
+      "[030] [15:20:03 UTC] GUEST_56D1 placed Scientist with PAPER to UNIVERSITY",
+      "[030] [15:20:05 UTC] GUEST_56D1 placed Politician with ROCK to SQUARE",
+      "[030] [15:50:03 UTC] STEP: BIDDING",
+      "[030] [15:50:03 UTC] PHASE 3 BEGINS",
+      "[030] [15:50:04 UTC] STEP: BIDDING",
+      "[030] [15:50:04 UTC] PHASE 3 BEGINS"
+    ],
+    "transactions": [],
+    "messages": [],
+    "startTime": 1772723825524,
+    "gameState": {
+      "phaseTicker": 7,
+      "playerReady": {
+        "guest_56d10552": true
+      },
+      "stagedActors": {
+        "guest_56d10552": [
+          {
+            "actorId": "a2",
+            "playerId": "guest_56d10552",
+            "locId": "dump",
+            "type": "dummy",
+            "isOpponent": false,
+            "actorType": "robot"
+          },
+          {
+            "actorId": "a4",
+            "playerId": "guest_56d10552",
+            "locId": "theatre",
+            "type": "scissors",
+            "isOpponent": false,
+            "actorType": "artist"
+          },
+          {
+            "actorId": "a3",
+            "playerId": "guest_56d10552",
+            "locId": "university",
+            "type": "paper",
+            "isOpponent": false,
+            "actorType": "scientist"
+          },
+          {
+            "actorId": "a1",
+            "playerId": "guest_56d10552",
+            "locId": "square",
+            "type": "rock",
+            "isOpponent": false,
+            "actorType": "politician"
+          }
+        ],
+        "guest_da340f39": []
+      }
+    }
   }
 ]
