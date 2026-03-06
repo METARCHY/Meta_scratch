@@ -64,6 +64,7 @@ Read these files to understand the project. They are the canonical references:
 - **Logs:** Use `formatLog(gameId, message)` for standardized UTC-timestamped logs
 - **No class components** — functional only
 - **No `any` in new code** — use proper types from `core/types.ts`
+- **Small changesets** — generate code changes in small batches of **100–150 lines max** per commit/diff to keep reviews manageable. If a task requires more, split it into sequential incremental changes.
 
 ---
 
