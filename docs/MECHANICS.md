@@ -1,0 +1,343 @@
+# Metarchy — Game Mechanics (Technical Reference)
+
+This document describes every game mechanic in precise technical terms, mapping rules to their implementation in code. Use this as the source of truth when implementing or refactoring game logic.
+
+---
+
+## 1. Turn Structure
+
+A game consists of **N turns** determined by player count:
+
+| Players | Turns | Source |
+|---|---|---|
+| 2 | 5 | `MAX_TURNS[2]` in `core/constants` |
+| 3 | 5 | `MAX_TURNS[3]` |
+| 4 | 8 | `MAX_TURNS[4]` |
+| 5 | 6 | `MAX_TURNS[5]` |
+| Test mode | 3 | `TEST_MAX_TURNS` |
+
+Each turn has 5 phases executed in strict order:
+
+```
+Phase 1: EVENT         (skipped on Turn 1)
+Phase 2: DISTRIBUTION
+Phase 3: ACTION        (4 sub-steps)
+Phase 4: CONFLICT
+Phase 5: MARKET
+```
+
+Phase advancement is handled by `advancePhase()` in `modules/phase/phaseEngine.ts`. The function is a pure state machine: `TurnState → PhaseAdvanceResult`.
+
+After Phase 5 of the last turn, `isGameOver = true`.
+
+---
+
+## 2. Actors
+
+Each player starts with 4 Actors. Defined in `DEFAULT_ACTORS` (`core/constants`):
+
+| Actor | Type key | Values Produced | Allowed Locations |
+|---|---|---|---|
+| Politician | `politician` | Power | `square`, `university` |
+| Scientist | `scientist` | Knowledge | `university`, `theatre` |
+| Artist | `artist` | Art | `square`, `theatre` |
+| Robot | `robot` | Product / Energy / Recycle (depends on location) | `factory`, `energy`, `dump` |
+
+**Location constraints** are defined in `ALLOWED_MOVES` and enforced by `isValidPlacement()` in `modules/distribution/placementLogic.ts`.
+
+### Actor Data Structure (`PlacedActor`)
+```typescript
+{
+    actorId: string;       // Unique ID (e.g. "a1", "bot1_a3")
+    playerId: string;      // Owner's player ID
+    locId: string;         // Target location ID
+    type: ArgumentType;    // Assigned argument: rock | paper | scissors | dummy
+    actorType: ActorType;  // politician | scientist | artist | robot
+    name: string;          // Display name
+    avatar: string;        // Full actor sprite path
+    headAvatar: string;    // Head-only sprite path
+    isOpponent?: boolean;  // True for non-local players
+    bid?: BetType;         // Optional bet: product | energy | recycle
+}
+```
+
+---
+
+## 3. Arguments (RPS System)
+
+Each Actor must receive exactly one Argument. Each player has 4 arguments — one per actor, no repeats.
+
+| Argument | Beats | Loses to | Draws with |
+|---|---|---|---|
+| Rock | Scissors, Dummy | Paper | Rock |
+| Paper | Rock, Dummy | Scissors | Paper |
+| Scissors | Paper, Dummy | Rock | Scissors |
+| Dummy | — | Rock, Paper, Scissors | Dummy |
+
+**Implementation:** `rpsOutcome(a, b)` in `core/constants` returns `'win' | 'lose' | 'draw'`.
+
+Available arguments are tracked by `getAvailableArguments()` in `modules/distribution` — filters out already-assigned arguments for the current player.
+
+---
+
+## 4. Locations
+
+7 locations defined in `LOCATIONS` array (`core/constants`):
+
+| Location | ID | Resource Type | Accepted Actors |
+|---|---|---|---|
+| City | `city` | glory | (special — not a standard conflict location) |
+| The Square | `square` | power (intangible) | Politician, Artist |
+| The Theatre | `theatre` | art (intangible) | Scientist, Artist |
+| University | `university` | knowledge (intangible) | Politician, Scientist |
+| Factory | `factory` | product (material) | Robot |
+| Energy Station | `energy` | energy (material) | Robot |
+| Dump | `dump` | recycle (material) | Robot |
+
+Each location has coordinates (x, y), dimensions, sprite paths (normal, hint, active), and a resource type.
+
+---
+
+## 5. Resources & Values
+
+### Values (Intangible)
+Used to form Victory Points:
+- **Power** — produced by Politicians at Square/University
+- **Art** — produced by Artists at Theatre/Square
+- **Knowledge** — produced by Scientists at University/Theatre
+- **Glory** — earned via Events; acts as wild card for VP calculation
+
+### Resources (Material)
+Used for Bets and Market purchases:
+- **Production** (`product`) — from Factory; used to bet on **Win**
+- **Electricity** (`energy`) — from Energy Station; used to bet on **Lose**
+- **Recycling** (`recycle`) — from Dump; used to bet on **Draw**
+
+### Initial Resources
+```typescript
+// core/constants — DEFAULT_RESOURCES
+{ gato: 1000, product: 1, energy: 1, recycle: 1, power: 0, art: 0, knowledge: 0, glory: 0 }
+
+// Test mode — TEST_RESOURCES
+{ gato: 1000, product: 2, energy: 2, recycle: 2, power: 2, art: 2, knowledge: 2, glory: 2 }
+```
+
+---
+
+## 6. Bets
+
+When placing an Actor, a player MAY attach a Bet by spending 1 Resource:
+
+| Bet Resource | Bet On | Effect if Successful |
+|---|---|---|
+| Production (`product`) | Win | Actor returns with **+1 additional** Value or Resource |
+| Electricity (`energy`) | Lose | Conflict is **re-resolved** (second chance) |
+| Recycling (`recycle`) | Draw | Draw counts as **Win** for this Actor |
+
+**Important:** The bet resource is always consumed regardless of outcome.
+
+---
+
+## 7. Conflict Detection & Resolution
+
+### Detection
+`detectConflicts()` in `modules/conflict/conflictDetector.ts`:
+1. Groups all `PlacedActor[]` by `locId`
+2. Within each location, groups by `actorType`
+3. If a group has >1 actor → creates a `Conflict` object
+4. If a group has exactly 1 actor → that actor is "peaceful" (auto-wins)
+5. Disabled locations are skipped entirely
+
+### Resolution
+`resolveConflictLogic()` in `modules/conflict/conflictResolver.ts`:
+
+**Input:** local player's RPS choice, opponent choices, bid information
+**Output:** `ConflictResult` with winner, draw/restart flags, bid results, logs
+
+**Resolution Algorithm:**
+1. All participants reveal their Arguments
+2. Filter out `dummy` arguments (auto-lose)
+3. Count remaining argument types:
+   - 1 type present → all who played it are tied (draw among same)
+   - 2 types present → standard RPS determines winner type
+   - 3 types present → global draw
+   - 0 non-dummy → global draw
+4. If exactly 1 winner → that player wins
+5. If multiple winners (same type) → draw among them
+
+### Draw Rules (Actor-Specific)
+
+| Actor Type | Draw Behavior | Code Flag |
+|---|---|---|
+| **Politician** | Must re-resolve until Win/Lose | `restart: true` |
+| **Scientist** | All scientists win (share rewards) | `shareRewards: true` |
+| **Artist** | All artists lose (nobody gets Art) | `evictAll: true` |
+| **Robot** | All robots get reduced reward (1 instead of 3) | `shareRewards: true` |
+
+### Reward Calculation
+`getActorRewardType()` and `getBaseReward()` in `modules/resources/resourceManager.ts`:
+
+| Actor | Win Reward | Draw Reward | Lose Reward |
+|---|---|---|---|
+| Politician | 1 Power | (re-fight) | 0 |
+| Scientist | 1 Knowledge | 1 Knowledge each | 0 |
+| Artist | 1 Art | 0 each | 0 |
+| Robot | 3 Resources | 1 Resource each | 0 |
+
+With successful Production bet: +1 to any reward.
+
+---
+
+## 8. Victory Points
+
+`calculateVictoryPoints()` in `modules/resources/resourceManager.ts`:
+
+```
+VP = min(Power, Knowledge, Art) — after distributing Glory
+```
+
+**Glory distribution algorithm** (greedy):
+1. While Glory > 0:
+   - Find which of {Power, Knowledge, Art} is the lowest
+   - Increment that value by 1
+   - Decrement Glory by 1
+2. Return `min(Power, Knowledge, Art)`
+
+---
+
+## 9. Phase 1: Events
+
+Starting from Turn 2, a random Event Card is drawn. 7 events defined in `EVENTS` (`core/constants`):
+
+### Compare Events (reward: Glory)
+The player with the **min or max** of a specific value gets Glory:
+- **Political Repression** — least Power → Glory
+- **Educational Crisis** — least Knowledge → Glory
+- **Cultural Decline** — least Art → Glory
+- **Revolution** — most Power → Glory
+
+### Discard Events (reward: Action Card)
+Players secretly discard resources. Whoever discards the most gets a random Action Card:
+- **Help Poor Countries** — discard Product
+- **Earth Hour** — discard Energy
+- **Prevent Eco-Crisis** — discard Recycling
+
+**Implementation:** `pickRandomEvent()`, `resolveCompareEvent()`, `resolveDiscardEvent()` in `modules/actions/eventLogic.ts`.
+
+If tied, a Conflict Resolution (RPS) determines the winner.
+
+---
+
+## 10. Phase 2: Distribution
+
+Players secretly place all 4 Actors on the board:
+1. Choose Location (validated by `ALLOWED_MOVES`)
+2. Assign Argument (each actor gets a unique one)
+3. Optionally attach Bet (costs 1 resource)
+
+**Implementation:** `modules/distribution/placementLogic.ts`
+- `isValidPlacement(actorType, locationId)` — checks allowed moves
+- `createPlacedActor(...)` — builds the `PlacedActor` struct
+- `getAvailableArguments(placed, playerId)` — returns unused arguments
+- `recallActor(placed, actorId)` — removes a placed actor
+
+### Bot Placement
+`generateBotPlacements()` in `modules/bot/botAI.ts`:
+- Random location from allowed set
+- Random unique argument per actor
+- Random bid (or none)
+
+---
+
+## 11. Phase 3: Action Cards (4 sub-steps)
+
+Phase 3 has 4 sequential sub-steps, each allowing a specific card type:
+
+| Step | Name | Allowed Cards |
+|---|---|---|
+| 1 | BIDDING | None (placeholder, reserved) |
+| 2 | STOPPING LOCATIONS | Location-blocking cards only (`type: 'turn off location'`) |
+| 3 | RELOCATION | Relocation/teleport cards only |
+| 4 | EXCHANGE | Change Values / exchange cards only |
+
+**Implementation:** `getFilteredCards(hand, p3Step)` in `modules/actions/actionCardLogic.ts`.
+
+### Card Effects
+
+**Block Location** (6 cards — one per non-City location):
+- `applyBlockLocation(disabledLocations, locationId)` — adds location to disabled list
+- Actors in disabled locations produce no values, have no conflicts
+
+**Relocation** (6 cards in deck):
+- `isValidRelocation(actorType, targetLocId)` — validates new location
+- `relocateActor(placedActors, actorId, newLocId)` — moves actor
+
+**Change Values** (3 cards in deck):
+- Exchange one of your Values (Power/Art/Knowledge) with another player's Value
+
+---
+
+## 12. Phase 5: Market
+
+Players can buy random Action Cards using resources.
+
+**Cost:** 1 Product + 1 Energy + 1 Recycle = 1 random Action Card
+
+**Implementation:** `modules/market/marketLogic.ts`
+- `canBuyActionCard(resources)` — checks affordability
+- `deductBuyCost(resources)` — subtracts costs
+- `pickRandomActionCard()` — random card from `ACTION_CARDS` array
+- `createCardInstance(card, n)` — creates unique instance with `instanceId`
+
+---
+
+## 13. Action Card Inventory
+
+8 unique Action Cards defined in `ACTION_CARDS` (`core/constants`):
+
+| Card | Type | Effect |
+|---|---|---|
+| Under Construction | Block | Disables Square |
+| Charity Event | Block | Disables Theatre |
+| Student Strikes | Block | Disables University |
+| Sabotage | Block | Disables Factory |
+| Blackout | Block | Disables Energy Station |
+| Ecological Protest | Block | Disables Dump |
+| Relocation | Action | Move one actor to another valid location |
+| Change of Values | Action | Exchange one Value with another player |
+
+Full deck in rules: 15 cards (6 block + 6 relocation + 3 change values).
+Current implementation: 8 definitions (6 block + 1 relocation + 1 change values) — instances can be duplicated.
+
+---
+
+## 14. Bot AI
+
+Bot decision-making in `modules/bot/botAI.ts` (pure functions):
+- `pickRandomArgument()` — random from `[rock, paper, scissors]`
+- `pickRandomBet()` — random from `[product, energy, recycle, undefined]`
+- `pickRandomLocation(actorType)` — random valid location
+- `generateBotPlacements(botId, prefix)` — full 4-actor placement
+- `pickBotConflictChoice()` — random RPS for conflict resolution
+
+Stateful bot orchestration remains in `lib/game/BotAI.ts` (legacy, uses `setTimeout` + React setState).
+
+---
+
+## 15. Commit-Reveal Scheme (Smart Contract)
+
+On-chain fairness guarantee implemented in `MetarchyGame.sol`:
+
+```
+Distribution Phase:
+  1. commitMove(gameId, keccak256(gameId, turn, phase, moveData, salt))
+     → All commits → auto-advance to DISTRIBUTION_REVEAL
+
+  2. revealMove(gameId, moveData, salt)
+     → Contract verifies: keccak256(...) == stored hash
+     → All reveals → auto-advance to ACTION phase
+
+After ACTION → CONFLICT → MARKET → next turn (EVENT)
+```
+
+Player state is reset between phases (commitHash zeroed, revealed flag cleared).
