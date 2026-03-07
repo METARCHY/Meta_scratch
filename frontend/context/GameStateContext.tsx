@@ -76,8 +76,13 @@ export function GameStateProvider({ children }: { children: ReactNode }) {
     const [player, setPlayer] = useState(initialState.player);
     const [lobby, setLobby] = useState(initialState.lobby);
 
-    const updateResource = (resource: string, amount: number) => {
-        setResources(prev => ({ ...prev, [resource]: amount }));
+    // updateResource: adds `delta` to the resource (positive or negative).
+    // The resource can never go below 0.
+    const updateResource = (resource: string, delta: number) => {
+        setResources(prev => ({
+            ...prev,
+            [resource]: Math.max(0, (prev[resource as keyof typeof prev] || 0) + delta),
+        }));
     };
 
     const setPlayerName = (name: string) => {

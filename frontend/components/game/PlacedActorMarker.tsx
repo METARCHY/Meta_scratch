@@ -8,10 +8,10 @@ interface PlacedActorMarkerProps {
     token?: string; // RSP token id
     bid?: string; // Attached resource type
     isP1: boolean;
-    isTeleporting?: boolean;
+    isRelocating?: boolean;
     phase?: number;
     p3Step?: number;
-    availableTeleportCards?: number;
+    availableRelocationCards?: number;
     isDisabled?: boolean;
     hudScale?: number;
     onClick?: (e: React.MouseEvent) => void;
@@ -23,24 +23,24 @@ const Resource_Icons: { [key: string]: string } = {
     'recycle': '/resources/resource_Recycle.png'
 };
 
-export default function PlacedActorMarker({ actor, token, bid, isP1, isTeleporting, isDisabled, phase, p3Step, availableTeleportCards, hudScale = 1, onClick }: PlacedActorMarkerProps) {
+export default function PlacedActorMarker({ actor, token, bid, isP1, isRelocating, isDisabled, phase, p3Step, availableRelocationCards, hudScale = 1, onClick }: PlacedActorMarkerProps) {
     const { showTooltip, hideTooltip } = useTooltip();
     const phaseScaleAdjust = phase && phase >= 3 ? 1.5 : 1.25;
 
-    const canTeleport = phase === 3 && p3Step === 3 && availableTeleportCards && availableTeleportCards > 0 && !isTeleporting;
+    const canRelocate = phase === 3 && p3Step === 3 && availableRelocationCards && availableRelocationCards > 0 && !isRelocating;
 
     return (
         <div
-            className={`relative w-[145px] h-[188px] cursor-pointer transition-all duration-700 group origin-bottom ${isTeleporting ? 'drop-shadow-[0_0_20px_cyan]' : (canTeleport ? 'drop-shadow-[0_0_15px_white]' : '')}`}
+            className={`relative w-[145px] h-[188px] cursor-pointer transition-all duration-700 group origin-bottom ${isRelocating ? 'drop-shadow-[0_0_20px_cyan]' : (canRelocate ? 'drop-shadow-[0_0_15px_white]' : '')}`}
             style={{
-                transform: `scale(${hudScale * phaseScaleAdjust}) ${isTeleporting ? 'scale(1.2)' : ''}`
+                transform: `scale(${hudScale * phaseScaleAdjust}) ${isRelocating ? 'scale(1.2)' : ''}`
             }}
             onClick={onClick}
             onMouseEnter={() => showTooltip(actor.name || actor.type)}
             onMouseLeave={hideTooltip}
         >
-            {/* Phase 3 Interactions: Bidding & Teleport - EXCLUDED from grayscale */}
-            {phase === 3 && (
+            {/* Phase 2 & 3 Interactions: Bidding & Teleport - EXCLUDED from grayscale */}
+            {(phase === 2 || phase === 3) && (
                 <div className="absolute -top-24 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-2">
                     {/* Bidding (Step 1 or View-Only) */}
                     {bid && (
@@ -53,7 +53,7 @@ export default function PlacedActorMarker({ actor, token, bid, isP1, isTeleporti
                                 }
                             }}
                         >
-                            <div className={`absolute inset-x-[-10px] inset-y-[-4px] bg-[#171B21]/90 backdrop-blur-sm border border-[#514D44] rounded-full -z-10 shadow-xl ${p3Step === 1 ? 'group-hover/bid:border-[#d4af37]/50' : ''} transition-colors`} />
+                            <div className={`absolute inset-x-[-10px] inset-y-[-4px] bg-[#171B21]/90 backdrop-blur-sm border border-[#514D44] rounded-full -z-10 shadow-xl ${(phase === 2 || p3Step === 1) ? 'group-hover/bid:border-[#d4af37]/50' : ''} transition-colors`} />
                             <div className="relative w-[28px] h-[28px]">
                                 <Image
                                     src={Resource_Icons[bid] || ""}
@@ -76,17 +76,17 @@ export default function PlacedActorMarker({ actor, token, bid, isP1, isTeleporti
                         </button>
                     )}
 
-                    {/* Step 3: Teleport Interaction (Only if cards available) */}
-                    {p3Step === 3 && availableTeleportCards && availableTeleportCards > 0 && !isTeleporting && (
+                    {/* Step 3: Relocation Interaction (Only if cards available) */}
+                    {p3Step === 3 && availableRelocationCards && availableRelocationCards > 0 && !isRelocating && (
                         <button
                             onClick={(e) => { e.stopPropagation(); onClick?.(e); }}
-                            className="pointer-events-auto group/teleport w-16 h-16 rounded-full bg-[#d4af37] border-4 border-white/20 flex flex-col items-center justify-center hover:bg-[#ffe066] hover:scale-110 transition-all shadow-[0_0_30px_rgba(212,175,55,0.8)] z-50 animate-pulse"
+                            className="pointer-events-auto group/relocate w-16 h-16 rounded-full bg-[#d4af37] border-4 border-white/20 flex flex-col items-center justify-center hover:bg-[#ffe066] hover:scale-110 transition-all shadow-[0_0_30px_rgba(212,175,55,0.8)] z-50 animate-pulse"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M5 12h14" />
                                 <path d="m12 5 7 7-7 7" />
                             </svg>
-                            <span className="text-[8px] font-black text-black leading-none mt-0.5 tracking-tighter">TELEPORT</span>
+                            <span className="text-[8px] font-black text-black leading-none mt-0.5 tracking-tighter">RELOCATE</span>
                         </button>
                     )}
                 </div>

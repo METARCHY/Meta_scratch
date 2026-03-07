@@ -15,7 +15,7 @@ export const handleNextPhase = (
     addLog: (msg: string) => Promise<void>,
     triggerBotPhase3ActionsWrapper: (step: number) => Promise<void>,
     setPhase: Dispatch<SetStateAction<number>>,
-    setP3Step: Dispatch<SetStateAction<1 | 2 | 3 | 4>>,
+    setP3Step: Dispatch<SetStateAction<0 | 1 | 2 | 3 | 4>>,
     setP5Step: Dispatch<SetStateAction<1 | 2 | 3>>,
     setTurn: Dispatch<SetStateAction<number>>,
     setPlacedActors: Dispatch<SetStateAction<any[]>>,
@@ -32,12 +32,13 @@ export const handleNextPhase = (
     const maxTurns = (() => {
         if (isTest) return 3; // Test games end after 3 turns
         const playerCount = dynamicPlayers.length;
-        if (playerCount === 4) return 8;
-        if (playerCount === 5) return 6;
-        return 7; // Default for 2, 3, 6 players
+        if (playerCount === 2 || playerCount === 3) return 5;
+        if (playerCount === 4) return 6;
+        return 5; // Default fallback for unsupported counts
     })();
 
-    if (turn >= maxTurns && phase === 5) {
+    // The last Turn: No Phase 5 (Market Phase), game is finished after Phase 4 (Conflicts Resolution)
+    if (turn >= maxTurns && phase === 4) {
         addLog("--- GAME FINISHED ---");
         isGameOver = true;
         // Log final scores for all players
@@ -51,10 +52,10 @@ export const handleNextPhase = (
 
     // Phase 3 Sub-step Logic
     if (phase === 3) {
-        if (p3Step < 4) {
-            const nextStep = (p3Step + 1) as 1 | 2 | 3 | 4;
+        if (p3Step < 3) {
+            const nextStep = (p3Step + 1) as 0 | 1 | 2 | 3;
             setP3Step(nextStep);
-            const stepNames = ["", "BIDDING", "STOPPING LOCATIONS", "RELOCATION", "EXCHANGE"];
+            const stepNames = ["SELECTION", "BLOCKING LOCATIONS", "RELOCATION", "CHANGE VALUES"];
             addLog("All players are ready");
             addLog(`STEP: ${stepNames[nextStep]}`);
 
@@ -68,7 +69,7 @@ export const handleNextPhase = (
         newPhase = phase + 1;
         setPhase(newPhase);
         // Reset P3 step when leaving P3
-        if (newPhase !== 3) setP3Step(1);
+        if (newPhase !== 3) setP3Step(0);
 
         // MVP: Skip Player Exchange (Steps 1 & 2) and go straight to Buy Action Card (Step 3)
         if (newPhase === 5) setP5Step(3);
@@ -82,7 +83,7 @@ export const handleNextPhase = (
         }
 
         if (newPhase === 3) {
-            addLog("STEP: BIDDING");
+            addLog("STEP: BLOCKING LOCATIONS");
             triggerBotPhase3ActionsWrapper(1);
         } else if (newPhase === 4) {
             // Log detailing conflicts
@@ -110,18 +111,22 @@ export const handleNextPhase = (
 
         addLog(`PHASE ${newPhase} BEGINS`);
     } else {
-        // MVP: Skip Phase 1 (Events) for now and go straight to Phase 2 (Distribution)
-        newPhase = 2;
-        setPhase(newPhase);
-        setP3Step(1);
         newTurn = turn + 1;
         setTurn(newTurn);
+
+        // Rule: Turn 1 skips Event Phase (1) straight to Distribution Phase (2).
+        // Turn 2+ starts at Event Phase (1).
+        newPhase = newTurn === 1 ? 2 : 1;
+        setPhase(newPhase);
+        setP3Step(1);
+
         setPlacedActors([]); // Safety clearing for next turn
         setDisabledLocations([]); // Safety clearing for next turn
 
         // CRITICAL: Reset bot readiness for the next turn
         setOpponentsReady(false);
         addLog(`TURN ${newTurn} BEGINS`);
+        if (newPhase === 1) addLog(`PHASE 1 BEGINS`);
     }
 
     return { newPhase, newTurn, isGameOver };

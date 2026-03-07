@@ -15,19 +15,18 @@ export function getFilteredCards(
     p3Step: number
 ): ActionCardInstance[] {
     switch (p3Step) {
-        case 1: return []; // Bidding step — no cards
-        case 2: return hand.filter(c => c.type === 'turn off location');
-        case 3: return hand.filter(c => c.id.includes('relocation') || c.id.includes('teleport'));
-        case 4: return hand.filter(c => c.id.includes('change_values') || c.id.includes('exchange'));
+        case 1: return hand.filter(c => c.type === 'turn off location'); // Block Location step
+        case 2: return hand.filter(c => c.id.includes('relocation')); // Relocation step
+        case 3: return hand.filter(c => c.id.includes('change_values') || c.id.includes('exchange')); // Change Values step
         default: return [];
     }
 }
 
 /**
- * Counts teleport cards in hand.
+ * Counts relocation cards in hand.
  */
-export function countTeleportCards(hand: ActionCardInstance[]): number {
-    return hand.filter(c => c.id.includes('relocation') || c.id.includes('teleport')).length;
+export function countRelocationCards(hand: ActionCardInstance[]): number {
+    return hand.filter(c => c.id.includes('relocation')).length;
 }
 
 /**

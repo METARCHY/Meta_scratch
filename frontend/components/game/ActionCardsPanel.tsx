@@ -16,14 +16,13 @@ interface ActionCard {
 
 interface ActionCardsPanelProps {
     cards: ActionCard[];
-    onSelect: (id: string) => void;
-    onActivate: (card: ActionCard) => void;
-    activeCardId: string | null;
+    selectedCounts: Record<string, number>;
+    onToggleCard: (cardId: string, count: number) => void;
     emptyMessage?: string;
     compact?: boolean;
 }
 
-export default function ActionCardsPanel({ cards, onSelect, onActivate, activeCardId, emptyMessage, compact }: ActionCardsPanelProps) {
+export default function ActionCardsPanel({ cards, selectedCounts, onToggleCard, emptyMessage, compact }: ActionCardsPanelProps) {
     const [currentIndex, setCurrentIndex] = useState(0);
 
     // Group cards by title to show counts
@@ -88,7 +87,8 @@ export default function ActionCardsPanel({ cards, onSelect, onActivate, activeCa
 
     const currentGroup = uniqueCards[currentIndex];
     const { card, count } = currentGroup;
-    const isActive = activeCardId === card.id;
+    const selectedQty = selectedCounts[card.id] || 0;
+    const isActive = selectedQty > 0;
 
     const nextCard = () => {
         setCurrentIndex((prev) => (prev + 1) % uniqueCards.length);
@@ -96,6 +96,12 @@ export default function ActionCardsPanel({ cards, onSelect, onActivate, activeCa
 
     const prevCard = () => {
         setCurrentIndex((prev) => (prev - 1 + uniqueCards.length) % uniqueCards.length);
+    };
+
+    const handleCardClick = () => {
+        let newQty = selectedQty + 1;
+        if (newQty > count) newQty = 0;
+        onToggleCard(card.id, newQty);
     };
 
     return (
@@ -111,8 +117,7 @@ export default function ActionCardsPanel({ cards, onSelect, onActivate, activeCa
 
                 {/* Main Card View */}
                 <div
-                    onDoubleClick={() => onActivate(card)}
-                    onClick={() => onSelect(card.id)}
+                    onClick={handleCardClick}
                     className={`relative w-[310px] h-[720px] rounded-[2.5rem] border transition-all cursor-pointer overflow-hidden
                         ${isActive
                             ? 'border-[#d4af37] bg-[#171B21] shadow-[0_0_80px_rgba(212,175,55,0.35)]'
@@ -155,9 +160,12 @@ export default function ActionCardsPanel({ cards, onSelect, onActivate, activeCa
                             )}
 
                             {/* Repositioned Count Badge as Overlay */}
-                            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20">
-                                <div className="px-6 py-2 rounded-full bg-[#d4af37] text-black font-black text-lg shadow-[0_0_30px_rgba(212,175,55,0.5)] flex items-center gap-1 border-2 border-white/20">
-                                    <span className="text-xs opacity-70">CARDS:</span> {count}
+                            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex gap-2">
+                                <div className="px-5 py-2 rounded-full bg-[#171B21] text-white font-black text-sm border-2 border-white/20">
+                                    <span className="text-[10px] opacity-70">OWNED:</span> {count}
+                                </div>
+                                <div className={`px-5 py-2 rounded-full font-black text-sm border-2 shadow-[0_0_30px_rgba(212,175,55,0.5)] flex items-center gap-1 transition-colors ${isActive ? 'bg-[#d4af37] text-black border-[#ffe066]' : 'bg-black/50 text-[#d4af37] border-[#d4af37]/30'}`}>
+                                    <span className="text-[10px] opacity-70">SELECTED:</span> {selectedQty}
                                 </div>
                             </div>
                         </div>
@@ -170,9 +178,11 @@ export default function ActionCardsPanel({ cards, onSelect, onActivate, activeCa
                         </div>
 
                         {/* Interaction Prompt */}
-                        <div className="w-full mt-auto px-6 py-3 bg-white/5 flex items-center justify-center gap-2 group-hover:bg-[#d4af37]/10 transition-colors border-t border-white/5">
-                            <Zap size={14} className="text-[#d4af37] animate-pulse" />
-                            <span className="text-[10px] uppercase font-bold tracking-widest text-[#d4af37]/80">Double Click to Activate</span>
+                        <div className={`w-full mt-auto px-6 py-3 transition-colors border-t flex items-center justify-center gap-2 ${isActive ? 'bg-[#d4af37]/20 border-[#d4af37]/50' : 'bg-white/5 border-white/5 group-hover:bg-[#d4af37]/10'}`}>
+                            <Zap size={14} className={isActive ? 'text-[#ffe066] animate-pulse' : 'text-[#d4af37]/50'} />
+                            <span className={`text-[10px] uppercase font-bold tracking-widest ${isActive ? 'text-[#ffe066]' : 'text-[#d4af37]/80'}`}>
+                                {isActive ? 'Card Queued for Phase' : 'Click to Toggle Selection'}
+                            </span>
                         </div>
                     </div>
                 </div>

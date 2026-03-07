@@ -119,7 +119,7 @@ export interface ActionCardInstance extends ActionCardDefinition {
 }
 
 // ─── Event Cards ──────────────────────────────────────────────────
-export type EventType = 'compare' | 'discard';
+export type EventType = 'compare' | 'compare_sum' | 'discard';
 
 export interface EventCardDefinition {
     id: string;
@@ -128,7 +128,8 @@ export interface EventCardDefinition {
     desc: string;
     image: string;
     type: EventType;
-    targetResource: string;
+    targetResource?: string;        // For 'compare' and 'discard' events
+    targetResources?: string[];     // For 'compare_sum' events (e.g. Revolution sums power+knowledge+art)
     winCondition?: 'min' | 'max';
     reward: string;
 }
@@ -153,7 +154,7 @@ export interface OpponentData {
 
 // ─── Game Phases ──────────────────────────────────────────────────
 export type PhaseNumber = 1 | 2 | 3 | 4 | 5;
-export type Phase3Step = 1 | 2 | 3 | 4;   // Bidding | Stop | Relocation | Exchange
+export type Phase3Step = 1 | 2 | 3;       // Block Location | Relocation | Change Values
 export type Phase5Step = 1 | 2 | 3;       // Market Offer | Market Reveal | Buy Cards
 
 export interface TurnState {

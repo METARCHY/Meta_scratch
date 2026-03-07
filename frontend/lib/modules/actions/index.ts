@@ -1,6 +1,6 @@
 export {
     getFilteredCards,
-    countTeleportCards,
+    countRelocationCards,
     countExchangeCards,
     applyBlockLocation,
     isValidRelocation,

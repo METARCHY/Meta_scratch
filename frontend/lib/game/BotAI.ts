@@ -11,30 +11,41 @@ export const triggerBotPhase3Actions = async (
     addLog: (msg: string) => Promise<void>,
     setDisabledLocations: (cb: (prev: string[]) => string[]) => void,
     setPlacedActors: (cb: (prev: any[]) => any[]) => void,
-    setOpponentsReady: (ready: boolean) => void
+    setOpponentsReady: (ready: boolean) => void,
+    setPendingRelocations?: (cb: (prev: any[]) => any[]) => void,
+    botActionCommits?: Record<string, number[]>
 ) => {
     if (!game?.isTest) return; // Only process bots in test mode
 
     for (const opp of opponents) {
-        // 50% chance a bot performs an action in a sub-phase
-        if (Math.random() < 0.5) {
-            if (step === 2) { // Stopping Locations
+        // Bots only play action cards if they actually have them.
+        // In a normal game start, bots have NO action cards (same rule as players).
+        // botActionCommits tracks which steps bots have cards for (determined at p3Step=0).
+        const botCommits = botActionCommits?.[opp.id] || [];
+        const botHasCardForStep = botCommits.includes(step);
+
+        // Only act if bot committed to this step (i.e., had a card for it)
+        if (botHasCardForStep && Math.random() < 0.5) {
+            if (step === 1) { // Stopping Locations — only if bot played a Block card
                 const targetLoc = LOCATIONS[Math.floor(Math.random() * LOCATIONS.length)];
                 setDisabledLocations(prev => [...prev, targetLoc.id]);
                 await addLog(`${opp.name} activated Under Construction - ${targetLoc.name.toUpperCase()} is now DISABLED`);
-            } else if (step === 3) { // Relocation
+            } else if (step === 2) { // Relocation — only if bot played a Relocation card
                 const botActors = placedActors.filter(a => a.playerId === opp.id);
                 if (botActors.length > 0) {
                     const actorToMove = botActors[Math.floor(Math.random() * botActors.length)];
                     const allowed = ALLOWED_MOVES[actorToMove.actorType] || [];
                     const targetLoc = allowed[Math.floor(Math.random() * allowed.length)] || actorToMove.locId;
 
-                    setPlacedActors(prev => prev.map(a =>
-                        (a.actorId === actorToMove.actorId) ? { ...a, locId: targetLoc } : a
-                    ));
-                    await addLog(`${opp.name} used Relocation to move ${actorToMove.name || actorToMove.actorType} to ${targetLoc.toUpperCase()}`);
+                    if (setPendingRelocations) {
+                        setPendingRelocations(prev => [...prev, {
+                            playerId: opp.id,
+                            actorId: actorToMove.actorId,
+                            targetLocId: targetLoc
+                        }]);
+                    }
                 }
-            } else if (step === 4) { // Exchange
+            } else if (step === 3) { // Exchange — only if bot played a Change Values card
                 const resTypes = ['POWER', 'ART', 'KNOWLEDGE'];
                 const give = resTypes[Math.floor(Math.random() * 3)];
                 let take = resTypes[Math.floor(Math.random() * 3)];
@@ -50,8 +61,8 @@ export const triggerBotPhase3Actions = async (
 };
 
 /**
- * Resolves conflicts where ONLY bots are present in a location (Phase 4).
- */
+     * Resolves conflicts where ONLY bots are present in a location (Phase 4).
+     */
 export const resolveBotOnlyConflicts = async (
     placedActors: any[],
     disabledLocations: string[],

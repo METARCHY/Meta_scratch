@@ -29,7 +29,7 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
     const { player } = useGameState();
     const [step, setStep] = useState<'intro' | 'reveal' | 'outcome_rsp' | 'outcome_bid'>('intro');
 
-    // State for choices (Player can change theirs in Draw)
+    // State for choices. Player uses their placed type.
     const [playerChoice, setPlayerChoice] = useState<string>(conflict.playerActor.type || 'rock');
     const [opponentChoices, setOpponentChoices] = useState<{ [id: string]: string }>({});
 
@@ -48,13 +48,13 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
 
         const choices: { [id: string]: string } = {};
         conflict.opponents.forEach(opp => {
-            const roll = Math.random();
-            choices[opp.actorId] = roll < 0.33 ? 'rock' : roll < 0.66 ? 'paper' : 'scissors';
+            // We need to use the actual 'type' they placed on the board!
+            choices[opp.actorId] = opp.type || 'rock';
         });
         setOpponentChoices(choices);
         setStep('intro');
         setResult(null);
-    }, [conflict.locId, isResolved]);
+    }, [conflict.locId, isResolved, conflict.opponents]);
 
     // 2. Logic: Resolve the Conflict
     const resolveConflict = (pChoice: string, applyBids: boolean = true): ConflictResult => {
@@ -86,12 +86,19 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
         setTimeout(() => setStep('outcome_rsp'), 2000);
     };
 
+    const localPlayerId = player.citizenId || player.address || 'p1';
+
     // Handler: Trigger a Re-Roll (from Energy Bid or Politician Draw)
     const handleReRollRequest = () => {
-        // Clear the player's choice so they have to pick again
+        // CRITICAL: Call onResolve FIRST to clear bets in the parent (stickyConflicts).
+        // result.restart=true so page.tsx will clear bets and return early (won't close the modal).
+        if (result) {
+            onResolve(result);
+        }
+
+        // Reset the player's choice so they have to pick again
         setPlayerChoice('');
 
-        // Let's re-roll opponents randomly for the new attempt
         const newOppChoices: { [id: string]: string } = {};
         conflict.opponents.forEach(opp => {
             const roll = Math.random();
@@ -100,8 +107,7 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
         setOpponentChoices(newOppChoices);
 
         // Reset the view back to the intro phase so the player can select a new token
-        // We do NOT clear result.usedBid here because we want to remember that bids are burned!
-        // We will pass a flag to handleReveal on the next click to know bids are burned.
+        setResult(null); // Clear result so bids won't show on re-render
         setStep('intro');
     };
 
@@ -124,7 +130,7 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
         }
 
         // Product Bid logic (Win)
-        if (result.usedBid === 'product' && result.winnerId === 'p1') {
+        if (result.usedBid === 'product' && result.winnerId === localPlayerId) {
             if (step !== 'outcome_bid') {
                 // Add the log dynamically right before showing
                 const updatedLogs = [...result.logs, "Product Bid: DOUBLE PRIZE!"];
@@ -180,7 +186,7 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
                             className="w-24 h-24 relative"
                         >
                             {playerChoice ? (
-                                <Image src={RSP_ICONS[playerChoice]} fill className="object-contain drop-shadow-[0_0_20px_rgba(255,255,0,0.5)]" alt="Player Choice" />
+                                <Image src={RSP_ICONS[playerChoice] || RSP_ICONS['rock']} fill className="object-contain drop-shadow-[0_0_20px_rgba(255,255,0,0.5)]" alt="Player Choice" />
                             ) : (
                                 <div className="w-full h-full rounded-full border-2 border-white/20 flex items-center justify-center bg-black/50 backdrop-blur-sm">
                                     <span className="text-4xl font-bold text-white/50">?</span>
@@ -246,7 +252,7 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
                                             <span className="text-3xl font-bold text-white/50">?</span>
                                         </div>
                                     ) : (
-                                        <Image src={RSP_ICONS[opponentChoices[opp.actorId]]} fill className="object-contain drop-shadow-2xl" alt="Opponent Choice" />
+                                        <Image src={RSP_ICONS[opponentChoices[opp.actorId]] || RSP_ICONS['rock']} fill className="object-contain drop-shadow-2xl" alt="Opponent Choice" />
                                     )}
                                 </motion.div>
                                 {/* 3. Bid Token */}
@@ -319,10 +325,10 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
                         >
                             {/* Header */}
                             <div className="bg-[#1a1a20] p-6 border-b border-white/5 text-center">
-                                <h2 className={`font-rajdhani font-bold text-4xl tracking-widest uppercase ${result?.isDraw ? 'text-blue-400' : result?.winnerId === 'p1' ? 'text-[#d4af37]' : 'text-red-500'}`}>
+                                <h2 className={`font-rajdhani font-bold text-4xl tracking-widest uppercase ${result?.isDraw ? 'text-blue-400' : result?.winnerId === localPlayerId ? 'text-[#d4af37]' : 'text-red-500'}`}>
                                     {result?.isDraw
                                         ? (result.evictAll ? 'DISMISSED' : result.shareRewards ? 'TRUCE' : 'DRAW')
-                                        : result?.winnerId === 'p1'
+                                        : result?.winnerId === localPlayerId
                                             ? (conflict.opponents.length === 0 ? 'SECURED' : 'VICTORY')
                                             : 'DEFEAT'}
                                 </h2>
@@ -333,7 +339,7 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
                                             : result.shareRewards
                                                 ? "Finding common ground, all actors remain at the location."
                                                 : "The negotiation stalled. A new argument is required.")
-                                        : result?.winnerId === 'p1'
+                                        : result?.winnerId === localPlayerId
                                             ? (conflict.opponents.length === 0 ? "Mining operations secured without opposition." : "Your arguments prevailed over the opposition.")
                                             : "You failed to convince the assembly."
                                     }
@@ -347,7 +353,7 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
                                 {step === 'outcome_rsp' && result?.restart && (
                                     <div className="flex flex-col items-center gap-4 w-full">
                                         <p className="text-white text-lg uppercase tracking-widest mb-2">
-                                            {result.isDraw ? "Resolve the dispute. Confrontation restarted:" : "Energy Bid active: Confrontation restarted!"}
+                                            {result.isDraw ? "Resolve the Conflict. Confrontation restarted:" : "Energy Bid active: Confrontation restarted!"}
                                         </p>
                                         <div className="flex gap-6 mt-4">
                                             <button
@@ -363,7 +369,7 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
                                 {/* WIN/LOSE/SPECIAL-DRAW: Next/Close */}
                                 {step === 'outcome_rsp' && !result?.restart && (
                                     <div className="text-center">
-                                        {result?.winnerId === 'p1' && (
+                                        {result?.winnerId === localPlayerId && (
                                             <div className="flex flex-col items-center">
                                                 <div className="w-24 h-24 mx-auto mb-4 relative flex items-center justify-center bg-white/5 rounded-full border border-white/10">
                                                     <div className="relative w-16 h-16">
@@ -379,7 +385,11 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
                                                         />
                                                     </div>
                                                     <div className="absolute -bottom-2 right-0 bg-[#d4af37] text-black font-black text-xl px-2 py-0.5 rounded-md border-2 border-black shadow-lg shadow-[#d4af37]/50">
-                                                        +{conflict.playerActor.bid === 'product' ? 2 : 1}
+                                                        +{(() => {
+                                                            const isRobot = conflict.playerActor.actorType?.toLowerCase() === 'robot';
+                                                            const baseReward = isRobot ? 3 : 1;
+                                                            return conflict.playerActor.bid === 'product' ? baseReward + 1 : baseReward;
+                                                        })()}
                                                     </div>
                                                 </div>
                                                 <p className="text-xl font-bold uppercase text-white mb-6">Resource Secured</p>

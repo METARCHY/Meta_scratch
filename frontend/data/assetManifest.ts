@@ -11,13 +11,14 @@ export const LOCATION_IMAGES: { [key: string]: string } = {
 export const RSP_ICONS: { [key: string]: string } = {
     'rock': '/tokens/rsp_rock.png',
     'paper': '/tokens/rsp_paper.png',
-    'scissors': '/tokens/rsp_scissors.png'
+    'scissors': '/tokens/rsp_scissors.png',
+    'dummy': '/tokens/rsp_dummy.png'
 };
 
 export const BID_ICONS: { [key: string]: string } = {
-    'product': '/resources/resource_box.png', // Win Bid
+    'product': '/resources/resource_product.png', // Win Bid
     'energy': '/resources/resource_energy.png', // Lose Bid
-    'recycle': '/resources/resource_bio.png' // Draw Bid
+    'recycle': '/resources/resource_Recycle.png' // Draw Bid
 };
 
 export const RESOURCE_ICONS: { [key: string]: string } = {

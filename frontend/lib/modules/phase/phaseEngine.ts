@@ -69,9 +69,9 @@ export function advancePhase(input: PhaseAdvanceInput): PhaseAdvanceResult {
 
     // Phase 3 sub-step advancement
     if (phase === 3) {
-        if (p3Step < 4) {
+        if (p3Step < 3) {
             const nextStep = (p3Step + 1) as Phase3Step;
-            const stepNames = ['', 'BIDDING', 'STOPPING LOCATIONS', 'RELOCATION', 'EXCHANGE'];
+            const stepNames = ['', 'BLOCKING LOCATIONS', 'RELOCATION', 'CHANGE VALUES'];
             logs.push('All players are ready');
             logs.push(`STEP: ${stepNames[nextStep]}`);
 
@@ -88,10 +88,10 @@ export function advancePhase(input: PhaseAdvanceInput): PhaseAdvanceResult {
     // Linear phase progression
     if (phase < 5) {
         const newPhase = (phase + 1) as PhaseNumber;
-        const newP3Step: Phase3Step = newPhase !== 3 ? 1 : 1;
+        const newP3Step: Phase3Step = 1;
 
         if (newPhase === 3) {
-            logs.push('STEP: BIDDING');
+            logs.push('STEP: BLOCKING LOCATIONS');
         }
         if (newPhase === 4) {
             result.markOpponentsReady = true;
@@ -114,14 +114,19 @@ export function advancePhase(input: PhaseAdvanceInput): PhaseAdvanceResult {
         };
     }
 
-    // Phase 5 → next turn (skip Phase 1 for MVP, go to Phase 2)
+    // Phase 5 → next turn
     const newTurn = turn + 1;
     logs.push(`TURN ${newTurn} BEGINS`);
+
+    // According to rulebook: "Event Phase - Starts from Turn 2. (but not on the Turn 1)"
+    // Therefore Turn > 1 goes to phase 1 (Event), Turn 1 skips to phase 2 (Distribution).
+    const nextPhase: PhaseNumber = newTurn === 1 ? 2 : 1;
+    if (nextPhase === 1) logs.push(`PHASE 1 BEGINS`);
 
     return {
         ...result,
         turn: newTurn,
-        phase: 2,
+        phase: nextPhase,
         p3Step: 1,
         logs,
         markOpponentsReady: false,

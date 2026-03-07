@@ -17,11 +17,11 @@ interface MapContainerProps {
     selectedActorId: string | null;
     hoveredActorId: string | null;
     disabledLocations: string[];
-    teleportSource: string | null;
+    relocationSource: string | null;
     selectedHex: string | null;
     playerActorsV2: any[];
     players: any[];
-    availableTeleportCards?: number;
+    availableRelocationCards?: number;
     availableExchangeCards?: number;
     localPlayerId: string;
     onHexClick: (locId: string) => void;
@@ -44,11 +44,11 @@ export default function MapContainer({
     selectedActorId,
     hoveredActorId,
     disabledLocations,
-    teleportSource,
+    relocationSource,
     selectedHex,
     playerActorsV2,
     players,
-    availableTeleportCards,
+    availableRelocationCards,
     availableExchangeCards,
     localPlayerId,
     onHexClick,
@@ -96,7 +96,7 @@ export default function MapContainer({
         setIsDragging(false);
     };
 
-    const activeActorId = teleportSource || hoveredActorId || selectedActorId;
+    const activeActorId = relocationSource || hoveredActorId || selectedActorId;
     const activeActor = activeActorId ? playerActorsV2.find(a => a.id === activeActorId) : null;
     const validLocs = activeActor ? ALLOWED_MOVES[activeActor.type] || [] : [];
 
@@ -247,7 +247,7 @@ export default function MapContainer({
                                                     actor={{ ...actorDetails, type: actorDetails.type }}
                                                     playerAvatar={playerAvatar}
                                                     bid={phase >= 4 ? a.bid : undefined}
-                                                    hasSecretBid={phase === 3 && !!a.bid}
+                                                    hasSecretBid={(phase === 2 || phase === 3) && !!a.bid}
                                                     isDisabled={disabledLocations.includes(loc.id)}
                                                     phase={phase}
                                                     p3Step={p3Step}
@@ -274,11 +274,11 @@ export default function MapContainer({
                                                 token={token}
                                                 bid={a.bid}
                                                 isP1={true}
-                                                isTeleporting={teleportSource === a.actorId}
+                                                isRelocating={relocationSource === a.actorId}
                                                 isDisabled={disabledLocations.includes(loc.id)}
                                                 phase={phase}
                                                 p3Step={p3Step}
-                                                availableTeleportCards={availableTeleportCards}
+                                                availableRelocationCards={availableRelocationCards}
                                                 hudScale={hudScale}
                                                 onClick={(e) => { e.stopPropagation(); onPlayerClick(a, e) }}
                                             />

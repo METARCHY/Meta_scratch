@@ -30,7 +30,7 @@ export function resolveCompareEvent(
     playerResources: PlayerResources,
     opponentStats: { name: string; amount: number }[]
 ): EventResult {
-    const myStat = (playerResources as any)[event.targetResource] || 0;
+    const myStat = (playerResources as any)[event.targetResource!] || 0;
     let won = false;
 
     if (event.winCondition === 'min') {
@@ -73,6 +73,6 @@ export function resolveDiscardEvent(
     return {
         won,
         message,
-        resourceCost: { type: event.targetResource, amount: discardAmount },
+        resourceCost: { type: event.targetResource!, amount: discardAmount },
     };
 }
