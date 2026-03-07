@@ -34,37 +34,64 @@ Resolution:
 
 Player Action: The player clicks an Actor, chooses a valid Location on the Map, and selects an Argument Token (Rock/Paper/Scissors). They may optionally add a Bet (Product, Energy, Recycle). After distributing all their Actors by Locations, the player must click the "Next Phase" button. If other players still didn't finish with the distribution of Actors by the Locations, the player's button changes to "WAITING FOR OTHERS..." until the other players finish.
 
-Bots Actions (Only in case of test game, when player plays agains bots): Bots automatically place their actors in the background. The user's button changes to "WAITING FOR OTHERS..." until the bots finish.
+Bots Actions (Only in case of test game, when player plays agains bots): Bots automatically place their actors in the background. The player's button changes to "WAITING FOR OTHERS..." until the bots finish.
 
 Phase Transition: Once all players (humans and bots) have committed their turns, the game advances to Phase 3.
 
-Phase 3: Action Phase
+### Phase 3: Action Phase
 This phase is divided into multiple sequential sub-steps (p3Step in the code).
 
-Step 0: Action: Select Cards
-Players view all the Action Cards in their hand.
-Player Action: The user selects which cards they want to activate this turn (they can pick 0 or multiple).
-Player Action: Once selection is complete, the user must click "Commit Action Cards" (or "Play No Cards" if none selected).
-Step 1: Action: Stop Locations (Block Locations)
-Auto-Execution: The game automatically finds any "Turn Off Location" cards selected in Step 0 and applies them instantly, disabling the target locations.
-Auto-Transition (The Issue): The game has a setTimeout that waits 1 second, then automatically evaluates what other cards were played:
-If Relocation cards were played, it forcefully jumps to Step 2.
-If Change Values (Exchange) cards were played, it forceful jumps to Step 3.
-If no valid cards remain, it instantly forces the game into Phase 4 via 
-handleNextPhaseWrapper()
-.
-Player Action: NONE required. The UI skips the user.
-Step 2: Action: Relocation
-Only accessible if Relocation cards were selected in Step 0.
-Player Action: The user must click their placed actor on the map, then click a new valid location hex.
-This repeats for the number of Relocation cards played.
-Player Action: The user must explicitly click "Done Relocation" to proceed (unless all cards match count, then it might rely on Next Phase).
-Step 3: Action: Change Values (Exchange)
-Only accessible if Change Values/Exchange cards were selected.
-Player Action: The user clicks an opponent's profile, chooses a resource to give, and a resource to take.
-Player Action: The user clicks "Done Exchange".
-Phase Transition: The game advances to Phase 4.
-Phase 4: Conflicts Reveal
+#### Step 0: Action: Select Cards
+- UI shows Action Card board to aplayer. Even if a player don't have any Action Cards.
+
+Player Action: The player selects which cards they want to activate this turn (they can pick 0 or multiple). Once selection is complete, the player must click "Commit Action Cards" (or "Play No Cards" if none selected).
+
+After all players selected cards to play, the game gets the information about Action Cards that will be played and goes to the next Step:
+- If Block Location Cards (Construction Work, Charity Event, Student Protests, Sabotage, Cable Stolen, Environmental Protests) have not been selected, then the game should skip Step 1
+- If Relocation Cards have not been selected, then the game should skip Step 2
+- If Change Values Cards have not been selected, then the game should skip Step 3
+
+- If no Action Cards have been seelcted, the game must show the players board with the information: "No Actions this turn."
+Player Action: Players need to click on button "Get It!", and game should go to Phase 4.
+
+#### Step 1: Action: Block Locations
+- UI shows to players a board with the information: "<Locations-Names> will not work this turn."
+
+Player Action: Players need to click on button "Get It!", and game goes to the next Step.
+
+#### Step 2: Action: Relocation
+- Players, who didn't select to play Reocation Cards in Step 0, get notification "Waiting for the Relocation..."
+- UI ask players, who selected Relocation Cards to play in Step 0, which actor they want to move from one location to another. (Note: Player can choose to relocate as own Actor, as an Actor of another player)
+
+Player Action: Player needs to click on any Actor,  then click a new valid Location (this repeats for the number of Relocation cards played). After click on button "Done". The player's button changes to "WAITING FOR OTHERS..." until the other players finish relocation. 
+
+After this, the game should show which Actors have moved to which Locations, and goes to the next Step.
+
+- If different players choice to relocate the same Actor to different locations, than game starts the process of Conflict Resolution between theses players (Other players need to get notification: Waiting for the Conflict Resolution).
+- Relocation Card of player-winner - has effect. Relocation Card of player-loser has no effect and discarded.
+- After this, the game should show which Actors have moved to which Locations, and goes to the next Step.
+
+#### Step 3: Action: Change Values
+Only for players who selected to play Change Values Card in Step 0. All other players get notification: Waiting for Values Exchange
+
+- UI shows to a player a board with non-zero amount Values of a player and ask player to choose own Value for exchange
+
+Player Action: The player need to click on available value (Power, Knowledg of Art), and after click on button: "Choose a player"
+- Player can't click on a Value if amount of Value is 0
+- Player can't click on Value Fame
+
+- UI shows to a player a board with avatars of opponent players, and ask to choose an opponent for exchange
+
+Player Action: The player need to click on avatar of a player-opponent
+
+- UI shows to a player a board with non-zero amount Values of a player-opponent and ask player to choose Value for exchange
+
+Player Action: The player need to click on available value (Power, Knowledg of Art), and after click on button: "Change Values"
+- Player can't click on a Value if amount of Value is 0
+- Player can't click on Value Fame
+
+
+### Phase 4: Conflicts Reveal
 The game scans the board for any locations holding actors belonging to different players (or if a single player/bot holds a location uncontested).
 A sidebar lists all active Conflicts.
 Player Action: The user clicks on a Conflict in the sidebar to open the Conflict Resolution Modal.
