@@ -1,32 +1,43 @@
-Current Phase Flow in Codebase
-This document describes the exact flow of turns and phases currently implemented in the Metarchy codebase (specifically inside 
-page.tsx
- and 
-PhaseEngine.ts
-).
+# Metarchy Phase Flow
+This document describes the exact flow of turns and phases currently implemented in the Metarchy 
 
-Turn Structure
-Turn 1: Skips Phase 1 (Events) and starts directly at Phase 2 (Distribution).
-Turn 2+: Starts at Phase 1 (Events).
-Max Turns:
-Test game against bots: ends after 3 turns.
-4-player game: ends after 8 turns.
-5-player game: ends after 6 turns.
-2, 3, or 6-player games: ends after 7 turns.
-Phase 1: Event Stage
-A random Event Card is drawn automatically at the start of the phase.
-The UI presents the Event Card and its conditions (e.g., discard resources, compare sum, compare single resource).
-Player Action: The user must click "CONFIRM" to resolve the event.
+## Turn Structure
+
+### Max Turns:
+- 2 players (1 vs 1): ends after 5 turns
+- 3 players (1 vs 1 vs 1): ends after 5 turns
+- 4 players (2 vs. 2): ends after 6 turns
+- Test game with bots ends after 3 turns
+
+- Turn 1: Skips Phase 1 (Event Phase) and starts directly at Phase 2 (Distribution Phase).
+- Turn 2+: Starts at Phase 1 (Event Phase).
+- The last Turn: No Phase 5 (Market Phase), game is finished after Phase 4 (Conflicts Resolution)
+
+## Phases Structure
+
+### Phase 1: Event Phase
+- At the start of the phase, a random Event Card is drawn automatically from the Event Card Deck
+- The UI presents the Event Card and its conditions (e.g., discard resources, compare sum of values, compare single values).
+
+Player Action: In case of comparing values, the player must click "CONFIRM" to resolve the event. In case of discarding resources, the player need to choose the amount to discard and afte click "CONFIRM".
+
 Resolution:
-If there is a clear winner/loser, the results and rewards are applied immediately.
-If there is a tie for a compare or compare_sum event, a specialized Conflict Resolution modal (Tie-Breaker) pops up where tied players play Rock-Paper-Scissors.
-Phase Transition: After resolution (or after closing the event modal), the game automatically advances to Phase 2.
-Phase 2: Distribution Phase (Placement)
-Players receive their set of Actors (Politician, Scientist, Artist, Robot).
-Player Action: The user clicks an Actor, chooses a valid Location on the Map, and selects an Argument Token (Rock/Paper/Scissors). They may optionally add a Bet (Product, Energy, Recycle).
-Player Action: After placing all their Actors (or deciding they are done), the user must click the "Next Phase" button in the bottom right corner.
-Opponent Action (Bots): In a test game, bots automatically place their actors in the background. The user's button changes to "WAITING FOR OTHERS..." until the bots finish.
-Phase Transition: Once all players (human and CPU) have committed their turns, the game advances to Phase 3.
+- UI shows the summary to players: Amount of discarded resources by each player, or amount of values owned by each player. And also shows Outcome:
+ - If there is a clear winner, UI show which of the players get reward: Value Fame or Action Card. Note: Only player-winner see the exactly Action Card, all other players see that winner got Action Card, but they don't know which Action Card. Players need to click on button "Get It!", and game goes to the Phase 2 (Distribution Phase)
+ - If there are several players meet the conditions for winning (two or more players discarded the same biggest amount of resources, or two or more players have the same smallest amount of values), UI shows wich players need to start the process of the Conflict Resolution. Players, who meet the conditions for winning, see the button "Resolve the Conflict" and need to click on it. Other players see the button "Wait for resolution...", but they can't click on it, they just need to wait while the conflict will be resolved.
+  - Fro players, who meet the conditions for winning, a specialized Conflict Resolution modal (Tie-Breaker) pops up where tied players play Rock-Paper-Scissors: each player choose Rock, Scissors or Paper and click on "Done". UI shows to players the Outcome:
+   - If the Outcome is Draw, players see the button "Resolve the Conflict" and need to click on it. Conflict Resolution happens one more time, until one of players is winner.
+   - If there is a clear winner, UI show which of the players get reward: Value Fame or Action Card. Players need to click on button "Get It!", and game goes to the Phase 2 (Distribution Phase)
+ 
+### Phase 2: Distribution Phase
+- Players have their set of Actors (Politician, Scientist, Artist, Robot).
+
+Player Action: The player clicks an Actor, chooses a valid Location on the Map, and selects an Argument Token (Rock/Paper/Scissors). They may optionally add a Bet (Product, Energy, Recycle). After distributing all their Actors by Locations, the player must click the "Next Phase" button. If other players still didn't finish with the distribution of Actors by the Locations, the player's button changes to "WAITING FOR OTHERS..." until the other players finish.
+
+Bots Actions (Only in case of test game, when player plays agains bots): Bots automatically place their actors in the background. The user's button changes to "WAITING FOR OTHERS..." until the bots finish.
+
+Phase Transition: Once all players (humans and bots) have committed their turns, the game advances to Phase 3.
+
 Phase 3: Action Phase
 This phase is divided into multiple sequential sub-steps (p3Step in the code).
 
