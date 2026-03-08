@@ -8,7 +8,7 @@ pipeline {
     stages {
         stage('COMPILE') {
             steps {
-                sh 'sudo su - root -c "cd /var/lib/jenkins/workspace/metarchy && cd frontend && npm install && npm run dev && pm2 restart metarchy"'
+                sh 'sudo su - root -c "cd /var/lib/jenkins/workspace/metarchy && cd frontend && npm install && rm -rf .next && npm run build && pm2 restart metarchy"'
             }
         }
     }
