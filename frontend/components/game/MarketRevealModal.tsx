@@ -22,11 +22,11 @@ interface MarketRevealModalProps {
 
 const RESOURCE_ICONS = {
     product: '/resources/resource_product.png',
-    energy: '/resources/resource_energy.png',
-    recycle: '/resources/resource_Recycle.png'
+    electricity: '/resources/resource_energy.png',
+    recycling: '/resources/resource_Recycle.png'
 };
 
-const RESOURCE_TYPES = ['product', 'energy', 'recycle'] as const;
+const RESOURCE_TYPES = ['product', 'electricity', 'recycling'] as const;
 
 export default function MarketRevealModal({ isOpen, playerOffer, opponents, botOffers, matchId, onComplete }: MarketRevealModalProps) {
     if (!isOpen) return null;
