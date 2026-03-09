@@ -216,8 +216,8 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
                                 </div>
                             )}
                         </motion.div>
-                        {/* 3. Bid Token */}
-                        {conflict.playerActor.bid && (
+                        {/* 3. Bid Token (Hide on re-roll - bets are burned) */}
+                        {conflict.playerActor.bid && !isRoundTwo && (
                             <div className="w-12 h-12 relative animate-bounce">
                                 <Image src={BID_ICONS[conflict.playerActor.bid]} fill className="object-contain drop-shadow-lg" alt="Bid" />
                             </div>

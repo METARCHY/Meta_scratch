@@ -157,11 +157,13 @@ export function resolveConflictLogic(
                     logs.push(`Electricity Bid: ${b.name}'s ${b.actorType.toUpperCase()} averted defeat! Restarting...`);
                     successfulBids.push({ actorId: b.id, bid: 'electricity' });
                 });
+                // CRITICAL: isDraw must be FALSE - this is a restart, not a draw
+                // Setting isDraw=true causes Robot Draw logic (1 resource) to trigger incorrectly
                 return {
                     winnerId: null,
                     loserIds: [],
                     survivorIds: participants.map(p => p.id),
-                    isDraw: true,
+                    isDraw: false,  // FIXED: was true, which triggered wrong Robot Draw logic
                     restart: true,
                     evictAll: false,
                     shareRewards: false,

@@ -484,6 +484,7 @@ export default function GameBoardPage() {
 
         if (gameEnded) {
             setIsGameOver(true);
+            return; // CRITICAL: Exit early to prevent phase advancement when game is over
         }
 
 
@@ -867,9 +868,11 @@ export default function GameBoardPage() {
             win = discardAmount > maxOpponentDiscard;
             updateResource(currentEvent.targetResource!, -discardAmount); // clamp to 0 is inside updateResource
 
+            const winnerName = win ? player.name || '080' : (oppDiscards.filter(o => o.amount === maxOpponentDiscard)[0]?.name || 'Opponent');
+            const rewardText = currentEvent.reward === 'action_card' ? 'an Action Card' : 'Fame';
             msg = win
-                ? `${player.name || '080'} discarded ${discardAmount} (Opponents: ${oppDiscards.map(o => `${o.name} discarded ${o.amount}`).join(', ')}). ${player.name || '080'} WON an Action Card!`
-                : `${player.name || '080'} discarded ${discardAmount} (Opponents: ${oppDiscards.map(o => `${o.name} discarded ${o.amount}`).join(', ')}). ${player.name || '080'} lost.`;
+                ? `${player.name || '080'} discarded ${discardAmount} (Opponents: ${oppDiscards.map(o => `${o.name} discarded ${o.amount}`).join(', ')}). WINNER: ${winnerName} receives ${rewardText}!`
+                : `${player.name || '080'} discarded ${discardAmount} (Opponents: ${oppDiscards.map(o => `${o.name} discarded ${o.amount}`).join(', ')}). WINNER: ${winnerName} receives ${rewardText}. ${player.name || '080'} lost.`;
 
         } else {
             const statValues: { id: string; name: string; amount: number }[] = [];
@@ -938,10 +941,13 @@ export default function GameBoardPage() {
                 }
             } else if (winners[0].id === localPlayerId) {
                 win = true;
-                msg = `${player.name || '080'} WON ${currentEvent.reward || 'Fame'}! (Stats: Me: ${myStatAmount}, ${oppStatsStr})`;
+                const rewardText = currentEvent.reward === 'action_card' ? 'Action Card: ' + ACTION_CARDS[Math.floor(Math.random() * ACTION_CARDS.length)].title : 'Fame';
+                msg = `WINNER: ${player.name || '080'} receives ${rewardText}! (Stats: Me: ${myStatAmount}, ${oppStatsStr})`;
             } else {
                 win = false;
-                msg = `${player.name || '080'} lost to ${winners[0].name}. (Stats: Me: ${myStatAmount}, ${oppStatsStr})`;
+                const winnerName = winners[0].name;
+                const rewardText = currentEvent.reward === 'action_card' ? 'an Action Card' : 'Fame';
+                msg = `WINNER: ${winnerName} receives ${rewardText}! (Stats: Me: ${myStatAmount}, ${oppStatsStr})`;
 
                 const botWinnerId = winners[0].id;
                 setOpponentsData((prev: any) => {
@@ -1506,13 +1512,14 @@ export default function GameBoardPage() {
                     onPlayerClick={(actor, e) => {
                         console.log("onPlayerClick triggered for actor:", actor);
                         if (phase === 2) handleActorRecall(actor);
-                        if (phase === 3 && p3Step === 2 && actor.playerId === localPlayerId) {
-                            // Start Relocation if cards available
+                        if (phase === 3 && p3Step === 2) {
+                            // Start Relocation if cards available - can relocate ANY actor (own or opponent's)
                             if (relocationCardsCount > 0) {
                                 setRelocationSource(prev => prev === actor.actorId ? null : actor.actorId);
                                 if (relocationSource !== actor.actorId) {
-                                    const actorSource = MY_ACTORS.find(a => a.id === actor.actorId);
-                                    addLog(`Selected ${actorSource?.name || actor.actorType} with ${actor.type.toUpperCase()} for relocation... choose a destination.`);
+                                    const actorSource = MY_ACTORS.find(a => a.id === actor.actorId) || { name: actor.actorType, actorType: actor.actorType };
+                                    const ownerName = actor.playerId === localPlayerId ? 'your' : dynamicPlayers.find(p => p.id === actor.playerId)?.name + "'s";
+                                    addLog(`Selected ${ownerName} ${actorSource.name || actor.actorType} with ${actor.type.toUpperCase()} for relocation... choose a destination.`);
                                 }
                             } else {
                                 addLog("No Relocation cards available.");
@@ -1649,8 +1656,8 @@ export default function GameBoardPage() {
 
                     {/* Bottom Right: Next Phase Button */}
                     <div className="absolute bottom-10 right-10 z-[300] pointer-events-auto">
-                        {/* Only show Next Phase if not in Phase 2 OR if all actors distributed. And in Phase 4, only if all player conflicts are resolved. */}
-                        {phase !== 5 && ((phase !== 2 || availableActors.length === 0) && (phase !== 4 || stickyConflicts.filter(c => c.hasPlayer && !resolvedConflicts.includes(c.locId)).length === 0)) && (
+                        {/* Only show Next Phase if not in Phase 2 OR if all actors distributed. And in Phase 4, only if all player conflicts are resolved. HIDE if game is over. */}
+                        {!isGameOver && phase !== 5 && ((phase !== 2 || availableActors.length === 0) && (phase !== 4 || stickyConflicts.filter(c => c.hasPlayer && !resolvedConflicts.includes(c.locId)).length === 0)) && (
                             <button
                                 onClick={(isWaitingForPlayers || (game?.isTest && !opponentsReady)) ? undefined : commitTurn}
                                 disabled={isWaitingForPlayers || (game?.isTest && !opponentsReady)}
