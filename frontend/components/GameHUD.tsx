@@ -35,10 +35,10 @@ export function GameHUD({ turn = 1, phase = "1", phaseName = "EVENT" }: GameHUDP
 
             {/* Center: Resources */}
             <div className="glass px-8 py-3 rounded-full border border-white/10 flex items-center gap-8 bg-black/60 backdrop-blur-md shadow-2xl mt-2 pointer-events-auto">
-                <ResourceIcon src="/resources/resource_energy.png" value={resources.energy} label="NRG" color="text-yellow-200" />
+                <ResourceIcon src="/resources/resource_energy.png" value={resources.electricity} label="NRG" color="text-yellow-200" />
                 <ResourceIcon src="/resources/resource_product.png" value={resources.product} label="BIO" color="text-green-400" />
                 {/* Note: 'product' seemed to map to BIO in the hardcoded version, checking context later */}
-                <ResourceIcon src="/resources/resource_Recycle.png" value={resources.recycle} label="MAT" color="text-red-400" />
+                <ResourceIcon src="/resources/resource_Recycle.png" value={resources.recycling} label="MAT" color="text-red-400" />
             </div>
 
             {/* Right: Turn Info */}

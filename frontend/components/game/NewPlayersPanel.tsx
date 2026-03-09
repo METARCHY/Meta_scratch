@@ -14,7 +14,7 @@ export default function NewPlayersPanel({ players = [], p3Step, availableExchang
     const p2 = players.length > 1 ? players[1] : null;
     const p3 = players.length > 2 ? players[2] : null;
 
-    const showExchange = p3Step === 4 && availableExchangeCards && availableExchangeCards > 0;
+    const showExchange = p3Step === 3 && availableExchangeCards && availableExchangeCards > 0;
 
     // Helper for circular avatar
     const AvatarCircle = ({ x, y, r, img, alt, player, hasOuterRing }: { x: number, y: number, r: number, img: string, alt: string, player?: any, hasOuterRing?: boolean }) => {

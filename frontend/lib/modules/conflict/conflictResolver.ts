@@ -38,6 +38,15 @@ interface PlayerInfo {
  * @param opponentChoices - Map of opponent actorId → their RPS choice
  * @param playerInfo - { id, name } of the local player
  */
+/**
+ * Resolves a single conflict iteration between the local player and opponents.
+ * 
+ * Logic follows the "Official Rulebook":
+ * 1. Win: Actor wins if their argument beats at least one other and is not beaten.
+ * 2. Lose: Actor loses if their argument is beaten by at least one other. Losers exit.
+ * 3. Draw: All same argument (Rock-Rock-Rock) or all three (Rock-Paper-Scissors).
+ * 4. Iteration: If multiple "Winners" remain, they re-roll until a single winner or Truce.
+ */
 export function resolveConflictLogic(
     localPlayerId: string,
     playerChoice: string,
@@ -46,10 +55,15 @@ export function resolveConflictLogic(
     opponentChoices: { [id: string]: string },
     playerInfo: PlayerInfo
 ): ConflictResult {
+    const logs: string[] = [];
+    const successfulBids: { actorId: string; bid: string }[] = [];
+
     // No opponents = automatic win
     if (conflict.opponents.length === 0) {
         return {
             winnerId: localPlayerId,
+            loserIds: [],
+            survivorIds: [localPlayerId],
             isDraw: false,
             restart: false,
             evictAll: false,
@@ -59,170 +73,148 @@ export function resolveConflictLogic(
         };
     }
 
-    // Build choices array with the local player's dynamic ID
-    const choices = [
+    // Build choices array
+    const participants = [
         {
             id: localPlayerId,
             choice: playerChoice,
             bid: conflict.playerActor.bid,
-            isPlayer: true,
+            actorType: conflict.playerActor.actorType?.toLowerCase() || 'actor',
+            name: playerInfo.name || 'Player'
         },
         ...conflict.opponents.map(opp => ({
             id: opp.actorId,
             choice: opponentChoices[opp.actorId],
             bid: opp.bid,
-            isPlayer: false,
+            actorType: opp.actorType?.toLowerCase() || 'actor',
+            name: opp.name || 'Opponent'
         })),
     ];
 
-    // ─── RPS Resolution ──────────────────────────────────────
-    const nonDummys = choices.filter(c => c.choice !== 'dummy');
+    const choicesValues = participants.filter(p => p.choice !== 'dummy').map(p => p.choice);
+    const hasRock = choicesValues.includes('rock');
+    const hasPaper = choicesValues.includes('paper');
+    const hasScissors = choicesValues.includes('scissors');
 
+    let winnerIds: string[] = [];
+    let loserIds: string[] = [];
     let isDraw = false;
-    let winnerType: string | null = null;
-    let winners: typeof choices = [];
 
-    if (nonDummys.length === 0) {
+    // --- Core RPS Distribution Logic for 3+ Players ---
+    if (choicesValues.length === 0) {
+        isDraw = true; // All dummies? (Shouldn't happen with current UI)
+    } else if ((hasRock && hasPaper && hasScissors) || (!hasRock && !hasPaper && !hasScissors)) {
+        // Draw: Rock, Paper, and Scissors all present OR all same (already filtered for 0)
         isDraw = true;
+    } else if (hasRock && hasPaper && !hasScissors) {
+        winnerIds = participants.filter(p => p.choice === 'paper').map(p => p.id);
+        loserIds = participants.filter(p => p.choice === 'rock').map(p => p.id);
+    } else if (hasPaper && hasScissors && !hasRock) {
+        winnerIds = participants.filter(p => p.choice === 'scissors').map(p => p.id);
+        loserIds = participants.filter(p => p.choice === 'paper').map(p => p.id);
+    } else if (hasScissors && hasRock && !hasPaper) {
+        winnerIds = participants.filter(p => p.choice === 'rock').map(p => p.id);
+        loserIds = participants.filter(p => p.choice === 'scissors').map(p => p.id);
     } else {
-        const counts = { rock: 0, paper: 0, scissors: 0 };
-        nonDummys.forEach(c => {
-            if (counts[c.choice as keyof typeof counts] !== undefined) {
-                counts[c.choice as keyof typeof counts]++;
-            }
-        });
-
-        const presentTypes = Object.keys(counts).filter(
-            k => counts[k as keyof typeof counts] > 0
-        );
-
-        if (presentTypes.length === 1) {
-            winnerType = presentTypes[0];
-        } else if (presentTypes.length === 3) {
-            isDraw = true;
-        } else {
-            const [t1, t2] = presentTypes;
-            if (
-                (t1 === 'rock' && t2 === 'scissors') ||
-                (t1 === 'scissors' && t2 === 'paper') ||
-                (t1 === 'paper' && t2 === 'rock')
-            ) {
-                winnerType = t1;
-            } else {
-                winnerType = t2;
-            }
-        }
-
-        winners = isDraw ? [] : nonDummys.filter(c => c.choice === winnerType);
+        // One type present (e.g. all Rock)
+        isDraw = true;
     }
 
-    let finalWinnerId = winners.length === 1 ? winners[0].id : null;
-    let finalIsDraw = isDraw || winners.length > 1;
+    // Include dummies as losers
+    const dummyIds = participants.filter(p => p.choice === 'dummy').map(p => p.id);
+    loserIds = winnerIds.length > 0 ? Array.from(new Set([...loserIds, ...dummyIds])) : loserIds;
+
+    let finalWinnerId: string | null = null;
     let finalRestart = false;
     let finalEvictAll = false;
     let finalShareRewards = false;
-    const logs: string[] = [];
+    let survivorIds: string[] = isDraw ? participants.map(p => p.id) : winnerIds;
 
-    // ─── Log the conflict ──────────────────────────────────────
-    const playerName = playerInfo.name || 'Player';
-    const p1ActorType = conflict.playerActor.actorType?.toUpperCase() || 'ACTOR';
-    const p1ChoiceStr = choices.find(c => c.id === localPlayerId)?.choice?.toUpperCase() || 'UNKNOWN';
-    const oppDetails = conflict.opponents.map(opp => {
-        const oppChoice = choices.find(c => c.id === opp.actorId)?.choice?.toUpperCase() || 'UNKNOWN';
-        const oppActorType = opp.actorType?.toUpperCase() || 'ACTOR';
-        return `${opp.name || 'Opponent'} used ${oppActorType} with ${oppChoice}`;
-    });
-
-    const locName = conflict.locationName || 'Unknown Location';
-    logs.push(
-        `Conflict at ${locName.toUpperCase()}: ${playerName} used ${p1ActorType} with ${p1ChoiceStr}. Opponents: ${oppDetails.join(', ')}.`
-    );
-
-    const successfulBids: { actorId: string; bid: string }[] = [];
-
-    // ─── Bid Processing ────────────────────────────────────────
+    // --- Bid Processing (Only on Round 1) ---
+    // Note: Caller must ensure applyBids is only true for the first iteration.
     if (applyBids) {
-        // 1. Recycle (Draw) Bids
-        if (finalIsDraw) {
-            const recycleBidders = choices.filter(c => c.bid === 'recycle');
-            if (recycleBidders.length > 0) {
-                if (recycleBidders.length === 1) {
-                    const winner = recycleBidders[0];
-                    const winnerName = winner.id === localPlayerId
-                        ? playerName
-                        : (conflict.opponents.find(o => o.actorId === winner.id)?.name || 'Opponent');
-                    const actorType = winner.id === localPlayerId
-                        ? p1ActorType
-                        : (conflict.opponents.find(o => o.actorId === winner.id)?.actorType?.toUpperCase() || 'ACTOR');
-                    logs.push(`Recycle Bid Activated: ${winnerName}'s ${actorType} wins the draw!`);
-                    finalWinnerId = winner.id;
-                    finalIsDraw = false;
-                } else {
-                    logs.push('Multiple Recycle Bids Activated: Conflict remains a draw!');
-                }
-                recycleBidders.forEach(b => successfulBids.push({ actorId: b.id, bid: 'recycle' }));
+        // 1. Recycling (Draw) Bids
+        if (isDraw) {
+            const recyclingBidders = participants.filter(p => p.bid === 'recycling');
+            if (recyclingBidders.length === 1) {
+                const b = recyclingBidders[0];
+                logs.push(`Recycling Bid: ${b.name}'s ${b.actorType.toUpperCase()} wins the Draw!`);
+                finalWinnerId = b.id;
+                isDraw = false;
+                survivorIds = [b.id];
+                loserIds = participants.filter(p => p.id !== b.id).map(p => p.id);
+            } else if (recyclingBidders.length > 1) {
+                logs.push('Multiple Recycling Bids: Conflict remains a Draw!');
             }
+            recyclingBidders.forEach(b => successfulBids.push({ actorId: b.id, bid: 'recycling' }));
         }
 
-        // 2. Product (Win) Bids
-        if (finalWinnerId) {
-            const winnerObj = choices.find(c => c.id === finalWinnerId);
-            if (winnerObj && winnerObj.bid === 'product') {
-                const winnerName = winnerObj.id === localPlayerId
-                    ? playerName
-                    : (conflict.opponents.find(o => o.actorId === winnerObj.id)?.name || 'Opponent');
-                const actorType = winnerObj.id === localPlayerId
-                    ? p1ActorType
-                    : (conflict.opponents.find(o => o.actorId === winnerObj.id)?.actorType?.toUpperCase() || 'ACTOR');
-                logs.push(`Product Bid Activated: ${winnerName}'s ${actorType} secures +1 resource!`);
-                successfulBids.push({ actorId: winnerObj.id, bid: 'product' });
-            }
-        }
-
-        // 3. Energy (Lose) Bids
-        if (!finalIsDraw && finalWinnerId) {
-            const energyLosers = choices.filter(c => c.id !== finalWinnerId && c.bid === 'energy');
-            if (energyLosers.length > 0) {
-                energyLosers.forEach(b => {
-                    const loserName = b.id === localPlayerId
-                        ? playerName
-                        : (conflict.opponents.find(o => o.actorId === b.id)?.name || 'Opponent');
-                    const actorType = b.id === localPlayerId
-                        ? p1ActorType
-                        : (conflict.opponents.find(o => o.actorId === b.id)?.actorType?.toUpperCase() || 'ACTOR');
-                    logs.push(`Energy Bid Activated: ${loserName}'s ${actorType} averted defeat! Conflict restarts without bets.`);
-                    successfulBids.push({ actorId: b.id, bid: 'energy' });
+        // 2. Electricity (Lose) Bids - Restarts Round 1 immediately
+        if (!isDraw && winnerIds.length > 0) {
+            const electricityLosers = participants.filter(p => loserIds.includes(p.id) && p.bid === 'electricity');
+            if (electricityLosers.length > 0) {
+                electricityLosers.forEach(b => {
+                    logs.push(`Electricity Bid: ${b.name}'s ${b.actorType.toUpperCase()} averted defeat! Restarting...`);
+                    successfulBids.push({ actorId: b.id, bid: 'electricity' });
                 });
-                finalRestart = true;
-                finalWinnerId = null;
+                return {
+                    winnerId: null,
+                    loserIds: [],
+                    survivorIds: participants.map(p => p.id),
+                    isDraw: true,
+                    restart: true,
+                    evictAll: false,
+                    shareRewards: false,
+                    successfulBids,
+                    logs
+                };
+            }
+        }
+
+        // 3. Product (Win) Bids
+        if (!isDraw && winnerIds.length === 1) {
+            const wId = winnerIds[0];
+            const winnerObj = participants.find(p => p.id === wId);
+            if (winnerObj && winnerObj.bid === 'product') {
+                logs.push(`Product Bid: ${winnerObj.name} secures +1 resource bonus!`);
+                successfulBids.push({ actorId: wId, bid: 'product' });
             }
         }
     }
 
-    // ─── Actor-Type-Specific Draw Rules ────────────────────────
-    if (finalIsDraw && !finalRestart) {
-        const actorType = conflict.playerActor.actorType?.toLowerCase() || '';
-
+    // --- Actor-Type Rules & Iteration ---
+    if (isDraw) {
+        const actorType = participants[0].actorType;
         if (actorType === 'politician') {
-            logs.push('Politicians clash in debate: Conflict must be re-resolved.');
+            logs.push('Politicians clash: Reroll required.');
             finalRestart = true;
         } else if (actorType === 'artist') {
-            logs.push('Artists refuse to compromise: All Artists leave the location.');
+            logs.push('Artists refuse to compromise: All exit.');
             finalEvictAll = true;
+            loserIds = participants.map(p => p.id);
+            survivorIds = [];
         } else if (actorType === 'scientist' || actorType === 'robot') {
-            logs.push(`${actorType}s find common ground: All remain and share the location.`);
+            logs.push(`${actorType.toUpperCase()}s sharing location.`);
             finalShareRewards = true;
         }
+    } else if (winnerIds.length > 1) {
+        // Tied Winners (e.g. 2 Paper vs 1 Rock): Losers exit, survivors re-roll!
+        // This applies to all actors initially. ONLY if they draw again do the specific rules apply.
+        logs.push(`Tied Winners (${winnerIds.length}): Losers exit, survivors re-roll!`);
+        finalRestart = true;
+    } else if (winnerIds.length === 1) {
+        finalWinnerId = winnerIds[0];
     }
 
     return {
         winnerId: finalWinnerId,
-        isDraw: finalIsDraw,
+        loserIds,
+        survivorIds,
+        isDraw,
         restart: finalRestart,
         evictAll: finalEvictAll,
         shareRewards: finalShareRewards,
         successfulBids,
-        usedBid: successfulBids.length > 0 ? successfulBids[0].bid : undefined,
         logs,
     };
 }

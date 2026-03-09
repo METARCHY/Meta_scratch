@@ -13,14 +13,14 @@ import { LOCATIONS } from '@/lib/modules/core/constants';
  * Glory fills the lowest value first.
  */
 export function calculateVictoryPoints(resources: PlayerResources): number {
-    let { power, knowledge, art, glory } = resources;
-    let p = power, k = knowledge, a = art, g = glory;
+    let { power, knowledge, art, fame } = resources;
+    let p = power, k = knowledge, a = art, f = fame;
 
-    while (g > 0) {
+    while (f > 0) {
         if (p <= k && p <= a) p++;
         else if (k <= p && k <= a) k++;
         else a++;
-        g--;
+        f--;
     }
 
     return Math.min(p, k, a);
@@ -30,7 +30,7 @@ export function calculateVictoryPoints(resources: PlayerResources): number {
  * Determines what resource an actor earns based on its type and location.
  */
 export function getActorRewardType(actorType: string, locId: string): string {
-    const type = actorType.toLowerCase();
+    const type = actorType?.toLowerCase() || '';
     if (type === 'politician') return 'power';
     if (type === 'scientist') return 'knowledge';
     if (type === 'artist') return 'art';
@@ -42,22 +42,34 @@ export function getActorRewardType(actorType: string, locId: string): string {
 }
 
 /**
- * Calculates the base reward amount for an actor.
- * Robots get 3 normally, but 1 if shared (draw).
- * Other actors get 1.
+ * Calculates the final reward amount for an actor based on conflict outcome and bids.
+ * 
+ * Rules:
+ * - Win (winnerId): Robot (3), Others (1).
+ * - Truce (shareRewards): Robot (1), Others (1).
+ * - Robot 3-3-3 Rule: If Robot Truce + Recycling Bid, reward is 3.
+ * - Product Bid: +1 bonus on top of Win reward.
  */
-export function getBaseReward(
-    actorType: string,
-    locId: string,
-    allActorsAtLocation: PlacedActor[]
+export function calculateReward(
+    actorType: ActorType,
+    isWinner: boolean,
+    isTruce: boolean,
+    successfulBids: { actorId: string; bid: string }[],
+    actorId: string
 ): number {
-    if (actorType.toLowerCase() === 'robot') {
-        const robotsHere = allActorsAtLocation.filter(
-            a => a.locId === locId && a.actorType?.toLowerCase() === 'robot'
-        );
-        return robotsHere.length > 1 ? 1 : 3;
+    const type = actorType?.toLowerCase() || '';
+    const hasProductBid = successfulBids.some(b => b.actorId === actorId && b.bid === 'product');
+
+    if (isWinner) {
+        const base = type === 'robot' ? 3 : 1;
+        return hasProductBid ? base + 1 : base;
     }
-    return 1;
+
+    if (isTruce) {
+        return 1;
+    }
+
+    return 0;
 }
 
 /**
@@ -78,7 +90,8 @@ export function calculatePhase4Rewards(
             if (!earnedResource) return;
 
             const isProductBet = actor.bid === 'product';
-            const base = getBaseReward(actor.actorType, actor.locId, placedActors);
+            // End of turn rewards assume the actor "won" the spot (survived Phase 4)
+            const base = actor.actorType?.toLowerCase() === 'robot' ? 3 : 1;
             const finalReward = isProductBet ? base + 1 : base;
 
             rewards[earnedResource] = (rewards[earnedResource] || 0) + finalReward;

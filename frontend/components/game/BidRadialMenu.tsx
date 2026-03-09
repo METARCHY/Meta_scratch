@@ -6,15 +6,15 @@ import { BID_ICONS } from '@/data/assetManifest';
 
 interface BidRadialMenuProps {
     actor: { name: string, avatar: string, headAvatar?: string, type: string } | null;
-    resources: { product: number, energy: number, recycle: number };
-    onSelect: (token: 'product' | 'energy' | 'recycle' | null) => void;
+    resources: { product: number, electricity: number, recycling: number };
+    onSelect: (token: 'product' | 'electricity' | 'recycling' | null) => void;
     onCancel: () => void;
 }
 
 const bidOptions = [
     { id: 'product', icon: BID_ICONS['product'], lbl: 'WIN', x: 43, y: 25 },
-    { id: 'energy', icon: BID_ICONS['energy'], lbl: 'LOSE', x: 25, y: 84 },
-    { id: 'recycle', icon: BID_ICONS['recycle'], lbl: 'DRAW', x: 37, y: 146 }
+    { id: 'electricity', icon: BID_ICONS['electricity'], lbl: 'LOSE', x: 25, y: 84 },
+    { id: 'recycling', icon: BID_ICONS['recycling'], lbl: 'DRAW', x: 37, y: 146 }
 ] as const;
 
 export default function BidRadialMenu({ actor, resources, onSelect, onCancel }: BidRadialMenuProps) {

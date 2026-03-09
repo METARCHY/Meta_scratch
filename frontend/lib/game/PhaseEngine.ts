@@ -30,22 +30,42 @@ export const handleNextPhase = (
 
     // Calculate max turns based on player count
     const maxTurns = (() => {
-        if (isTest) return 3; // Test games end after 3 turns
+        if (isTest) return 3;
         const playerCount = dynamicPlayers.length;
         if (playerCount === 2 || playerCount === 3) return 5;
         if (playerCount === 4) return 6;
-        return 5; // Default fallback for unsupported counts
+        return 5;
     })();
 
-    // The last Turn: No Phase 5 (Market Phase), game is finished after Phase 4 (Conflicts Resolution)
-    if (turn >= maxTurns && phase === 4) {
-        addLog("--- GAME FINISHED ---");
-        isGameOver = true;
-        // Log final scores for all players
-        dynamicPlayers.forEach(p => {
-            addLog(`${p.name} completed the game successfully.`);
-        });
-        return { newPhase, newTurn, isGameOver };
+    // Helper to calculate VP for any player (consistent with fame distribution)
+    const calculateVP = (res: any) => {
+        const p = res.power, k = res.knowledge, a = res.art, f = res.fame;
+        let totalFame = f;
+        let pV = p, kV = k, aV = a;
+        while (totalFame > 0) {
+            if (pV <= kV && pV <= aV) pV++;
+            else if (kV <= pV && kV <= aV) kV++;
+            else aV++;
+            totalFame--;
+        }
+        return Math.min(pV, kV, aV);
+    };
+
+    // --- WIN CONDITIONS (Checked at end of Phase 4 / start of Phase 5) ---
+    if (phase === 4 && turn >= maxTurns) {
+        const playerVP = calculateVP(player.resources || {});
+        const opponentVPs = dynamicPlayers.map(p => ({ id: p.id, vp: calculateVP(p.resources || {}) }));
+        const allVPs = [{ id: player.citizenId || 'p1', vp: playerVP }, ...opponentVPs];
+        const topVP = Math.max(...allVPs.map(v => v.vp));
+
+        const winners = allVPs.filter(v => v.vp === topVP);
+        if (winners.length === 1) {
+            addLog(`--- GAME FINISHED: ${winners[0].id === (player.citizenId || 'p1') ? 'YOU' : 'OPPONENT'} WINS WITH ${topVP} VP ---`);
+            return { newPhase, newTurn, isGameOver: true };
+        } else {
+            addLog("--- TIE DETECTED AT FINAL TURN: STARTING TIE-BREAKER TURN ---");
+            // Reset for one extra turn (handled by turn transition below)
+        }
     }
 
 
@@ -114,16 +134,14 @@ export const handleNextPhase = (
         newTurn = turn + 1;
         setTurn(newTurn);
 
-        // Rule: Turn 1 skips Event Phase (1) straight to Distribution Phase (2).
-        // Turn 2+ starts at Event Phase (1).
-        newPhase = newTurn === 1 ? 2 : 1;
+        // Turn 1 skips Event Phase (1) straight to Distribution Phase (2).
+        newPhase = (newTurn === 1) ? 2 : 1;
         setPhase(newPhase);
-        setP3Step(1);
+        setP3Step(0);
 
-        setPlacedActors([]); // Safety clearing for next turn
-        setDisabledLocations([]); // Safety clearing for next turn
+        setPlacedActors([]);
+        setDisabledLocations([]);
 
-        // CRITICAL: Reset bot readiness for the next turn
         setOpponentsReady(false);
         addLog(`TURN ${newTurn} BEGINS`);
         if (newPhase === 1) addLog(`PHASE 1 BEGINS`);

@@ -27,6 +27,7 @@ import BuyActionCardModal from '@/components/game/BuyActionCardModal';
 import { formatLog } from '@/lib/logUtils';
 import { triggerBotPhase3Actions, triggerOpponentPlacements } from '@/lib/game/BotAI';
 import { handleNextPhase } from '@/lib/game/PhaseEngine';
+import { getActorRewardType, calculateReward } from '@/lib/modules/resources/resourceManager';
 
 // Constants
 import { EVENTS, LOCATIONS, ACTION_CARDS, getConflicts, ALLOWED_MOVES } from '@/data/gameConstants';
@@ -90,58 +91,66 @@ export default function GameBoardPage() {
 
 
 
-    // Initialize opponents data dynamically
+    // Initialize opponents data dynamically (Memoize with guard)
     useEffect(() => {
-        const initialOpponents: Record<string, OpponentData> = {};
         const isTest = game?.isTest;
+        const mainId = player.citizenId || player.address || 'p1';
 
-        // Use game players if available (especially for bots)
+        const initialOpponents: Record<string, OpponentData> = {};
         if (game && game.players) {
             game.players.forEach((p: any) => {
-                if (p.citizenId !== player.citizenId) {
-                    const id = p.citizenId || p.address;
-                    initialOpponents[id] = {
-                        id,
-                        resources: {
-                            gato: 1000,
-                            product: 1, energy: 1, recycle: 1,
-                            power: 0, art: 0, knowledge: 0, glory: 0, vp: 0
-                        },
+                const pid = p.citizenId || p.address;
+                if (pid !== mainId) {
+                    initialOpponents[pid] = {
+                        id: pid,
+                        resources: { gato: 1000, product: 1, electricity: 1, recycling: 1, power: 0, art: 0, knowledge: 0, fame: 0, victoryPoints: 0 },
                         cards: isTest ? ACTION_CARDS.reduce((acc: any, c) => ({ ...acc, [c.id]: 2 }), {}) : {}
                     };
                 }
             });
         } else {
-            // Fallback for simulation
             PLAYERS.forEach(opp => {
                 initialOpponents[opp.id] = {
                     id: opp.id,
-                    resources: {
-                        gato: 1000,
-                        product: 1, energy: 1, recycle: 1,
-                        power: 0, art: 0, knowledge: 0, glory: 0, vp: 0
-                    },
+                    resources: { gato: 1000, product: 1, electricity: 1, recycling: 1, power: 0, art: 0, knowledge: 0, fame: 0, victoryPoints: 0 },
                     cards: isTest ? ACTION_CARDS.reduce((acc: any, c) => ({ ...acc, [c.id]: 2 }), {}) : {}
                 };
             });
         }
-        setOpponentsData(initialOpponents);
-    }, [game, player.citizenId]);
+
+        // Only update if actually different (deep check or simple length check for optimization)
+        setOpponentsData(prev => {
+            if (Object.keys(prev).length === Object.keys(initialOpponents).length) return prev;
+            return initialOpponents;
+        });
+    }, [game?.id, player.citizenId, player.address]); // Use stable IDs as dependencies
+
+    const stopPollingRef = useRef(false);
 
     // Fetch Specific Game Data
     useEffect(() => {
         if (!id) return;
+        console.log("Setting up game fetch interval for id:", id);
+        stopPollingRef.current = false;
 
         const fetchGame = async () => {
+            if (stopPollingRef.current) return;
             try {
                 const res = await fetch(`/api/games/${id}`);
                 if (res.ok) {
                     const data = await res.json();
-                    setGame(data);
-
-                    // IF TEST GAME: Resources are already initialized in GameStateContext (product:1, energy:1, recycle:1)
-                    // DO NOT call updateResource here — it is ADD-based and would double the starting values.
-                    // actionHand stays [] — players buy cards in Phase 5.
+                    setGame((prev: any) => {
+                        if (prev === '404') return prev;
+                        // Optimization: Only update if the phaseTicker or important state changed
+                        if (prev && prev.gameState?.phaseTicker === data.gameState?.phaseTicker && prev.players?.length === data.players?.length) {
+                            return prev;
+                        }
+                        return data;
+                    });
+                } else if (res.status === 404) {
+                    console.warn("Polling: Game NOT FOUND (404)");
+                    stopPollingRef.current = true;
+                    setGame('404');
                 }
             } catch (e) {
                 console.error("Fetch game error", e);
@@ -149,9 +158,17 @@ export default function GameBoardPage() {
         };
 
         fetchGame();
-        const interval = setInterval(fetchGame, 2000);
-        return () => clearInterval(interval);
-    }, [id, game, player.citizenId, updateResource]);
+        const interval = setInterval(() => {
+            if (!stopPollingRef.current) {
+                fetchGame();
+            }
+        }, 3000);
+
+        return () => {
+            stopPollingRef.current = true;
+            clearInterval(interval);
+        };
+    }, [id]); // Only depend on id to prevent interval thrashing
 
     // Construct dynamic player list
     const dynamicPlayers = useMemo(() => {
@@ -269,7 +286,7 @@ export default function GameBoardPage() {
                             name: dynamicPlayers.find(p => p.id === o.playerId)?.name || PLAYERS.find(p => p.id === o.playerId)?.name || 'Unknown',
                             playerAvatar: dynamicPlayers.find(p => p.id === o.playerId)?.avatar || PLAYERS.find(p => p.id === o.playerId)?.avatar || '',
                         })),
-                        resourceType: locDef?.resource || 'glory',
+                        resourceType: locDef?.resource || 'fame',
                         isPeaceful: opponentsRaw.length === 0,
                         hasPlayer: actorsOfType.some(a => a.playerId === localPlayerId)
                     });
@@ -282,11 +299,11 @@ export default function GameBoardPage() {
 
     const [stickyConflicts, setStickyConflicts] = useState<any[]>([]);
 
-    // Logic to lock in conflicts when Phase 4 starts
+    // Logic to lock in conflicts when Phase 4 starts (with Guard)
     useEffect(() => {
         if (phase === 4 && activeConflicts.length > 0 && stickyConflicts.length === 0) {
             setStickyConflicts(activeConflicts);
-        } else if (phase !== 4) {
+        } else if (phase !== 4 && stickyConflicts.length > 0) {
             setStickyConflicts([]);
         }
     }, [phase, activeConflicts, stickyConflicts.length]);
@@ -302,25 +319,27 @@ export default function GameBoardPage() {
     }, [isWaitingForPlayers, opponentsReady, game?.isTest]);
 
     const commitTurn = async () => {
-        if (!game || !player.citizenId) return;
+        const myId = player.citizenId || player.address || 'p1';
+        if (!game || !myId) return;
 
         // Immediately set waiting state so UI button changes to "WAITING FOR OTHERS..."
         setIsWaitingForPlayers(true);
 
         // If this is a Test Game against bots, we bypass the multiplayer lock entirely
         if (game.isTest) {
-            if (!opponentsReady && phase !== 4) { // Phase 4 has its own resolution logic
+            if (!opponentsReady && phase !== 4) {
                 addLog("Wait for others to be ready...");
-                // Keep isWaitingForPlayers as true, a useEffect will auto-proceed when opponentsReady becomes true
                 return;
             }
+            // Add a small delay so user sees "WAITING FOR OTHERS..." as feedback
+            await new Promise(r => setTimeout(r, 1000));
             setIsWaitingForPlayers(false);
             handleNextPhaseWrapper();
             addLog("All players are ready");
             return;
         }
         try {
-            const mainPlayerId = player.citizenId || player.address || 'p1';
+            const mainPlayerId = myId;
             const myActors = placedActors.filter(a => a.playerId === mainPlayerId);
 
             await fetch(`/api/games/${id}`, {
@@ -384,27 +403,17 @@ export default function GameBoardPage() {
                     c.playerActor?.actorId === actor.actorId ||
                     c.opponents?.some((o: any) => o.actorId === actor.actorId)
                 );
-                if (wasInConflict) return; // Already handled
+                if (wasInConflict) return;
+                if (actor) {
+                    const actorType = actor.actorType?.toLowerCase();
+                    const earnedResource = getActorRewardType(actorType, actor.locId);
 
-                const actorType = actor.actorType?.toLowerCase();
-                const locDef = LOCATIONS.find(l => l.id === actor.locId);
-                let earnedResource = '';
-
-                if (actorType === 'politician') earnedResource = 'power';
-                else if (actorType === 'scientist') earnedResource = 'knowledge';
-                else if (actorType === 'artist') earnedResource = 'art';
-                else if (actorType === 'robot') earnedResource = locDef?.resource || '';
-
-                if (earnedResource) {
-                    const isDouble = actor.bid === 'product';
-                    let baseReward = 1;
-                    if (actorType === 'robot') {
-                        // Peaceful robot (no opponents) = 3 resources
-                        baseReward = 3;
+                    if (earnedResource) {
+                        const isDouble = actor.bid === 'product';
+                        const finalReward = calculateReward(actorType as any, true, isDouble, [], '');
+                        updateResource(earnedResource, finalReward);
+                        addLog(`${player.name || '080'} secured ${finalReward} ${earnedResource.toUpperCase()} (uncontested ${actorType} at ${LOCATIONS.find(l => l.id === actor.locId)?.name})!`);
                     }
-                    const finalReward = isDouble ? (baseReward + 1) : baseReward;
-                    updateResource(earnedResource, finalReward);
-                    addLog(`${player.name || '080'} secured ${finalReward} ${earnedResource.toUpperCase()} (uncontested ${actorType} at ${locDef?.name})!`);
                 }
             });
         }
@@ -511,21 +520,32 @@ export default function GameBoardPage() {
 
 
     const addLog = async (msg: string) => {
-        if (!id || !game) return;
+        if (!id || !game || game === '404') return;
 
         // Optimistically update local state with a functional update to avoid stale closures
-        const formattedMsg = formatLog(game.displayId || game.id as string, msg);
-        setGame((prev: any) => ({
-            ...prev,
-            logs: [...(prev?.logs || []), formattedMsg]
-        }));
+        const formattedMsg = formatLog(game.displayId || game.id || id as string, msg);
+        setGame((prev: any) => {
+            if (prev === '404') return prev;
+            return {
+                ...prev,
+                logs: [...(prev?.logs || []), formattedMsg]
+            };
+        });
 
         try {
-            await fetch(`/api/games/${id}`, {
+            const res = await fetch(`/api/games/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'add-log', message: msg })
             });
+
+            if (res.status === 404) {
+                console.warn("Game not found on server during log sync.");
+                setGame('404');
+                setIsGameOver(true);
+                return;
+            }
+
         } catch (e) {
             console.error("Failed to sync log", e);
         }
@@ -548,8 +568,8 @@ export default function GameBoardPage() {
                 setActionHand(prev => [...prev, randomCard]);
                 addLog(`${player.name || '080'} WON the Tie-Breaker Conflict and earned the Action Card: ${randomCard.title}!`);
             } else {
-                updateResource(currentEvent.reward || 'glory', 1);
-                addLog(`${player.name || '080'} WON the Tie-Breaker Conflict and earned ${currentEvent.reward || 'Glory'}!`);
+                updateResource(currentEvent.reward || 'fame', 1);
+                addLog(`${player.name || '080'} WON the Tie-Breaker Conflict and earned ${currentEvent.reward || 'Fame'}!`);
             }
         } else if (result.winnerId) {
             const winnerName = dynamicPlayers.find(p => p.id === result.winnerId)?.name || 'Opponent';
@@ -557,12 +577,12 @@ export default function GameBoardPage() {
                 const next = { ...prev };
                 if (!next[result.winnerId]) return prev;
                 const oppRes = { ...next[result.winnerId].resources };
-                const key = currentEvent.reward || 'glory';
+                const key = currentEvent.reward || 'fame';
                 oppRes[key] = (oppRes[key] || 0) + 1;
                 next[result.winnerId] = { ...next[result.winnerId], resources: oppRes };
                 return next;
             });
-            addLog(`${winnerName} WON the Tie-Breaker Conflict and received ${currentEvent.reward === 'action_card' ? 'an Action Card' : 'Glory'}.`);
+            addLog(`${winnerName} WON the Tie-Breaker Conflict and received ${currentEvent.reward === 'action_card' ? 'an Action Card' : 'Fame'}.`);
         } else if (result.isDraw && result.evictAll) {
             addLog(`Tie-Breaker ended in a complete DISMISSAL. No one receives the reward.`);
         }
@@ -683,24 +703,17 @@ export default function GameBoardPage() {
                 if (used.bid === 'product') {
                     const actor = placedActors.find(a => a.actorId === used.actorId);
                     if (actor) {
-                        const isMain = actor.playerId === localPlayerId;
                         const actorType = actor.actorType?.toLowerCase();
-                        const currentLocDef = LOCATIONS.find(l => l.id === actor.locId);
-                        let earnedResource = '';
-
-                        if (actorType === 'politician') earnedResource = 'power';
-                        else if (actorType === 'scientist') earnedResource = 'knowledge';
-                        else if (actorType === 'artist') earnedResource = 'art';
-                        else if (actorType === 'robot') earnedResource = currentLocDef?.resource || '';
+                        const earnedResource = getActorRewardType(actorType, actor.locId);
 
                         if (earnedResource) {
-                            if (isMain) {
+                            if (actor.playerId === localPlayerId) {
                                 updateResource(earnedResource, 1); // delta +1
-                                addLog(`${player.name || '080'}'s ${actor.actorType.toUpperCase()} secured +1 ${earnedResource.toUpperCase()} from early Product Bet!`);
+                                addLog(`${player.name || '080'}'s ${actor.actorType?.toUpperCase()} secured +1 ${earnedResource.toUpperCase()} from early Product Bet!`);
                             } else {
                                 setOpponentsData((prev: any) => {
                                     const oppId = actor.playerId;
-                                    const oppData = prev[oppId] || { resources: { glory: 0, power: 0, knowledge: 0, art: 0, product: 0, energy: 0, recycle: 0 } };
+                                    const oppData = prev[oppId] || { resources: { fame: 0, power: 0, knowledge: 0, art: 0, product: 0, electricity: 0, recycling: 0 } };
                                     return {
                                         ...prev,
                                         [oppId]: {
@@ -712,7 +725,7 @@ export default function GameBoardPage() {
                                         }
                                     };
                                 });
-                                addLog(`${actor.name}'s ${actor.actorType.toUpperCase()} secured +1 ${earnedResource.toUpperCase()} from early Product Bet!`);
+                                addLog(`${actor.name}'s ${actor.actorType?.toUpperCase()} secured +1 ${earnedResource.toUpperCase()} from early Product Bet!`);
                             }
                         }
                     }
@@ -737,12 +750,21 @@ export default function GameBoardPage() {
         if (result.evictAll) {
             addLog(`Draw: All ${conflictActorType}s evicted from location.`);
             setPlacedActors(prev => prev.filter(actor => !(actor.locId === realLocId && actor.actorType === conflictActorType)));
-        } else if (result.winnerId) {
-            // Evict all other actors of this type from the location
+        } else if (result.loserIds && result.loserIds.length > 0) {
+            // Losers Exit: Remove specific actors that were beaten in this iteration
+            setPlacedActors(prev => prev.filter(actor => !result.loserIds.includes(actor.actorId)));
+            result.loserIds.forEach(lId => {
+                const lActor = [...placedActors, ...stickyConflicts.flatMap(c => [c.playerActor, ...c.opponents])].find(a => a?.actorId === lId);
+                if (lActor) addLog(`${lActor.name}'s ${lActor.actorType?.toUpperCase()} lost the argument and exited.`);
+            });
+        }
+
+        if (result.winnerId) {
+            // A final winner was found
+            // Evict all other actors of this type from the location (clean up survivors who weren't the winner)
             setPlacedActors(prev => prev.filter(actor => {
                 if (actor.locId !== realLocId || actor.actorType !== conflictActorType) return true;
-                const isWinner = (result.winnerId === localPlayerId && actor.playerId === localPlayerId) || (actor.actorId === result.winnerId);
-                return isWinner;
+                return (result.winnerId === localPlayerId && actor.playerId === localPlayerId) || (actor.actorId === result.winnerId);
             }));
 
             // --- AWARD RESOURCES TO THE CONFLICT WINNER immediately ---
@@ -750,23 +772,14 @@ export default function GameBoardPage() {
                 const winnerActor = currentConflict?.playerActor;
                 if (winnerActor) {
                     const winActorType = winnerActor.actorType?.toLowerCase();
-                    let earnedResource = '';
-                    if (winActorType === 'politician') earnedResource = 'power';
-                    else if (winActorType === 'scientist') earnedResource = 'knowledge';
-                    else if (winActorType === 'artist') earnedResource = 'art';
-                    else if (winActorType === 'robot') earnedResource = locDef?.resource || '';
+                    const earnedResource = getActorRewardType(winActorType, realLocId || '');
 
                     if (earnedResource) {
-                        // Robots: win → 3 resources. Draw (shareRewards) → 1. Product bet → +1 bonus.
-                        let baseReward = 1;
-                        if (winActorType === 'robot') {
-                            const opponents = currentConflict?.opponents || [];
-                            baseReward = result.shareRewards ? 1 : (opponents.length === 0 ? 3 : 3);
-                        }
-                        const isDouble = winnerActor.bid === 'product';
-                        const finalReward = isDouble ? (baseReward + 1) : baseReward;
+                        const isDouble = result.successfulBids?.some(b => b.bid === 'product' && b.actorId === result.winnerId);
+                        const finalReward = calculateReward(winActorType as any, true, isDouble, [], '');
+
                         updateResource(earnedResource, finalReward);
-                        addLog(`${player.name || '080'} WON ${finalReward} ${earnedResource.toUpperCase()} from ${winActorType.toUpperCase()} conflict at ${locDef?.name}!`);
+                        addLog(`${player.name || '080'} WON ${finalReward} ${earnedResource.toUpperCase()} from ${winActorType?.toUpperCase()} conflict at ${locDef?.name}!`);
                     }
                 }
             }
@@ -775,11 +788,8 @@ export default function GameBoardPage() {
             const trActor = currentConflict?.playerActor;
             if (trActor) {
                 const trActorType = trActor.actorType?.toLowerCase();
-                let earnedResource = '';
-                if (trActorType === 'politician') earnedResource = 'power';
-                else if (trActorType === 'scientist') earnedResource = 'knowledge';
-                else if (trActorType === 'artist') earnedResource = 'art';
-                else if (trActorType === 'robot') earnedResource = locDef?.resource || '';
+                const earnedResource = getActorRewardType(trActorType, realLocId || '');
+
                 if (earnedResource) {
                     updateResource(earnedResource, 1);
                     addLog(`${player.name || '080'} earned 1 ${earnedResource.toUpperCase()} from TRUCE at ${locDef?.name}!`);
@@ -800,19 +810,21 @@ export default function GameBoardPage() {
     const usedRSPs = placedActors.filter(p => p.playerId === localPlayerId).map(p => p.type);
     const availableActors = MY_ACTORS.filter(a => !placedActors.find(p => p.actorId === a.id));
 
-
-
-    // VP Calculation logic
-    const vp = useMemo(() => {
-        const { power, knowledge, art, glory } = resources;
-        let p = power, k = knowledge, a = art, g = glory;
-        while (g > 0) {
-            if (p <= k && p <= a) p++;
-            else if (k <= p && k <= a) k++;
-            else a++;
-            g--;
+    const victoryPoints = useMemo(() => {
+        const mainPlayerId = player.citizenId || player.address || 'p1';
+        const myActors = placedActors.filter(a => a.playerId === mainPlayerId);
+        const playerResources = resources;
+        const p = playerResources.power, k = playerResources.knowledge, a = playerResources.art, f = playerResources.fame;
+        let totalFame = f;
+        let powerValue = p, knowValue = k, artValue = a;
+        while (totalFame > 0) {
+            if (powerValue <= knowValue && powerValue <= artValue) powerValue++;
+            else if (knowValue <= powerValue && knowValue <= artValue) knowValue++;
+            else artValue++;
+            totalFame--;
         }
-        return Math.min(p, k, a);
+        const vpValue = Math.min(powerValue, knowValue, artValue);
+        return vpValue;
     }, [resources]);
 
     // --- Effects ---
@@ -894,7 +906,7 @@ export default function GameBoardPage() {
                                 actorType: 'politician',
                                 type: ['rock', 'paper', 'scissors'][Math.floor(Math.random() * 3)]
                             })),
-                            resourceType: currentEvent.reward || 'glory'
+                            resourceType: currentEvent.reward || 'fame'
                         }
                     });
                     return; // Wait for the modal to resolve
@@ -907,7 +919,7 @@ export default function GameBoardPage() {
                         const next = { ...prev };
                         if (!next[randomBotWinner.id]) return prev;
                         const oppRes = { ...next[randomBotWinner.id].resources };
-                        const key = currentEvent.reward || 'glory';
+                        const key = currentEvent.reward || 'fame';
                         oppRes[key] = (oppRes[key] || 0) + 1;
                         next[randomBotWinner.id] = { ...next[randomBotWinner.id], resources: oppRes };
                         return next;
@@ -915,7 +927,7 @@ export default function GameBoardPage() {
                 }
             } else if (winners[0].id === localPlayerId) {
                 win = true;
-                msg = `${player.name || '080'} WON ${currentEvent.reward || 'Glory'}! (Stats: Me: ${myStatAmount}, ${oppStatsStr})`;
+                msg = `${player.name || '080'} WON ${currentEvent.reward || 'Fame'}! (Stats: Me: ${myStatAmount}, ${oppStatsStr})`;
             } else {
                 win = false;
                 msg = `${player.name || '080'} lost to ${winners[0].name}. (Stats: Me: ${myStatAmount}, ${oppStatsStr})`;
@@ -925,7 +937,7 @@ export default function GameBoardPage() {
                     const next = { ...prev };
                     if (!next[botWinnerId]) return prev;
                     const oppRes = { ...next[botWinnerId].resources };
-                    const key = currentEvent.reward || 'glory';
+                    const key = currentEvent.reward || 'fame';
                     oppRes[key] = (oppRes[key] || 0) + 1;
                     next[botWinnerId] = { ...next[botWinnerId], resources: oppRes };
                     return next;
@@ -934,8 +946,8 @@ export default function GameBoardPage() {
         }
 
         if (win) {
-            if (currentEvent.reward === "glory") {
-                updateResource('glory', 1);
+            if (currentEvent.reward === "fame") {
+                updateResource('fame', 1);
             } else if (currentEvent.reward === "action_card") {
                 const randomCard = ACTION_CARDS[Math.floor(Math.random() * ACTION_CARDS.length)];
 
@@ -1106,7 +1118,7 @@ export default function GameBoardPage() {
         }
     };
 
-    const handleBid = (resourceType: 'product' | 'energy' | 'recycle' | null) => {
+    const handleBid = (resourceType: 'product' | 'electricity' | 'recycling' | null) => {
         if (!pendingPlacement || !pendingRsp) return;
 
         const actor = MY_ACTORS.find(a => a.id === pendingPlacement.actorId);
@@ -1136,7 +1148,7 @@ export default function GameBoardPage() {
             }
         ]);
 
-        const betLog = resourceType ? ` and BET ON ${resourceType === 'product' ? 'WIN' : resourceType === 'energy' ? 'LOSE' : 'DRAW'}` : '';
+        const betLog = resourceType ? ` and BET ON ${resourceType === 'product' ? 'WIN' : resourceType === 'electricity' ? 'LOSE' : 'DRAW'}` : '';
         addLog(`${player.name || '080'} placed ${actor?.name} with ${pendingRsp.toUpperCase()} to ${pendingPlacement.locId.toUpperCase()}${betLog}`);
 
         // 3. Clear transient states
@@ -1339,7 +1351,7 @@ export default function GameBoardPage() {
         // Generate Bot Offers and Log them
         const offers: { [id: string]: MarketOffer | null } = {};
         let foundMatch: string | null = null;
-        const RESOURCE_TYPES = ['product', 'energy', 'recycle'] as const;
+        const RESOURCE_TYPES = ['product', 'electricity', 'recycling'] as const;
 
         const mainPlayerId = player.citizenId || player.address || 'p1';
         const opponents = dynamicPlayers.filter(p => p.id !== mainPlayerId);
@@ -1401,8 +1413,8 @@ export default function GameBoardPage() {
 
     const handleBuyActionCard = (card: any) => {
         updateResource('product', -1);
-        updateResource('energy', -1);
-        updateResource('recycle', -1);
+        updateResource('electricity', -1);
+        updateResource('recycling', -1);
 
         const mappedCard = {
             ...card,
@@ -1424,6 +1436,41 @@ export default function GameBoardPage() {
 
 
     // --- Render ---
+    if (game === '404') {
+        return (
+            <main className="relative w-full h-screen overflow-hidden bg-black text-white font-sans flex items-center justify-center p-10">
+                <div className="flex flex-col items-center gap-10 p-16 border-[3px] border-red-500/50 bg-gradient-to-b from-[#1a1a24] to-[#0d0d12] rounded-[3rem] shadow-[0_0_150px_rgba(255,0,0,0.2)] max-w-2xl w-full">
+                    <div className="text-center">
+                        <h1 className="text-6xl font-black uppercase tracking-[0.2em] text-red-500 drop-shadow-[0_0_40px_rgba(255,0,0,0.8)]">
+                            GAME NOT FOUND
+                        </h1>
+                        <p className="text-white/50 text-xl font-rajdhani uppercase tracking-[0.4em] mt-4">Simulation ID invalid or expired</p>
+                    </div>
+                    <p className="text-gray-400 text-center leading-relaxed font-rajdhani font-semibold px-8 mt-4">
+                        We couldn't locate the game session you're looking for. This can happen if the game was deleted, or if the URL is incorrect.
+                    </p>
+                    <button
+                        onClick={() => window.location.href = '/dashboard'}
+                        className="mt-8 px-16 py-5 bg-gradient-to-r from-red-500 to-red-700 text-white font-black text-xl uppercase tracking-[0.4em] rounded-2xl hover:from-red-400 hover:to-red-600 shadow-[0_0_40px_rgba(255,0,0,0.5)] transition-all transform hover:scale-105 active:scale-95"
+                    >
+                        Back to Dashboard
+                    </button>
+                </div>
+            </main>
+        );
+    }
+
+    if (!game) {
+        return (
+            <main className="relative w-full h-screen overflow-hidden bg-black text-white font-sans flex items-center justify-center">
+                <div className="flex flex-col items-center gap-6">
+                    <div className="w-16 h-16 border-4 border-[#d4af37] border-t-transparent rounded-full animate-spin shadow-[0_0_20px_rgba(212,175,55,0.4)]"></div>
+                    <p className="text-[#d4af37] font-bold font-rajdhani tracking-[0.3em] uppercase animate-pulse">Initializing Board...</p>
+                </div>
+            </main>
+        );
+    }
+
     return (
         <TooltipProvider>
             <main className="relative w-full h-screen overflow-hidden bg-black text-white font-sans select-none">
@@ -1536,7 +1583,7 @@ export default function GameBoardPage() {
 
 
                     {/* Top Center: Resources (Layered ABOVE Header) */}
-                    <GameResources resources={resources} vp={vp} />
+                    <GameResources resources={resources} victoryPoints={victoryPoints} />
 
                     {/* Top Left: New Players Panel (SVG) */}
                     <NewPlayersPanel
@@ -1630,10 +1677,14 @@ export default function GameBoardPage() {
                     {phase === 2 && pendingPlacement && pendingRsp && (
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-auto">
                             <BidRadialMenu
-                                actor={MY_ACTORS.find(a => a.id === pendingPlacement.actorId) || null}
-                                resources={resources}
+                                actor={pendingPlacement ? (MY_ACTORS.find(a => a.id === pendingPlacement.actorId) as any) : null}
+                                resources={{
+                                    product: resources.product,
+                                    electricity: resources.electricity,
+                                    recycling: resources.recycling
+                                }}
                                 onSelect={handleBid}
-                                onCancel={() => setPendingRsp(null)}
+                                onCancel={() => setPendingPlacement(null)}
                             />
                         </div>
                     )}
@@ -1699,11 +1750,11 @@ export default function GameBoardPage() {
                     {/* --- Phase 5: Modals --- */}
                     {phase === 5 && p5Step === 1 && (
                         <MarketOfferModal
-                            isOpen={true}
+                            isOpen={phase === 5 && p5Step === 1}
                             playerResources={{
                                 product: resources.product,
-                                energy: resources.energy,
-                                recycle: resources.recycle
+                                electricity: resources.electricity,
+                                recycling: resources.recycling
                             }}
                             onConfirm={handleMarketOfferConfirm}
                         />
@@ -1732,7 +1783,7 @@ export default function GameBoardPage() {
                             isOpen={true}
                             onClose={handleSkipBuyActionCard}
                             onBuy={handleBuyActionCard}
-                            canAfford={resources.product >= 1 && resources.energy >= 1 && resources.recycle >= 1}
+                            canAfford={resources.product >= 1 && resources.electricity >= 1 && resources.recycling >= 1}
                             availableCards={ACTION_CARDS}
                         />
                     )}
@@ -1743,14 +1794,14 @@ export default function GameBoardPage() {
                         const playersWithVP = dynamicPlayers.map((p) => {
                             const isMain = p.id === localPlayerId;
                             const res = isMain ? resources : (opponentsData[p.id]?.resources || {});
-                            const { power = 0, knowledge = 0, art = 0, glory = 0 } = res as any;
+                            const { power = 0, knowledge = 0, art = 0, fame = 0 } = res as any;
 
-                            let currP = power, currK = knowledge, currA = art, currG = glory;
-                            while (currG > 0) {
+                            let currP = power, currK = knowledge, currA = art, currF = fame;
+                            while (currF > 0) {
                                 if (currP <= currK && currP <= currA) currP++;
                                 else if (currK <= currP && currK <= currA) currK++;
                                 else currA++;
-                                currG--;
+                                currF--;
                             }
                             const finalVP = Math.min(currP, currK, currA);
                             return { ...p, finalVP, isMain };

@@ -19,23 +19,23 @@ export interface ActorDefinition {
 export type ArgumentType = 'rock' | 'paper' | 'scissors' | 'dummy';
 
 // ─── Resources & Values ───────────────────────────────────────────
-export type ResourceType = 'product' | 'energy' | 'recycle';
+export type ResourceType = 'product' | 'electricity' | 'recycling';
 export type ValueType = 'power' | 'art' | 'knowledge';
-export type GloryType = 'glory';
+export type FameType = 'fame';
 
 /** All trackable resource/value keys */
-export type ResourceKey = ResourceType | ValueType | GloryType | 'gato';
+export type ResourceKey = ResourceType | ValueType | FameType | 'gato';
 
 export interface PlayerResources {
     gato: number;
     product: number;
-    energy: number;
-    recycle: number;
+    electricity: number;
+    recycling: number;
     power: number;
     art: number;
     knowledge: number;
-    glory: number;
-    vp?: number;
+    fame: number;
+    victoryPoints?: number;
 }
 
 // ─── Locations ────────────────────────────────────────────────────
@@ -57,7 +57,7 @@ export interface LocationDefinition {
 
 // ─── Bets ─────────────────────────────────────────────────────────
 /** Bet type maps to the resource spent */
-export type BetType = 'product' | 'energy' | 'recycle';
+export type BetType = 'product' | 'electricity' | 'recycling';
 
 // ─── Placed Actors (Board State) ──────────────────────────────────
 export interface PlacedActor {
@@ -91,9 +91,11 @@ export interface Conflict {
 }
 
 export interface ConflictResult {
-    winnerId: string | null;
+    winnerId: string | null;      // If null and shareRewards=false, conflict continues or draw
+    loserIds: string[];           // IDs of actors that must leave immediately
+    survivorIds: string[];        // IDs of actors that stay for the next iteration
     isDraw: boolean;
-    restart: boolean;
+    restart: boolean;             // If true, everyone in survivorIds must re-pick argument
     evictAll: boolean;
     shareRewards: boolean;
     successfulBids: { actorId: string; bid: string }[];

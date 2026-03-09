@@ -99,7 +99,7 @@ export const resolveBotOnlyConflicts = async (
             if (bot.actorType === 'politician') resource = 'Power';
             else if (bot.actorType === 'scientist') resource = 'Knowledge';
             else if (bot.actorType === 'artist') resource = 'Art';
-            else if (bot.actorType === 'robot') resource = (locDef?.resource || 'Product').charAt(0).toUpperCase() + (locDef?.resource || 'Product').slice(1);
+            else if (bot.actorType === 'robot') resource = (locDef?.resource || 'product').charAt(0).toUpperCase() + (locDef?.resource || 'product').slice(1);
 
             await addLog(`${botName}'s ${actorTypeName} has no rivals at ${realLocName}. They secured 1 ${resource}!`);
 
@@ -139,7 +139,7 @@ export const resolveBotOnlyConflicts = async (
                 if (winner.actorType === 'politician') resource = 'Power';
                 else if (winner.actorType === 'scientist') resource = 'Knowledge';
                 else if (winner.actorType === 'artist') resource = 'Art';
-                else if (winner.actorType === 'robot') resource = (locDef?.resource || 'Product').charAt(0).toUpperCase() + (locDef?.resource || 'Product').slice(1);
+                else if (winner.actorType === 'robot') resource = (locDef?.resource || 'product').charAt(0).toUpperCase() + (locDef?.resource || 'product').slice(1);
 
                 await addLog(`${winnerName}'s ${actorTypeName} WON at ${realLocName} and secured 1 ${resource}!`);
 
@@ -147,9 +147,11 @@ export const resolveBotOnlyConflicts = async (
                     const next = { ...prev };
                     if (!next[winner.playerId]) return prev;
                     const res = { ...next[winner.playerId].resources } as any;
-                    const resKey = resource.toLowerCase();
-                    res[resKey] = (res[resKey] || 0) + 1;
-                    next[winner.playerId] = { ...next[winner.playerId], resources: res };
+                    if (resource) {
+                        const resKey = resource.toLowerCase();
+                        res[resKey] = (res[resKey] || 0) + 1;
+                        next[winner.playerId] = { ...next[winner.playerId], resources: res };
+                    }
                     return next;
                 });
             }
@@ -211,7 +213,7 @@ export const triggerOpponentPlacements = async (
         // Resolve name from game players if possible
         const playerInfo = game.players.find((p: any) => (p.citizenId || p.address) === action.playerId);
         const playerName = playerInfo?.name || PLAYERS.find(p => p.id === action.playerId)?.name || action.playerId;
-        const betText = action.bid ? ` (Bet on ${action.bid === 'product' ? 'WIN' : action.bid === 'energy' ? 'LOSE' : 'DRAW'})` : "";
+        const betText = action.bid ? ` (Bet on ${action.bid === 'product' ? 'WIN' : action.bid === 'electricity' ? 'LOSE' : 'DRAW'})` : "";
         await addLog(`${playerName} placed ${action.name} with ${action.type.toUpperCase()} to ${action.locId.toUpperCase()}${betText}`);
 
         await new Promise(r => setTimeout(r, 600)); // Increased delay for stability

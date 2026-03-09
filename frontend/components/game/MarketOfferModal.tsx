@@ -5,35 +5,35 @@ import { motion } from 'framer-motion';
 import Image from 'next/image';
 
 export interface MarketOffer {
-    giveType: 'product' | 'energy' | 'recycle';
+    giveType: 'product' | 'electricity' | 'recycling';
     giveAmount: number;
-    takeType: 'product' | 'energy' | 'recycle';
+    takeType: 'product' | 'electricity' | 'recycling';
     takeAmount: number;
 }
 
 interface MarketOfferModalProps {
     isOpen: boolean;
-    playerResources: { product: number; energy: number; recycle: number };
+    playerResources: { product: number; electricity: number; recycling: number };
     onConfirm: (offer: MarketOffer | null) => void;
 }
 
 const RESOURCE_ICONS = {
     product: '/resources/resource_product.png',
-    energy: '/resources/resource_energy.png',
-    recycle: '/resources/resource_Recycle.png'
+    electricity: '/resources/resource_energy.png',
+    recycling: '/resources/resource_Recycle.png'
 };
 
 const RESOURCE_NAMES = {
     product: 'PRODUCT',
-    energy: 'ENERGY',
-    recycle: 'RECYCLE'
+    electricity: 'ELECTRICITY',
+    recycling: 'RECYCLING'
 };
 
 export default function MarketOfferModal({ isOpen, playerResources, onConfirm }: MarketOfferModalProps) {
-    const [giveType, setGiveType] = useState<'product' | 'energy' | 'recycle' | null>(null);
+    const [giveType, setGiveType] = useState<'product' | 'electricity' | 'recycling' | null>(null);
     const [giveAmount, setGiveAmount] = useState<number>(1);
 
-    const [takeType, setTakeType] = useState<'product' | 'energy' | 'recycle' | null>(null);
+    const [takeType, setTakeType] = useState<'product' | 'electricity' | 'recycling' | null>(null);
     const [takeAmount, setTakeAmount] = useState<number>(1);
 
     if (!isOpen) return null;
@@ -69,11 +69,11 @@ export default function MarketOfferModal({ isOpen, playerResources, onConfirm }:
                     <div className="flex-1 flex flex-col items-center gap-6 bg-black/20 p-6 rounded-xl border border-white/5">
                         <h3 className="text-white/80 uppercase font-bold tracking-widest text-sm">You Give</h3>
                         <div className="flex gap-4">
-                            {(Object.keys(RESOURCE_ICONS) as Array<'product' | 'energy' | 'recycle'>).map(res => (
+                            {(Object.keys(RESOURCE_ICONS) as Array<'product' | 'electricity' | 'recycling'>).map(res => (
                                 <button
                                     key={res}
                                     onClick={() => {
-                                        const newlySelected = res as 'product' | 'energy' | 'recycle';
+                                        const newlySelected = res as 'product' | 'electricity' | 'recycling';
                                         setGiveType(newlySelected);
                                         setGiveAmount(Math.min(1, playerResources[newlySelected]));
                                     }}
@@ -112,7 +112,7 @@ export default function MarketOfferModal({ isOpen, playerResources, onConfirm }:
                     <div className="flex-1 flex flex-col items-center gap-6 bg-black/20 p-6 rounded-xl border border-white/5">
                         <h3 className="text-white/80 uppercase font-bold tracking-widest text-sm">You Take</h3>
                         <div className="flex gap-4">
-                            {(Object.keys(RESOURCE_ICONS) as Array<'product' | 'energy' | 'recycle'>).map(res => (
+                            {(Object.keys(RESOURCE_ICONS) as Array<'product' | 'electricity' | 'recycling'>).map(res => (
                                 <button
                                     key={res}
                                     onClick={() => setTakeType(res)}

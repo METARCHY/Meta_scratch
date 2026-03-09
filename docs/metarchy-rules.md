@@ -11,21 +11,28 @@ If players have an equal number of Victory Points at the end of the final Turn, 
 
 ## Gaming Terminology
 - **Conflict** - If two or more Actors of the same type meet in one Location, they will have a Conflict. If Actors have a Conflict, players need to start the process of Conflict Resolution.
-- **Conflict Resolution** - Every time, when rules of the game come to a conflict with each other, players need to start the process of Conflict Resolution: each player chooses Rock, Paper, or Scissors. Each player knows only their own choice, but not the other players' choices. After all players have made their choices, their choices are revealed. The Outcome of the Conflict can be Win, Lose or Draw. If the Conflict Outcome is a Draw then repeat the Conflict Resolution unless otherwise stated in the rules. Conflict Resolution can be between Actors. Bets are not used for the Conflict Resolution. Dummy is not used for the Conflict Resolution. 
+- **Conflict Resolution** - When two or more Actors of the same type meet in one Location, or when game rules conflict, players start Conflict Resolution: each player chooses Rock, Paper, or Scissors. Choices are hidden until all players have committed, then revealed simultaneously. The Outcome for each Actor/Player can be Win, Lose, or Draw. 
+  - **In 2-Player Conflicts**: Outcome is determined by standard RPS rules.
+  - **In 3+ Player Conflicts**: 
+    - **Win**: An Actor wins if their argument beats at least one other argument and is not beaten by any.
+    - **Lose**: An Actor loses if their argument is beaten by at least one other argument. Losers immediately exit the conflict and return to their player-owner with nothing.
+    - **Draw**: If all players reveal the same argument, or if all three RPS types (Rock, Paper, Scissors) are present, it is a Draw.
+    - **Tied Winners**: If multiple players remain (e.g., two Paper vs one Rock), the losers exit, and the remaining tied players repeat Conflict Resolution until a single winner or a specific Actor-type Draw condition is met.
+  - Dummy is not used for Conflict Resolution. Bets are not used for Conflict Resolution.
 - **Outcome** - result of the Conflict Resolution. It can be Win, Lose or Draw.
 - **Location** - part of the game field. Locations is doing nothing by itself. Players can send Actors to the Locations.
 - **Actor** - main charecters of each player. Players send Actors to the Locations. Actors produce Values or Resources in the Locations.
 - **Argument** - when sending an Actor to a Location, player MUST give an Argument to Actor. Each Actor must to have an Argument. Each Actor can get only one Argument. Actors of the same player must have different Arguments.
-- **Bet** - when sending an Actor to a Location, player MAY add a Bet on Outcome to Actor. To add a Bet on the Outcome of a Conflict, a player must use a Resource. If a player does not have the required Resource, player cannot add a Bet to Actor. Player can't add more than one Bet to one Actor. If Outcome of the Conflict is the same as a Bet, then Bet is succesful. If Outcome of the Conflict is other than a Bet, then Bet is faild. Regardless of whether the Bet was successful or faild, the Bet Resource is discarded and is not returned to the player.
+- **Bet** - when sending an Actor to a Location, player MAY add a Bet on Outcome to Actor. To add a Bet on the Outcome of a Conflict, a player must use a Resource. If a player does not have the required Resource, player cannot add a Bet to Actor. Player can't add more than one Bet to one Actor. If Outcome of the Conflict is the same as a Bet, then Bet is successful. If Outcome of the Conflict is other than a Bet, then Bet is failed. Regardless of whether the Bet was successful or failed, the Bet Resource is discarded and is not returned to the player.
 
 ## 🔬 Game Components
 
 ### 1. Players
 The game supports 2 to 3 players, or "2 vs. 2" mode.
-Exch player starts the game with:
+Each player starts the game with:
 - 4 Actors (Politician, Scientist, Artist, Robot)
 - 4 Arguments (Rock, Scissors, Paper, Dummy)
-- 3 Resources (1 Production, 1 Electricity, 1 Recycling)
+- 3 Resources (1 Product, 1 Electricity, 1 Recycling)
 
 ### 2. The Game Board (Locations)
 The board consists of 6 distinct Locations where Conflicts are happening:
@@ -36,7 +43,7 @@ The board consists of 6 distinct Locations where Conflicts are happening:
 
 **Robot Locations:**
 - 🏭 **Factory** (You can send here Robot)
-- ⚡ **Energy Plant** (You can send here Robot)
+- ⚡ **Power Plant** (You can send here Robot)
 - 🗑️ **Dump** (You can send here Robot)
 
 ### 3. Actors (4 Types per Player)
@@ -63,14 +70,14 @@ Actors are sent to Locations to create values.
   - If Outcome is Lose - Artist returns to Player-owner without anything. 
   - If Outcome is Draw, players don't need to Resolve the Conflict. All Artists return to Player-owners without anything. ("Draw between Artists" is the same as "All Artists Lose")
 - 🤖 **Robot** (Players can send an Actor-Robot to these Locations: Factory, Power Plant, or Dump.)
-  - A Robot in the Factory Location produces three units of Rescourses - Product.
-  - A Robot in the Power Plant Location produces three units of Rescourses - Electricity.
-  - A Robot in the Dump Location produces three units of Rescourses - Recycling.
+  - A Robot in the Factory Location produces three units of Resources - Product.
+  - A Robot in the Power Plant Location produces three units of Resources - Electricity.
+  - A Robot in the Dump Location produces three units of Resources - Recycling.
   - If two or more Actor-Robots are in the Factory, Power Plant, or Dump Location, a Conflict occurs between the Robots.
   - For each Robot, the Conflict Outcome can be Win, Lose or Draw.
   - If Outcome is Win - Robot returns to Player-owner with 3 Resources of Product/Electricity/Recycling (depending on the Location).
   - If Outcome is Lose - Robot returns to Player-owner without anything. 
-  - If Outcome is Draw - Robot returns to Player-owner with 1 Resource of Product/Electricity/Recycling (depending on the Location).
+  - If Outcome is Draw - Robot returns to Player-owner with 1 Resource of Product/Electricity/Recycling (depending on the Location). Note: If a Robot with a "Draw" Bet results in a Draw, it wins and returns with 3 Resources; others in the draw without the bet return with nothing.
 
 ### 4. Arguments (4 Types)
 When Player send an Actor to Location, Player must give an Argument to Actor.
@@ -87,9 +94,9 @@ Required to form Victory Points. 1 Power + 1 Art + 1 Knowledge = 1 Victory Point
 
 ### 6. Resources
 Used to add bets on Conflict Outcome.
-- ⚙️ **Production** (Used to bet on "Win". If the Conflict Outcome for Actor is Win, this Actor will return to Player-owner with one more additional Value or Resource, depending on the Actor.)
+- ⚙️ **Product** (Used to bet on "Win". If the Conflict Outcome for Actor is Win, this Actor will return to Player-owner with one more additional Value or Resource, depending on the Actor.)
 - 🔋 **Electricity** (Used to bet on "Lose". If the Conflict Outcome for Actor is Lose, then Resolve the Conflict one more time.)
-- ♻️ **Recycling** (Used to bet on "Draw". If the Conflict Outcome for Actor is Draw, then count Outcome as a Win for this Actor.)
+- ♻️ **Recycling** (Used to bet on "Draw". If the Conflict Outcome for Actor is Draw, then count Outcome as a Win for this Actor. For Robots, this results in 3 Resources instead of 1.)
 
 ### 7. Action Cards
 Action cards are powerful, single-use items that can dramatically alter the game state. They are purchased during Market Phase using a combination of Resources.
@@ -98,9 +105,9 @@ Action cards are powerful, single-use items that can dramatically alter the game
 - **Charity Event** (1 card. Location Theater doesn't work this turn. No conflicts will happen there. Actors in this location will not produce any Values.)
 - **Student Protests** (1 card. Location University doesn't work this turn. No conflicts will happen there. Actors in this location will not produce any Values.)
 - **Sabotage** (1 card. Location Factory doesn't work this turn. No conflicts will happen there. Actors in this location will not produce any Values.)
-- **Cable Stolen** (1 card. Location Energy Plant doesn't work this turn. No conflicts will happen there. Actors in this location will not produce any Values.)
-- **Environmental Protests** (1 card. Location Dump doesn't work this turn. No conflicts will happen there. Actors in this location will not produce any Values.)
-- **Relocation** (6 cards. Choose one Actor and move it to any possible location. You can't send Politics to Theater, Scientist to Square, Artist to University, Robots to Human Locations, and Humans to Robot Locations. You can play Relocation card after any player played Construction Work, Charity Event, Student Protests, Sabotage, Cable Stolen, or Environmental Protests)
+- **Cable Stolen** (1 card. Location Power Plant doesn't work this turn. No Conflicts will happen there. Actors in this location will not produce any Values.)
+- **Environmental Protests** (1 card. Location Dump doesn't work this turn. No Conflicts will happen there. Actors in this location will not produce any Values.)
+- **Relocation** (6 cards. Choose one Actor and move it to any valid location. Valid locations are determined by the Actor type: Politicians (Square/University), Scientists (Theater/University), Artists (Theater/Square), Robots (Factory/Power Plant/Dump). You can't relocate Humans to Robot Locations or Robots to Human Locations. You can play Relocation card after any player played a Block Location card.)
 - **Change Values** (3 cards. Exchange one of your Values with any other Value of another Player. Players can't exchange the Fame Value.)
 
 - An Action Card can be obtained randomly by playing an Event Card.
@@ -116,12 +123,12 @@ Deck of Event Cards contains 7 cards:
 - **Cultural Decline** (Compare the amount of Value Art for each Player. The player with the lowest amount of Value Art gains the Value Fame.)
 - **Revolution** - Compare the total amount of all Values for each Player. The player with the lowest amount of all Values gains the Value Fame.)
 - **Help Poor Countries** (Each Player may discards any amount of Resource Product, but players don't know how many Resources other players discarded. After all Players have discarded the desired amount of Resources Product (the amount may be zero), information about how many resources each player has discarded becomes publicly known. The Player who has discarded more Resourse Products receives a random Action Card.
-- **Earth Hour** - Each Player may discards any amount of Resource Electricity, but players don't know how many Resources other players discarded. After all Players have discarded the desired amount of Resources Electricity (the amount may be zero), information about how many resources each player has discarded becomes publicly known. The Player who has discarded more Resourse Electricity receives a random Action Card.
-- **Prevent Eco-Crisis** - Each Player may discards any amount of Resource Recycling, but players don't know how many Resources other players discarded. After all Players have discarded the desired amount of Resources Recycling (the amount may be zero), information about how many resources each player has discarded becomes publicly known. The Player who has discarded more Resourse Recycling receives a random Action Card.
+- **Earth Hour** - Each Player may discard any amount of Resource Electricity, but players don't know how many Resources other players discarded. After all Players have discarded the desired amount of Resources Electricity (the amount may be zero), information about how many resources each player has discarded becomes publicly known. The Player who has discarded more Resource Electricity receives a random Action Card.
+- **Prevent Eco-Crisis** - Each Player may discard any amount of Resource Recycling, but players don't know how many Resources other players discarded. After all Players have discarded the desired amount of Resources Recycling (the amount may be zero), information about how many resources each player has discarded becomes publicly known. The Player who has discarded more Resource Recycling receives a random Action Card.
 
 If two or more players meet the conditions specified on the Event Card, the winner is determined by a Conflict Resolution.
 
-## Metarchy Phase Flow
+# Metarchy Phase Flow
 This document describes the exact flow of turns and phases currently implemented in the Metarchy 
 
 ## Turn Structure
@@ -142,7 +149,7 @@ This document describes the exact flow of turns and phases currently implemented
 - At the start of the phase, a random Event Card is drawn automatically from the Event Card Deck
 - The UI presents the Event Card and its conditions (e.g., discard resources, compare sum of values, compare single values).
 
-Player Action: In case of comparing values, the player must click "CONFIRM" to resolve the event. In case of discarding resources, the player need to choose the amount to discard and afte click "CONFIRM".
+Player Action: In case of comparing values, the player must click "CONFIRM" to resolve the event. In case of discarding resources, the player needs to choose the amount to discard and after click "CONFIRM".
 
 Resolution:
 - UI shows the summary to players: Amount of discarded resources by each player, or amount of values owned by each player. And also shows Outcome:
@@ -183,15 +190,15 @@ Player Action: Players need to click on button "Get It!", and game should go to 
 Player Action: Players need to click on button "Get It!", and game goes to the next Step.
 
 #### Step 2: Action: Relocation
-- Players, who didn't select to play Reocation Cards in Step 0, get notification "Waiting for the Relocation..."
-- UI ask players, who selected Relocation Cards to play in Step 0, which actor they want to move from one location to another. (Note: Player can choose to relocate as own Actor, as an Actor of another player)
+- Players, who didn't select to play Relocation Cards in Step 0, get notification "Waiting for the Relocation..."
+- UI asks players, who selected Relocation Cards to play in Step 0, which actor they want to move from one location to another. (Note: Player can choose to relocate their own Actor, or an Actor of another player, provided the destination is a valid location for that Actor type.)
 
-Player Action: Player needs to click on any Actor,  then click a new valid Location (this repeats for the number of Relocation cards played). After click on button "Done". The player's button changes to "WAITING FOR OTHERS..." until the other players finish relocation. 
+Player Action: Player needs to click on any Actor, then click a new valid Location (this repeats for the number of Relocation cards played). After, click on the button "Done". The player's button changes to "WAITING FOR OTHERS..." until the other players finish relocation. 
 
 After this, the game should show which Actors have moved to which Locations, and goes to the next Step.
 
-- If different players choice to relocate the same Actor to different locations, than game starts the process of Conflict Resolution between theses players (Other players need to get notification: Waiting for the Conflict Resolution).
-- Relocation Card of player-winner - has effect. Relocation Card of player-loser has no effect and discarded.
+- If different players choose to relocate the same Actor to different locations, then the game starts the process of Conflict Resolution between these players (Other players receive a notification: "Waiting for the Conflict Resolution").
+- The Relocation Card of the player-winner has effect. The Relocation Card of the player-loser has no effect and is discarded.
 - After this, the game should show which Actors have moved to which Locations, and goes to the next Step.
 
 #### Step 3: Action: Change Values
@@ -213,27 +220,114 @@ Player Action: The player need to click on available value (Power, Knowledg of A
 - Player can't click on a Value if amount of Value is 0
 - Player can't click on Value Fame
 
-### Phase 4: Conflict Resolution Phase
-- If in the Location the only one Actor of one type (the only one Politician, the only one Scientist, the only one Artist, the only one Robot) - such an Actor doesn't have a Conflict, and game count such an Actor as a Winner. Such an Actor returns back to Player and brings a Value or 3 Resources (depends of Actor type). If such an Actor had a Bet on Win, then a Bet is succesful, and it brings additional Value or Resource to Player. However, if a Bet was on a Draw or Lose, the Bet is faild. All Resources used as Bets are not returned, regardless of succesful or failed bet.
-- If two or more Actors of the same type are in the same Location, a Conflict occurs between these Actors
-- All Actors involved in the Conflict reveal their Arguments and Bets.
-- Conflicts between Actors can have Outcome: "Win", "Draw" or "Loss".
-- If Actors had Bets, then compare Outcome with Bets:
-    - If the "Conflict Outcome" matches the Bet, the Bet is successful.
-    - If the "Conflict Outcome" does not match the Bet, the Bet is faild.
-    - All Resources used as Bets are not returned, regardless of the Conflict's outcome.
-- If for the Actor, Outcome of the Conflict is **Win:** The Actor produce Value or 3 Resources in the Location and bring it to a Player-owner.
-- If for the Actor, Outcome of the Conflict is **Lose:** The Actor leave the Location and doesn't bring any Value or Resources to a Player.
-- If for the Actor, Outcome of the Conflict is **Draw:** 
-  - For Politicians: Resolve the Conflict until only one Politician in the Location. Politician-winner creates Value Power and brings it to a Player-owner.
-  - For Scientists: no needs to Resolve the Conflict, all Scientists remain in the Location and considered as winners, all of them create Value Knowledge and bring it to players-owners.
-  - For Artists: no needs to Resolve the Conflict, all Artists leave the location and considered as losers. Players-owners don't get Value Art.
-  - For Robots: no needs to Resolve the Conflict, all Robots remain in the Location and considered as winners, but all of them create only 1 Resource instead of 3 Resources and bring it to players-owners.
-After, Players count amount of Values and Resources, and go to the next Phase.
+- If a player selected to play several Change Values cards in Step 0, then the process is repeating for each Change Values card
+
+After a player played all Change Values cards, UI shows to a player updated amount of player's values, and the game goes to the next phase
+
+### Phase 4: Conflicts Reveal
+The game scans all the Locations on a board:
+- Check all Locations for Actors
+- Check Actor Types
+- If Actors of the same Type meet in a Location, a Conflict occurs between these Actors.
+- If a Location contains an Actor with a Type that is not shared by other Actors in the same Location (or if there is only one Actor in the Location), that Actor has no Conflict and the Outcome of its Conflict is considered as Win.
+- The game displays a sidebar with a list of all Conflicts between Actors for each Player, as well as a list of Actors that do not have a Conflict.
+- For each Player, the Game displays only those Conflicts involving Actors belonging to the Player. Conflicts in which the Player's Actors are not involved are not displayed to the Player. The same applies to Actors that do not have a Conflict: each player sees only their own Actors that are not involved in the Conflict in the list.
+
+#### The process of Conflict
+Player Action: The player clicks on a Conflict in the sidebar to open the Conflict board.
+- The game displays the Conflict board to the Player.
+- The player sees their Actor, sees their Actor's Argument, and sees the Bet on their Actor (if a Bet has been made).
+- The player sees the Actors of other players, but does not see the Arguments and Bets of other players' Actors.
+
+Player Action: The player clicks the "Reveal Conflict" button.
+- The game displays the Arguments and Bets (if any) of other players' Actors.
+- The game compares the Arguments of the Actors involved in the Conflict and obtains the Conflict Outcome for each Actor: Win, Lose, or Draw.
+- After this, the Game compares the Actors' Bets (if any have been made) with the Conflict Outcome for each Actor
+- If the Bet does not match the Conflict Outcome, then the Bet is faild.
+- If the Bet matches the Conflict Outcome, then the Bet is a success.
+- If the Bet is a success, then the betting rules apply.
+- If the Bet is failed, then the betting rules do not apply.  
+After this, all Bets are removed, and the Game shows the Player the result of Conflict.
+
+#### Results of the Conflict without applying of betting rules (Standard Rules):
+- If the Player's Actor wins, and the other players' Actors lose, then the Player Actor produces one Value of the type that depends on the Player Actor Type (Politician produces Power, Scientist produces Knowledge, Artist produces Art). If the Actor is Robot, it produces 3 Resources of the type that depends on the Location (Robot in the Factory produces Product, Robot in the Power Plant produces Electricity, Robot in the Dump produces Recycling). After it, Actor returns to the owning Player with produced Value or Resources. 
+- If the Player's Actor loses, then the Actor does not produce Value (or 3 Resources, if it is a Robot Actor) and returns to the owning Player with nothing.
+
+If the Conflict Outcome for the Player's Actor is a Draw, then results depend on the Actor's Type:
+- Actor Artist doesn't produce Value Art and returns to the owning Player with nothing.
+- Actor Scientist produces 1 Value Knowledge and returns to the owning Player with 1 Value Knowledge.
+- Actor Robot produces 1 Resource of the type that depends on the Location (Robot in the Factory produces Product, Robot in the Power Plant produces Electricity, Robot in the Dump produces Recycling) and returns to the owning Player with 1 produced Resource.
+- Actor Politician doesn't produce a Value and doesn't return to the owning Player, but participates in the process of the Conflict Resolution with other Politician Actors who also got Draw as a Conflict Outcome:
+Player Action: Player clicks on the button "Resolve the Conflict"
+  - A specialized Conflict Resolution modal pops up where each player choose Rock, Scissors or Paper and click on "Done".
+UI shows to players the Outcome:
+  - If the Outcome is Draw, players see the button "Resolve the Conflict" and need to click on it. Conflict Resolution happens one more time, until one of players is a winner.
+  - When one of the players wins the Conflict Resolution, Outcome for Actor Politician of the Player-winner is Win.
+
+#### Results of the Conflict with applying of betting rules:
+
+##### If the Outcome for Actor is Win, and the Bet was made on Win
+Actor produces one additional Value of the type that depends on the Player Actor Type (Politician produces Power, Scientist produces Knowledge, Artist produces Art). If the Actor is Robot, it produces 1 additional Resource of the type that depends on the Location (Robot in the Factory produces Product, Robot in the Power Plant produces Electricity, Robot in the Dump produces Recycling). After it, Actor returns to the owning Player with 2 produced Values or with 4 produced Resources.
+
+##### If the Outcome for Actor is Lose, and the Bet was made on Lose
+- Actor with Outcome Lose doesn't returns to a player with nothing
+- Actors with Outcome Win of other players don't return to players with Valus or Resources
+- Conflict between Actors need to be resolved one more time, and the game display the information that the Conflict need to be resolved:
+Player Action: Player clicks on the button "Resolve the Conflict"
+  - A specialized Conflict Resolution modal pops up: each player choose Rock, Scissors or Paper and click on "Done".
+UI shows the Outcome  to players:
+  - Outcome for the player is an Outcome for the Player's Actor.
+  - Since the betting rules apply only to the first Conflict, and Bets are discarded after the betting rule is applied, then the Conflict Resolution is resolving according to the Standard Rules.
+
+##### If the Outcome for Actor is Draw, and the Bet was made on Draw
+The Outcome for Actor is Win instead of Draw.
+
+After the Conflict is resolved, the game displays a board to the players with the information about conflict's results:
+- For players whose Actor's Outcome is Win: Information that Actor returns to a player with produced Value or 3 Resources
+- For players whose Actor's Outcome is Lose: Information that Actor returns to a player without any Values or Resources
+- For players whose Artist's Outcome is Draw: Information that Artist returns to a player without Art
+- For players whose Scientist's Outcome is Draw: Information that Scientist returns to a player with produced Knowledge
+- For players whose Robot's Outcome is Draw: Information that Robot returns to a player with 1 produced Resource
+- The information for Politician's Outcome is Draw cannot be shown as Politicians always replay Draws, resulting in a Conflict Outcome for Politicians being either a Win or a Loss.
+
+Player Action: Player clicks on the button "Get It!", and the game returns to the sidebar with the list of not-resolved Conflicts.
+
+Player Action: The player clicks on the next not-resolved Conflict in the sidebar to open the Conflict board, and the Conflict process is repeated for every active conflict.
+
+Player Action: The player clicks on the non-conflict Actor in the sidebar (if any):
+- The game displays a board with the Player's Actor and the information that the Player's Actor has won, and returns to the player with 1 produced Value Power/Knowldege/Art (if the Actor is Politician/Scientist/Artist) or with 3 produced Resources (if the Actor is a Robot).
+Players Action: Player clicks on the button "Get It!".
+
+After a player has resolved all Conflicts and reviewed all their Actors that were not involved in the Conflicts, the player must click the "Next Phase" button. The button changes to "WAITING FOR OTHERS..."
+Once all players click the "Next Phase" button, the game goes the Market Phase.
+
+#### In case of Phase 4 on the last Turn
+- If it was the last Turn, the game is counting Victory Points of each player
+- UI shows a board with the amount of Victory Points of each player. The player with the biggest amount of Victory Point is shown as a Winner.
+Player Action: Player can click on the button "Good Game", and it will redirect player to the main menu of the game
+
+- If two or more players have the same amount of Victory Points, UI shows a board with the amount of Victory Points of each player. Players with the same biggest amount of Victory Point are shown as a Potential Winner
+Player Action: Player with the lowest amount of Victory Points can click on the button "Good Game", and it will redirect this player to the main munu of the game. Players with the same biggest amount of Victory Points can click on the button "Continue": the player's button Continue changes to "WAITING FOR OTHERS..." until all players with the same biggest amount of Victory Points click on the button "Continue": 
+- The game goes to the next Phase (Market Phase), but only players with the same biggest amount of Victory Points will play in the next Phase
+- After the next Market Phase will be one more additional Turn for players with the same biggest amount of Victory Points, and the next Turn will be considered as the last Turn.
 
 ### Phase 5: Market Phase
-Players may purchase Action Card.
-- Players may choose to spend Production + Electricity + Recycling (1 unit of each) to buy a random Action Card from the deck.
-- The Turn ends after the Market Phase, and next Turn starts from Phase 1.
-- If it was the final Turn, game ends after Conflict Resolution Phase, and players count their Victory Points to determine the ultimate winner!
-- If two or more players have the same amount of Victory Points, they play one more Turn.
+Note: Skip this Phase if it's the phase of the last turn, until two or more players with the same biggest amount of Victory Points in the previous phase.
+
+In the Market Phase, players can buy random Action Cards from Action Cards Deck for resources. Price for one Action Card is: 1 Product + 1 Recycling + 1 Electricity
+
+- UI shows a Market board with the information about the price of an Action Card to a player
+- There are 2 buttons on a board: "Buy" and "Skip"
+- If a player hasn't enough resources to buy an Action Card, the button "Buy" is unavailable for a player
+
+Player Action: If a player click on the button "Skip", the player's button "Skip" changes to "WAITING FOR OTHERS..." until all players finish the Market Phase. After it, the game goes to the next Turn.
+
+Player Action:  If a player clicks on the button "Buy":
+- UI shows to a player a board with the random Action Card from Action Cards Deck. This Action Card is going to inventory of a player.
+
+Player Action: Player can click on the button "Get It!", and it will return a player to the Market Board. 
+- If a player still has enough resources to buy one more Action Card, then the button "Buy" is available
+- If a player doesn't have enough resources to buy one more Action Card, then the button "Buy" is unavailable, and only "Skip" button is available
+
+After all players clicked on the button "Skip", the game goes to the next Turn:
+- Turn counter increments by +1, and the game loops back to Phase 1: Event Stage

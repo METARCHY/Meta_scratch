@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
 
 // Define the shape of the game state
 interface Player {
@@ -21,8 +21,8 @@ interface Lobby {
 interface GameState {
     resources: {
         gato: number;
-        product: number; energy: number; recycle: number;
-        power: number; art: number; knowledge: number; glory: number;
+        product: number; electricity: number; recycling: number;
+        power: number; art: number; knowledge: number; fame: number;
     };
     player: Player;
     lobby: Lobby;
@@ -41,8 +41,8 @@ interface GameState {
 const initialState: GameState = {
     resources: {
         gato: 1000,
-        product: 1, energy: 1, recycle: 1,
-        power: 0, art: 0, knowledge: 0, glory: 0
+        product: 1, electricity: 1, recycling: 1,
+        power: 0, art: 0, knowledge: 0, fame: 0
     },
     player: {
         name: "",
@@ -78,32 +78,32 @@ export function GameStateProvider({ children }: { children: ReactNode }) {
 
     // updateResource: adds `delta` to the resource (positive or negative).
     // The resource can never go below 0.
-    const updateResource = (resource: string, delta: number) => {
+    const updateResource = useCallback((resource: string, delta: number) => {
         setResources(prev => ({
             ...prev,
             [resource]: Math.max(0, (prev[resource as keyof typeof prev] || 0) + delta),
         }));
-    };
+    }, []);
 
-    const setPlayerName = (name: string) => {
+    const setPlayerName = useCallback((name: string) => {
         setPlayer(prev => ({ ...prev, name }));
-    };
+    }, []);
 
-    const setPlayerAddress = (address: string) => {
+    const setPlayerAddress = useCallback((address: string) => {
         setPlayer(prev => ({ ...prev, address }));
-    };
+    }, []);
 
-    const setCitizenId = (id: string) => {
+    const setCitizenId = useCallback((id: string) => {
         setPlayer(prev => ({ ...prev, citizenId: id }));
-    };
+    }, []);
 
-    const setPlayerAvatar = (avatar: string) => {
+    const setPlayerAvatar = useCallback((avatar: string) => {
         setPlayer(prev => ({ ...prev, avatar }));
-    };
+    }, []);
 
-    const setPlayerUpdate = (newPlayer: Player) => {
+    const setPlayerUpdate = useCallback((newPlayer: Player) => {
         setPlayer(newPlayer);
-    };
+    }, []);
 
     const [games, setGames] = useState<any[]>([]);
 
@@ -126,7 +126,7 @@ export function GameStateProvider({ children }: { children: ReactNode }) {
         return () => clearInterval(interval);
     }, []);
 
-    const createRoom = async (name: string, maxPlayers: number, isPrivate: boolean, id?: string, isTest?: boolean) => {
+    const createRoom = useCallback(async (name: string, maxPlayers: number, isPrivate: boolean, id?: string, isTest?: boolean) => {
         try {
             const res = await fetch('/api/games', {
                 method: 'POST',
@@ -148,9 +148,9 @@ export function GameStateProvider({ children }: { children: ReactNode }) {
         } catch (error) {
             console.error("Failed to create room", error);
         }
-    };
+    }, [player]);
 
-    const joinRoom = async (gameId: string, joinPlayer: Player) => {
+    const joinRoom = useCallback(async (gameId: string, joinPlayer: Player) => {
         try {
             const res = await fetch(`/api/games/${gameId}`, {
                 method: 'PUT',
@@ -171,18 +171,24 @@ export function GameStateProvider({ children }: { children: ReactNode }) {
         } catch (error) {
             console.error("Failed to join room", error);
         }
-    };
+    }, []);
 
-    const leaveRoom = () => {
+    const leaveRoom = useCallback(() => {
         setLobby(initialState.lobby);
-    };
+    }, []);
+
+    const contextValue = React.useMemo(() => ({
+        resources, player, lobby, games,
+        updateResource, setPlayerName, setPlayerAddress, setCitizenId, setPlayerAvatar, setPlayer: setPlayerUpdate,
+        createRoom, joinRoom, leaveRoom
+    }), [
+        resources, player, lobby, games,
+        updateResource, setPlayerName, setPlayerAddress, setCitizenId, setPlayerAvatar, setPlayerUpdate,
+        createRoom, joinRoom, leaveRoom
+    ]);
 
     return (
-        <GameStateContext.Provider value={{
-            resources, player, lobby, games,
-            updateResource, setPlayerName, setPlayerAddress, setCitizenId, setPlayerAvatar, setPlayer: setPlayerUpdate,
-            createRoom, joinRoom, leaveRoom
-        }}>
+        <GameStateContext.Provider value={contextValue}>
             {children}
         </GameStateContext.Provider>
     );

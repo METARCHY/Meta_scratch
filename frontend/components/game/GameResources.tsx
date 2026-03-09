@@ -1,20 +1,21 @@
 import Image from 'next/image';
 import { useTooltip } from '@/context/TooltipContext';
+import { RESOURCE_ICONS } from '@/data/assetManifest';
 
 interface GameResourcesProps {
     resources: {
         power: number;
         knowledge: number;
         art: number;
-        glory: number;
+        fame: number;
         product: number;
-        energy: number;
-        recycle: number;
+        electricity: number;
+        recycling: number;
     };
-    vp: number;
+    victoryPoints: number;
 }
 
-export default function GameResources({ resources, vp }: GameResourcesProps) {
+export default function GameResources({ resources, victoryPoints }: GameResourcesProps) {
     const { showTooltip, hideTooltip } = useTooltip();
     if (!resources) return null;
 
@@ -28,7 +29,7 @@ export default function GameResources({ resources, vp }: GameResourcesProps) {
         >
             {/* Icon */}
             <div className="relative w-full h-full">
-                <Image src={iconPath} layout="fill" objectFit="contain" alt={label} />
+                <Image src={iconPath} fill className="object-contain" alt={label} />
             </div>
 
             {/* Count - positioned to the right of the icon */}
@@ -70,31 +71,31 @@ export default function GameResources({ resources, vp }: GameResourcesProps) {
                     </defs>
                 </svg>
 
-                {/* Resource Slots - Positioned based on user provided coords */}
+                {/* Resource Slots */}
 
-                {/* VP (White) x=35.15 y=3.5 - NOW STAR/FAME */}
-                {renderSlot(35.15, 3.5, "/intangibles/resource_VP.png", vp, "VP")}
+                {/* victoryPoints (White) x=35.15 y=3.5 */}
+                {renderSlot(35.15, 3.5, "/intangibles/resource_VP.png", victoryPoints, "VP")}
 
-                {/* Glory (Yellow) x=118.15 y=3.5 - NOW VICTORY */}
-                {renderSlot(118.15, 3.5, "/intangibles/resource_Glory.png", resources.glory, "Glory")}
+                {/* Fame (Yellow) x=118.15 y=3.5 */}
+                {renderSlot(118.15, 3.5, RESOURCE_ICONS['fame'], resources.fame, "Fame")}
 
                 {/* Power (Orange) x=189.15 y=4.5 */}
-                {renderSlot(189.15, 4.5, "/intangibles/resource_power.png", resources.power, "Power")}
+                {renderSlot(189.15, 4.5, RESOURCE_ICONS['power'], resources.power, "Power")}
 
                 {/* Art (Magenta) x=260.15 y=4.5 */}
-                {renderSlot(260.15, 4.5, "/intangibles/resource_Art.png", resources.art, "Art")}
+                {renderSlot(260.15, 4.5, RESOURCE_ICONS['art'], resources.art, "Art")}
 
-                {/* Wisdom (Light Blue) x=331.15 y=4.5 */}
-                {renderSlot(331.15, 4.5, "/intangibles/resource_wisdom.png", resources.knowledge, "Wisdom")}
+                {/* Knowledge (Light Blue) x=331.15 y=4.5 */}
+                {renderSlot(331.15, 4.5, RESOURCE_ICONS['knowledge'], resources.knowledge, "Knowledge")}
 
                 {/* Product (Red) x=404.15 y=3.5 */}
-                {renderSlot(404.15, 3.5, "/resources/resource_product.png", resources.product, "Product")}
+                {renderSlot(404.15, 3.5, RESOURCE_ICONS['product'], resources.product, "Product")}
 
-                {/* Energy (Blue) x=475.15 y=3.5 */}
-                {renderSlot(475.15, 3.5, "/resources/resource_energy.png", resources.energy, "Energy")}
+                {/* Electricity (Blue) x=475.15 y=3.5 */}
+                {renderSlot(475.15, 3.5, RESOURCE_ICONS['electricity'], resources.electricity, "Electricity")}
 
-                {/* Recycle (Green) x=545.15 y=3.5 */}
-                {renderSlot(545.15, 3.5, "/resources/resource_Recycle.png", resources.recycle, "Recycle")}
+                {/* Recycling (Green) x=545.15 y=3.5 */}
+                {renderSlot(545.15, 3.5, RESOURCE_ICONS['recycling'], resources.recycling, "Recycling")}
 
             </div>
         </div>

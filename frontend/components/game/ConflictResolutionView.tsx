@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Image from 'next/image';
 
 // Types
-import { ConflictResult, resolveConflictLogic } from '@/lib/game/ConflictResolver';
+import { ConflictResult } from '@/lib/modules/core/types';
+import { resolveConflictLogic } from '@/lib/modules/conflict/conflictResolver';
 
 interface ConflictResolutionViewProps {
     conflict: {
@@ -35,49 +36,55 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
 
     // Calculated Result
     const [result, setResult] = useState<ConflictResult | null>(null);
+    const [survivorIds, setSurvivorIds] = useState<string[]>([]);
+    const [isRoundTwo, setIsRoundTwo] = useState(false);
+
+    const localPlayerId = player.citizenId || player.address || 'p1';
 
     // 1. Initialize Opponent Choices (Random for now)
     useEffect(() => {
-        if (conflict.opponents.length === 0 || isResolved) {
-            // Peaceful Mining or already resolved: auto-resolve and show outcome
-            const res = resolveConflict(playerChoice);
-            setResult(res);
+        if (isResolved) {
             setStep('outcome_rsp');
             return;
         }
 
+        const initialSurvivors = [localPlayerId, ...conflict.opponents.map(o => o.actorId)];
+        setSurvivorIds(initialSurvivors);
+
         const choices: { [id: string]: string } = {};
         conflict.opponents.forEach(opp => {
-            // We need to use the actual 'type' they placed on the board!
             choices[opp.actorId] = opp.type || 'rock';
         });
         setOpponentChoices(choices);
         setStep('intro');
         setResult(null);
-    }, [conflict.locId, isResolved, conflict.opponents]);
+        setIsRoundTwo(false);
+    }, [conflict.locId, isResolved, conflict.opponents, localPlayerId]);
 
     // 2. Logic: Resolve the Conflict
     const resolveConflict = (pChoice: string, applyBids: boolean = true): ConflictResult => {
+        // Filter conflict for current survivors
+        const currentConflictInput = {
+            ...conflict,
+            opponents: conflict.opponents.filter(o => survivorIds.includes(o.actorId))
+        };
+
         return resolveConflictLogic(
+            localPlayerId,
             pChoice,
             applyBids,
-            conflict,
+            currentConflictInput,
             opponentChoices,
-            player
+            { id: localPlayerId, name: player.name || 'Player' }
         );
     };
 
+
     // Handler: "Reveal" Button Click
     const handleReveal = () => {
-        // If we already have a usedBid from a previous fail/draw, we know bids are burned.
-        // Otherwise, it's the first time, so we apply bids.
-        const areBidsActive = !result?.usedBid && !result?.restart;
+        // Bids only active on Round 1
+        const areBidsActive = !isRoundTwo;
         const res = resolveConflict(playerChoice, areBidsActive);
-
-        // Preserve the usedBid state if it was already burned by an Energy bid
-        if (result?.usedBid && !res.usedBid) {
-            res.usedBid = result.usedBid;
-        }
 
         setResult(res);
         setStep('reveal');
@@ -86,28 +93,30 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
         setTimeout(() => setStep('outcome_rsp'), 2000);
     };
 
-    const localPlayerId = player.citizenId || player.address || 'p1';
-
-    // Handler: Trigger a Re-Roll (from Energy Bid or Politician Draw)
+    // Handler: Trigger a Re-Roll (from Tied Winners, Draw, or Electricity Bid)
     const handleReRollRequest = () => {
-        // CRITICAL: Call onResolve FIRST to clear bets in the parent (stickyConflicts).
-        // result.restart=true so page.tsx will clear bets and return early (won't close the modal).
-        if (result) {
-            onResolve(result);
-        }
+        if (!result) return;
 
-        // Reset the player's choice so they have to pick again
-        setPlayerChoice('');
+        // Update survivors for next iteration
+        const newSurvivors = result.survivorIds;
+        setSurvivorIds(newSurvivors);
+        setIsRoundTwo(true);
+
+        // Reset the player's choice ONLY if they are still in the conflict
+        if (newSurvivors.includes(localPlayerId)) {
+            setPlayerChoice('');
+        }
 
         const newOppChoices: { [id: string]: string } = {};
         conflict.opponents.forEach(opp => {
-            const roll = Math.random();
-            newOppChoices[opp.actorId] = roll < 0.33 ? 'rock' : roll < 0.66 ? 'paper' : 'scissors';
+            if (newSurvivors.includes(opp.actorId)) {
+                const roll = Math.random();
+                newOppChoices[opp.actorId] = roll < 0.33 ? 'rock' : roll < 0.66 ? 'paper' : 'scissors';
+            }
         });
         setOpponentChoices(newOppChoices);
 
-        // Reset the view back to the intro phase so the player can select a new token
-        setResult(null); // Clear result so bids won't show on re-render
+        setResult(null);
         setStep('intro');
     };
 
@@ -119,7 +128,8 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
         // Energy/Restart logic (Energy bid or Politician Draw)
         if (result.restart) {
             // Need to show "outcome_bid" first if it was an energy bid to explain the restart
-            if (result.usedBid === 'energy' && step !== 'outcome_bid' && !result.isDraw) {
+            const hasEnergyBid = result.successfulBids?.some(b => b.bid === 'electricity');
+            if (hasEnergyBid && step !== 'outcome_bid' && !result.isDraw) {
                 setStep('outcome_bid');
                 return;
             }
@@ -130,7 +140,8 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
         }
 
         // Product Bid logic (Win)
-        if (result.usedBid === 'product' && result.winnerId === localPlayerId) {
+        const hasProductBid = result.successfulBids?.some(b => b.bid === 'product' && b.actorId === localPlayerId);
+        if (hasProductBid && result.winnerId === localPlayerId) {
             if (step !== 'outcome_bid') {
                 // Add the log dynamically right before showing
                 const updatedLogs = [...result.logs, "Product Bid: DOUBLE PRIZE!"];
@@ -149,11 +160,19 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
 
     // Helper: Determine grayscale
     const isActorLoser = (actorId: string) => {
-        if (step === 'intro' || step === 'reveal') return false;
-        if (!result) return false;
-        // If draw, no one is loser yet (unless specific logic).
-        if (result.isDraw) return false;
-        return result.winnerId !== actorId;
+        if (step === 'intro' || step === 'reveal') {
+            return !survivorIds.includes(actorId); // If they didn't survive previous round
+        }
+        if (!result) return !survivorIds.includes(actorId);
+
+        // In outcome view
+        if (result.isDraw || result.shareRewards) return false;
+        if (result.winnerId === actorId) return false;
+
+        // If it's a tied winner scenario, they are NOT losers
+        if (result.restart && result.survivorIds.includes(actorId)) return false;
+
+        return true;
     };
 
     return (
@@ -204,7 +223,7 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
                     {/* Actor Body */}
                     <div className="relative w-full h-[120%]">
                         <Image
-                            src={ACTOR_IMAGES[conflict.playerActor.actorType.toLowerCase()] || ACTOR_IMAGES['politician']}
+                            src={ACTOR_IMAGES[conflict.playerActor?.actorType?.toLowerCase()] || ACTOR_IMAGES['politician']}
                             fill
                             className="object-contain object-bottom drop-shadow-[0_0_30px_rgba(0,0,0,0.8)]"
                             alt="Player Actor"
@@ -213,7 +232,7 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
 
                     {/* Tag */}
                     <div className="absolute bottom-8 bg-black/80 px-6 py-2 rounded-full border border-[#d4af37] text-[#d4af37] font-bold text-lg uppercase tracking-widest z-20">
-                        YOU
+                        {survivorIds.includes(localPlayerId) ? 'YOU' : 'EXITED'}
                     </div>
                 </div>
 
@@ -275,7 +294,7 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
 
                             {/* Tag */}
                             <div className="absolute bottom-8 bg-black/80 px-4 py-1 rounded-full border border-white/30 text-white font-bold tracking-wider z-20">
-                                {opp.name}
+                                {survivorIds.includes(opp.actorId) ? opp.name : `${opp.name} (EXITED)`}
                             </div>
                         </div>
                     ))}
@@ -288,7 +307,7 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
                     {!playerChoice ? (
                         <div className="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
                             <p className="text-white font-rajdhani text-xl uppercase tracking-widest bg-black/50 px-6 py-2 rounded-full border border-white/10 backdrop-blur-md">
-                                Select New Argument
+                                {isRoundTwo ? "Tie-Breaker: Select New Argument" : "Select Argument"}
                             </p>
                             <div className="flex gap-6 bg-black/80 p-4 rounded-2xl border border-white/10 backdrop-blur-md shadow-2xl">
                                 {['rock', 'paper', 'scissors'].map(token => (
@@ -375,7 +394,7 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
                                                     <div className="relative w-16 h-16">
                                                         <Image
                                                             src={(() => {
-                                                                const actorType = conflict.playerActor.actorType?.toLowerCase();
+                                                                const actorType = conflict.playerActor?.actorType?.toLowerCase();
                                                                 if (actorType === 'politician') return RESOURCE_ICONS['power'];
                                                                 if (actorType === 'scientist') return RESOURCE_ICONS['knowledge'];
                                                                 if (actorType === 'artist') return RESOURCE_ICONS['art'];
@@ -386,9 +405,9 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
                                                     </div>
                                                     <div className="absolute -bottom-2 right-0 bg-[#d4af37] text-black font-black text-xl px-2 py-0.5 rounded-md border-2 border-black shadow-lg shadow-[#d4af37]/50">
                                                         +{(() => {
-                                                            const isRobot = conflict.playerActor.actorType?.toLowerCase() === 'robot';
+                                                            const isRobot = conflict.playerActor?.actorType?.toLowerCase() === 'robot';
                                                             const baseReward = isRobot ? 3 : 1;
-                                                            return conflict.playerActor.bid === 'product' ? baseReward + 1 : baseReward;
+                                                            return conflict.playerActor?.bid === 'product' ? baseReward + 1 : baseReward;
                                                         })()}
                                                     </div>
                                                 </div>
@@ -402,7 +421,7 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
                                                     <div className="relative w-16 h-16">
                                                         <Image
                                                             src={(() => {
-                                                                const actorType = conflict.playerActor.actorType?.toLowerCase();
+                                                                const actorType = conflict.playerActor?.actorType?.toLowerCase();
                                                                 if (actorType === 'politician') return RESOURCE_ICONS['power'];
                                                                 if (actorType === 'scientist') return RESOURCE_ICONS['knowledge'];
                                                                 if (actorType === 'artist') return RESOURCE_ICONS['art'];
