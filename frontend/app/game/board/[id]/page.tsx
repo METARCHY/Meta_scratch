@@ -554,13 +554,22 @@ export default function GameBoardPage() {
     console.log("GameBoardPage Rendering, Phase:", phase, "Turn:", turn);
 
     // Phase 1: Events
-    const [currentEvent, setCurrentEvent] = useState(EVENTS[0]);
+    // Initial value is a placeholder; actual event is set by useEffect when phase === 1
+    const [currentEvent, setCurrentEvent] = useState<EventCardDefinition | null>(null);
     const [discardAmount, setDiscardAmount] = useState(0);
     const [eventResult, setEventResult] = useState<{ msg: string, win: boolean } | null>(null);
     const [eventTieBreakerActive, setEventTieBreakerActive] = useState<{ conflict: any } | null>(null);
 
     const handleEventTieBreakerResolve = (result: any) => {
         if (result.restart) return; // Modal handles rerolls internally
+
+        // Safety check: currentEvent should always be set at this point, but guard against null
+        if (!currentEvent) {
+            console.error("handleEventTieBreakerResolve called without currentEvent set");
+            setEventTieBreakerActive(null);
+            closeEvent();
+            return;
+        }
 
         if (result.winnerId === localPlayerId) {
             if (currentEvent.reward === 'action_card') {
@@ -829,12 +838,14 @@ export default function GameBoardPage() {
 
     // --- Effects ---
     useEffect(() => {
-        // Pick a random event for this turn
+        // Pick a random event for this turn (Phase 1 only)
         // NOTE: actionHand is NOT reset here — cards persist between turns.
         // Cards are only consumed when played in Phase 3.
-        const randomEvent = EVENTS[Math.floor(Math.random() * EVENTS.length)];
-        setCurrentEvent(randomEvent);
-    }, []);
+        if (phase === 1) {
+            const randomEvent = EVENTS[Math.floor(Math.random() * EVENTS.length)];
+            setCurrentEvent(randomEvent);
+        }
+    }, [phase, turn]);
 
 
     // --- Handlers ---
@@ -1710,7 +1721,7 @@ export default function GameBoardPage() {
 
                     {/* --- Phase 1: Event Modal --- */}
                     {
-                        phase === 1 && (
+                        phase === 1 && currentEvent && (
                             <div className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm pointer-events-auto">
                                 <div className="relative w-[600px] bg-[#0d0d12] border border-[#d4af37]/30 rounded-xl shadow-2xl p-6 flex flex-col items-center">
                                     <h2 className="text-xl font-bold text-[#d4af37] mb-2">{currentEvent.title}</h2>

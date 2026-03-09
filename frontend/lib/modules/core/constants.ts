@@ -58,15 +58,29 @@ export const EVENTS: EventCardDefinition[] = [
 ];
 
 // ─── Action Cards ─────────────────────────────────────────────────
+// Deck contains 15 cards total:
+// - 6 Block Location cards (1 copy each)
+// - 6 Relocation cards (6 copies)
+// - 3 Change Values cards (3 copies)
 export const ACTION_CARDS: ActionCardDefinition[] = [
+    // Block Location Cards (6 unique cards, 1 copy each)
     { id: 'under_construction', title: 'Under Construction', icon: '/actions/Under construction.png', type: 'turn off location', disables: 'square', desc: 'Disables The Square. No conflict or resources.', flavor: 'The foundation of progress often requires temporary silence.' },
     { id: 'charity', title: 'Charity Event', icon: '/actions/Charity Event.png', type: 'turn off location', disables: 'theatre', desc: 'Disables The Theatre. No conflict or resources.', flavor: 'Good intentions can be the best way to clear the room.' },
     { id: 'student_strikes', title: 'Student Strikes', icon: '/actions/Student strikes.png', type: 'turn off location', disables: 'university', desc: 'Disables University. No conflict or resources.', flavor: 'The next generation refuses to play their part today.' },
     { id: 'sabotage', title: 'Sabotage', icon: '/actions/Sabotage.png', type: 'turn off location', disables: 'factory', desc: 'Disables Factory. No conflict or resources.', flavor: 'A single loose bolt can halt the engine of empire.' },
     { id: 'blackout', title: 'Blackout', icon: '/actions/Blackout.png', type: 'turn off location', disables: 'power_plant', desc: 'Disables Power Plant. No conflict or resources.', flavor: 'Darkness is a canvas for those who work in the shadows.' },
     { id: 'eco_protest', title: 'Ecological Protest', icon: '/actions/Ecological Protest.png', type: 'turn off location', disables: 'dump', desc: 'Disables Dump. No conflict or resources.', flavor: "Mother Nature has its own way of saying 'enough'." },
-    { id: 'relocation', title: 'Relocation', icon: '/actions/Teleportation.png', type: 'action', desc: 'Relocate an actor along with its RSP and bet.', flavor: 'Space is just a suggestion for the well-connected.' },
-    { id: 'change_values', title: 'Change of Values', icon: '/actions/Change values.png', type: 'action', desc: 'Exchange an intangible resource with another player.', flavor: 'In the new era, even principles have a market price.' },
+    // Relocation Cards (6 copies)
+    { id: 'relocation_1', title: 'Relocation', icon: '/actions/Teleportation.png', type: 'action', desc: 'Relocate an actor along with its RSP and bet.', flavor: 'Space is just a suggestion for the well-connected.' },
+    { id: 'relocation_2', title: 'Relocation', icon: '/actions/Teleportation.png', type: 'action', desc: 'Relocate an actor along with its RSP and bet.', flavor: 'Space is just a suggestion for the well-connected.' },
+    { id: 'relocation_3', title: 'Relocation', icon: '/actions/Teleportation.png', type: 'action', desc: 'Relocate an actor along with its RSP and bet.', flavor: 'Space is just a suggestion for the well-connected.' },
+    { id: 'relocation_4', title: 'Relocation', icon: '/actions/Teleportation.png', type: 'action', desc: 'Relocate an actor along with its RSP and bet.', flavor: 'Space is just a suggestion for the well-connected.' },
+    { id: 'relocation_5', title: 'Relocation', icon: '/actions/Teleportation.png', type: 'action', desc: 'Relocate an actor along with its RSP and bet.', flavor: 'Space is just a suggestion for the well-connected.' },
+    { id: 'relocation_6', title: 'Relocation', icon: '/actions/Teleportation.png', type: 'action', desc: 'Relocate an actor along with its RSP and bet.', flavor: 'Space is just a suggestion for the well-connected.' },
+    // Change Values Cards (3 copies)
+    { id: 'change_values_1', title: 'Change of Values', icon: '/actions/Change values.png', type: 'action', desc: 'Exchange an intangible resource with another player.', flavor: 'In the new era, even principles have a market price.' },
+    { id: 'change_values_2', title: 'Change of Values', icon: '/actions/Change values.png', type: 'action', desc: 'Exchange an intangible resource with another player.', flavor: 'In the new era, even principles have a market price.' },
+    { id: 'change_values_3', title: 'Change of Values', icon: '/actions/Change values.png', type: 'action', desc: 'Exchange an intangible resource with another player.', flavor: 'In the new era, even principles have a market price.' },
 ];
 
 // ─── Game Configuration ───────────────────────────────────────────

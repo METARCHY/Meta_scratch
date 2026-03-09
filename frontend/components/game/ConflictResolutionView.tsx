@@ -129,14 +129,18 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
         if (result.restart) {
             // Need to show "outcome_bid" first if it was an energy bid to explain the restart
             const hasEnergyBid = result.successfulBids?.some(b => b.bid === 'electricity');
-            if (hasEnergyBid && step !== 'outcome_bid' && !result.isDraw) {
+            if (hasEnergyBid && step === 'outcome_rsp') {
+                // First click: show the bid outcome explanation
                 setStep('outcome_bid');
                 return;
             }
-            // If it's a Politician draw, we just transition to 'outcome_rsp' and rely on the UI to show the Re-Roll buttons.
+            // After showing bid outcome (or if it's a Politician draw), transition to 'outcome_rsp' to show Re-Roll buttons
             if (step !== 'outcome_rsp') {
                 setStep('outcome_rsp');
+                return;
             }
+            // If already on outcome_rsp, let user click the Re-Roll button (don't call onResolve)
+            return;
         }
 
         // Product Bid logic (Win)
