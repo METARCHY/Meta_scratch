@@ -10,7 +10,7 @@ import type { PlacedActor, ActorType, ArgumentType, BetType } from '@/lib/module
 import { ALLOWED_MOVES } from '@/lib/modules/core/constants';
 
 const RPS_CHOICES: ArgumentType[] = ['rock', 'paper', 'scissors'];
-const BET_CHOICES: (BetType | undefined)[] = ['product', 'energy', 'recycle', undefined];
+const BET_CHOICES: (BetType | undefined)[] = ['product', 'electricity', 'recycling', undefined];
 
 /**
  * Randomly picks an RPS argument for a bot.
