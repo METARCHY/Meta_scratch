@@ -4,7 +4,9 @@ description: how to connect and upload the project to GitHub
 
 # Uploading Metarchy to GitHub
 
-Follow these steps to connect your local project to a GitHub repository.
+**IMPORTANT:** Only push to GitHub when explicitly requested by the user. Do not push automatically after commits.
+
+Follow these steps to connect and upload your local project to a GitHub repository.
 
 ## 1. Initialize Git locally
 If you haven't initialized git in the project root yet:
@@ -36,15 +38,17 @@ git remote add origin PASTE_YOUR_URL_HERE
 git branch -M main
 ```
 
-## 5. Push to GitHub
-Finally, upload your code:
+## 5. Push to GitHub (Only When Requested)
+**Wait for user to explicitly request a push.** When the user asks to push/upload to GitHub:
 
 ```bash
 git push -u origin main
 ```
 
----
-**Tip**: If you ever need to update the project later, just run:
+For subsequent updates, when the user requests to push:
 1. `git add .`
 2. `git commit -m "your message"`
 3. `git push`
+
+---
+**Rule:** Never push to GitHub without explicit user request. Commits to local repository are fine, but pushing to remote requires user approval.
