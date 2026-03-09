@@ -139,6 +139,11 @@ export function resolveConflictLogic(
         survivorIds = survivorIds.filter(id => !dummyIds.includes(id));
     }
 
+    let finalWinnerId: string | null = null;
+    let finalRestart = false;
+    let finalEvictAll = false;
+    let finalShareRewards = false;
+
     // --- Bid Processing (Only on Round 1) ---
     // Note: Caller must ensure applyBids is only true for the first iteration.
     if (applyBids) {
