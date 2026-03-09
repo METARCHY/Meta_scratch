@@ -16,8 +16,8 @@ const BUY_COST = { product: 1, energy: 1, recycle: 1 };
 export function canBuyActionCard(resources: PlayerResources): boolean {
     return (
         resources.product >= BUY_COST.product &&
-        resources.energy >= BUY_COST.energy &&
-        resources.recycle >= BUY_COST.recycle
+        resources.electricity >= BUY_COST.energy &&
+        resources.recycling >= BUY_COST.recycle
     );
 }
 
@@ -48,7 +48,7 @@ export function deductBuyCost(resources: PlayerResources): PlayerResources {
     return {
         ...resources,
         product: resources.product - BUY_COST.product,
-        energy: resources.energy - BUY_COST.energy,
-        recycle: resources.recycle - BUY_COST.recycle,
+        electricity: resources.electricity - BUY_COST.energy,
+        recycling: resources.recycling - BUY_COST.recycle,
     };
 }
