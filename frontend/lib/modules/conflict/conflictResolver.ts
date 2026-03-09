@@ -99,6 +99,7 @@ export function resolveConflictLogic(
     let winnerIds: string[] = [];
     let loserIds: string[] = [];
     let isDraw = false;
+    let survivorIds: string[] = [];
 
     // --- Core RPS Distribution Logic for 3+ Players ---
     // Note: Dummy always loses to Rock/Paper/Scissors, and draws only against another Dummy
