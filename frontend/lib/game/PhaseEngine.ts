@@ -30,7 +30,10 @@ export const handleNextPhase = (
 
     // Calculate max turns based on player count
     const maxTurns = (() => {
-        if (isTest) return 3;
+        if (isTest) {
+            addLog(`[DEBUG] Test mode detected - maxTurns = 3`);
+            return 3;
+        }
         const playerCount = dynamicPlayers.length;
         if (playerCount === 2 || playerCount === 3) return 5;
         if (playerCount === 4) return 6;
@@ -52,6 +55,7 @@ export const handleNextPhase = (
     };
 
     // --- WIN CONDITIONS (Checked at end of Phase 4 / start of Phase 5) ---
+    // CRITICAL: This MUST trigger before any phase advancement
     if (phase === 4 && turn >= maxTurns) {
         const playerVP = calculateVP(player.resources || {});
         const opponentVPs = dynamicPlayers.map(p => ({ id: p.id, vp: calculateVP(p.resources || {}) }));
@@ -59,12 +63,16 @@ export const handleNextPhase = (
         const topVP = Math.max(...allVPs.map(v => v.vp));
 
         const winners = allVPs.filter(v => v.vp === topVP);
+        addLog(`[DEBUG] Turn ${turn}, MaxTurns ${maxTurns}, isTest ${isTest}, TopVP ${topVP}, Winners ${winners.length}`);
+
         if (winners.length === 1) {
             addLog(`--- GAME FINISHED: ${winners[0].id === (player.citizenId || 'p1') ? 'YOU' : 'OPPONENT'} WINS WITH ${topVP} VP ---`);
             return { newPhase, newTurn, isGameOver: true };
         } else {
             addLog("--- TIE DETECTED AT FINAL TURN: STARTING TIE-BREAKER TURN ---");
-            // Reset for one extra turn (handled by turn transition below)
+            // For tie-breaker: advance to Phase 5 (Market) for tied players only, then one more turn
+            // BUT we need to track that this is a tie-breaker turn
+            // For now, let it continue to Phase 5, but next turn WILL end the game
         }
     }
 

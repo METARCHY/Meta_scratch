@@ -101,34 +101,42 @@ export function resolveConflictLogic(
     let isDraw = false;
 
     // --- Core RPS Distribution Logic for 3+ Players ---
+    // Note: Dummy always loses to Rock/Paper/Scissors, and draws only against another Dummy
+    const dummyIds = participants.filter(p => p.choice === 'dummy').map(p => p.id);
+
     if (choicesValues.length === 0) {
-        isDraw = true; // All dummies? (Shouldn't happen with current UI)
-    } else if ((hasRock && hasPaper && hasScissors) || (!hasRock && !hasPaper && !hasScissors)) {
-        // Draw: Rock, Paper, and Scissors all present OR all same (already filtered for 0)
+        // ALL players played Dummy - this is a true draw (Dummy vs Dummy)
         isDraw = true;
+        survivorIds = participants.map(p => p.id); // Everyone stays for re-roll
+    } else if ((hasRock && hasPaper && hasScissors) || (!hasRock && !hasPaper && !hasScissors)) {
+        // Draw: Rock, Paper, and Scissors all present OR all same (e.g., all Rock)
+        isDraw = true;
+        survivorIds = participants.map(p => p.id);
     } else if (hasRock && hasPaper && !hasScissors) {
         winnerIds = participants.filter(p => p.choice === 'paper').map(p => p.id);
         loserIds = participants.filter(p => p.choice === 'rock').map(p => p.id);
+        survivorIds = winnerIds;
     } else if (hasPaper && hasScissors && !hasRock) {
         winnerIds = participants.filter(p => p.choice === 'scissors').map(p => p.id);
         loserIds = participants.filter(p => p.choice === 'paper').map(p => p.id);
+        survivorIds = winnerIds;
     } else if (hasScissors && hasRock && !hasPaper) {
         winnerIds = participants.filter(p => p.choice === 'rock').map(p => p.id);
         loserIds = participants.filter(p => p.choice === 'scissors').map(p => p.id);
+        survivorIds = winnerIds;
     } else {
-        // One type present (e.g. all Rock)
+        // One type present (e.g. all Rock) - this is a draw
         isDraw = true;
+        survivorIds = participants.map(p => p.id);
     }
 
-    // Include dummies as losers
-    const dummyIds = participants.filter(p => p.choice === 'dummy').map(p => p.id);
-    loserIds = winnerIds.length > 0 ? Array.from(new Set([...loserIds, ...dummyIds])) : loserIds;
-
-    let finalWinnerId: string | null = null;
-    let finalRestart = false;
-    let finalEvictAll = false;
-    let finalShareRewards = false;
-    let survivorIds: string[] = isDraw ? participants.map(p => p.id) : winnerIds;
+    // CRITICAL: Dummy ALWAYS loses (unless ALL played Dummy, handled above)
+    // Add dummies to losers if there are any non-dummy choices
+    if (choicesValues.length > 0 && dummyIds.length > 0) {
+        loserIds = Array.from(new Set([...loserIds, ...dummyIds]));
+        // Dummies are NOT survivors - they exit immediately
+        survivorIds = survivorIds.filter(id => !dummyIds.includes(id));
+    }
 
     // --- Bid Processing (Only on Round 1) ---
     // Note: Caller must ensure applyBids is only true for the first iteration.
