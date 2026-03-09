@@ -1,6 +1,15 @@
 # Metarchy
 
-Metarchy is a blockchain-based NFT strategy game where players compete for dominance in a dystopian neural network environment.
+- Metarchy is a turn-based strategy game with microeconomics, predicting opponents' actions, and betting on the outcome of events.
+- It uses blockchain as a source of proof that data has not been intercepted or retroactively altered.
+- Metarchy is ideal for online human competitions, as it features a mechanic that resists AI substitution: even if the opponent is an AI-agent, a human-player has exactly the same chance to win, lose, or draw against an AI-player as against a human-player.
+- The game is set in the near future, where robots do the heavy lifting, and super-advanced AI has solved all fundamental problems.
+- Knowledge, Art, and Power are the most important values ​​for people, and because of these values conflicts arise between people.
+- Fortunately, in our near future, all conflicts are resolved with Rock-Paper-Scissors!
+- Metaarchy teaches people that the world is not dual. Besides "Zero" and "One," there is also "Neither Zero nor One."
+- Metaarchy shifts our perspective from Dualism to Three-alism. In Metaarchy, there are not Duels, but Three-els!
+
+Let's dive into the world of Metaarchy and see: can Rock, Paper, and Scissors reach a consensus?
 
 ## Features
 
