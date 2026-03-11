@@ -29,8 +29,6 @@ Read these files to understand the project. They are the canonical references:
 | **UI System** | `docs/UI_SYSTEM.md` | Design system, components, screens, asset pipeline |
 | **Roadmap** | `docs/ROADMAP.md` | Development phases, what's done, what's needed for MVP |
 | **Original Rules** | `docs/metarchy-rules.md` | Full rules (English, original source) |
-| **MVP Rules** | `docs/Metarchy-MVP-rules.md` | Simplified rules for MVP scope |
-| **MVP Flow** | `docs/flow_MVP.md` | Step-by-step 2-player game flow with encryption spec |
 
 ---
 
