@@ -12,8 +12,7 @@ A game consists of **N turns** determined by player count:
 |---|---|---|
 | 2 | 5 | `MAX_TURNS[2]` in `core/constants` |
 | 3 | 5 | `MAX_TURNS[3]` |
-| 4 | 8 | `MAX_TURNS[4]` |
-| 5 | 6 | `MAX_TURNS[5]` |
+| 4 | 6 | `MAX_TURNS[4]` (2 vs 2 expected) |
 | Test mode | 3 | `TEST_MAX_TURNS` |
 
 Each turn has 5 phases executed in strict order:
@@ -28,7 +27,7 @@ Phase 5: MARKET
 
 Phase advancement is handled by `advancePhase()` in `modules/phase/phaseEngine.ts`. The function is a pure state machine: `TurnState → PhaseAdvanceResult`.
 
-After Phase 5 of the last turn, `isGameOver = true`.
+After Phase 4 of the last turn, if players tie for Victory Points, an extra tie-breaker Turn is played (starting with Market Phase specifically for the tied players). Otherwise, `isGameOver = true`.
 
 ---
 
@@ -214,7 +213,7 @@ The player with the **min or max** of a specific value gets Fame:
 - **Political Repression** — least Power → Fame
 - **Educational Crisis** — least Knowledge → Fame
 - **Cultural Decline** — least Art → Fame
-- **Revolution** — most Power → Fame
+- **Revolution** — least total Values → Fame
 
 ### Discard Events (reward: Action Card)
 Players secretly discard resources. Whoever discards the most gets a random Action Card:
@@ -255,10 +254,10 @@ Phase 3 has 4 sequential sub-steps, each allowing a specific card type:
 
 | Step | Name | Allowed Cards |
 |---|---|---|
-| 1 | BIDDING | None (placeholder, reserved) |
-| 2 | STOPPING LOCATIONS | Location-blocking cards only (`type: 'turn off location'`) |
-| 3 | RELOCATION | Relocation/teleport cards only |
-| 4 | EXCHANGE | Change Values / exchange cards only |
+| 0 | SELECT CARDS | Players select cards to activate |
+| 1 | BLOCK LOCATIONS | Location-blocking cards only (`type: 'turn off location'`) |
+| 2 | RELOCATION | Relocation/teleport cards only |
+| 3 | CHANGE VALUES | Change Values / exchange cards only |
 
 **Implementation:** `getFilteredCards(hand, p3Step)` in `modules/actions/actionCardLogic.ts`.
 
@@ -307,7 +306,7 @@ Players can buy random Action Cards using resources.
 | Change of Values | Action | Exchange one Value with another player |
 
 Full deck in rules: 15 cards (6 block + 6 relocation + 3 change values).
-Current implementation need to be as in rules: 8 definitions (6 block + 1 relocation + 1 change values) — instances can be duplicated.
+Technical implementation: Uses 8 definitions (6 block + 1 relocation + 1 change values) that are duplicated to form the 15-card deck.
 
 ---
 
