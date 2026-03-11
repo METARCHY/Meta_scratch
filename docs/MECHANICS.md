@@ -86,7 +86,7 @@ Available arguments are tracked by `getAvailableArguments()` in `modules/distrib
 
 | Location | ID | Resource Type | Accepted Actors |
 |---|---|---|---|
-| City | `city` | glory | (special — not a standard conflict location) |
+| City | `city` | Fame | (special — not a standard conflict location) |
 | The Square | `square` | power (intangible) | Politician, Artist |
 | The Theatre | `theatre` | art (intangible) | Scientist, Artist |
 | University | `university` | knowledge (intangible) | Politician, Scientist |
@@ -105,7 +105,7 @@ Used to form Victory Points:
 - **Power** — produced by Politicians at Square/University
 - **Art** — produced by Artists at Theatre/Square
 - **Knowledge** — produced by Scientists at University/Theatre
-- **Glory** — earned via Events; acts as wild card for VP calculation
+- **Fame** — earned via Events; acts as wild card for VP calculation
 
 ### Resources (Material)
 Used for Bets and Market purchases:
@@ -116,10 +116,10 @@ Used for Bets and Market purchases:
 ### Initial Resources
 ```typescript
 // core/constants — DEFAULT_RESOURCES
-{ gato: 1000, product: 1, energy: 1, recycle: 1, power: 0, art: 0, knowledge: 0, glory: 0 }
+{ gato: 1000, product: 1, energy: 1, recycle: 1, power: 0, art: 0, knowledge: 0, fame: 0 }
 
 // Test mode — TEST_RESOURCES
-{ gato: 1000, product: 2, energy: 2, recycle: 2, power: 2, art: 2, knowledge: 2, glory: 2 }
+{ gato: 1000, product: 2, energy: 2, recycle: 2, power: 2, art: 2, knowledge: 2, fame: 2 }
 ```
 
 ---
@@ -156,12 +156,12 @@ When placing an Actor, a player MAY attach a Bet by spending 1 Resource:
 
 **Resolution Algorithm:**
 1. All participants reveal their Arguments
-2. Filter out `dummy` arguments (auto-lose)
+2. Don't filter out `dummy` arguments
 3. Count remaining argument types:
    - 1 type present → all who played it are tied (draw among same)
    - 2 types present → standard RPS determines winner type
    - 3 types present → global draw
-   - 0 non-dummy → global draw
+   - If two or more argument types are presented, and one of them is a Dummy, the Actor with the Dummy Argument is considered the loser.
 4. If exactly 1 winner → that player wins
 5. If multiple winners (same type) → draw among them
 
@@ -193,14 +193,14 @@ With successful Production bet: +1 to any reward.
 `calculateVictoryPoints()` in `modules/resources/resourceManager.ts`:
 
 ```
-VP = min(Power, Knowledge, Art) — after distributing Glory
+VP = min(Power, Knowledge, Art) — after distributing Fame
 ```
 
-**Glory distribution algorithm** (greedy):
-1. While Glory > 0:
+**Fame distribution algorithm** (greedy):
+1. While Fame > 0:
    - Find which of {Power, Knowledge, Art} is the lowest
    - Increment that value by 1
-   - Decrement Glory by 1
+   - Decrement Fame by 1
 2. Return `min(Power, Knowledge, Art)`
 
 ---
@@ -209,12 +209,12 @@ VP = min(Power, Knowledge, Art) — after distributing Glory
 
 Starting from Turn 2, a random Event Card is drawn. 7 events defined in `EVENTS` (`core/constants`):
 
-### Compare Events (reward: Glory)
-The player with the **min or max** of a specific value gets Glory:
-- **Political Repression** — least Power → Glory
-- **Educational Crisis** — least Knowledge → Glory
-- **Cultural Decline** — least Art → Glory
-- **Revolution** — most Power → Glory
+### Compare Events (reward: Fame)
+The player with the **min or max** of a specific value gets Fame:
+- **Political Repression** — least Power → Fame
+- **Educational Crisis** — least Knowledge → Fame
+- **Cultural Decline** — least Art → Fame
+- **Revolution** — most Power → Fame
 
 ### Discard Events (reward: Action Card)
 Players secretly discard resources. Whoever discards the most gets a random Action Card:
@@ -303,18 +303,18 @@ Players can buy random Action Cards using resources.
 | Sabotage | Block | Disables Factory |
 | Blackout | Block | Disables Energy Station |
 | Ecological Protest | Block | Disables Dump |
-| Relocation | Action | Move one actor to another valid location |
+| Relocation | Action | Move any one actor to another valid location |
 | Change of Values | Action | Exchange one Value with another player |
 
 Full deck in rules: 15 cards (6 block + 6 relocation + 3 change values).
-Current implementation: 8 definitions (6 block + 1 relocation + 1 change values) — instances can be duplicated.
+Current implementation need to be as in rules: 8 definitions (6 block + 1 relocation + 1 change values) — instances can be duplicated.
 
 ---
 
 ## 14. Bot AI
 
 Bot decision-making in `modules/bot/botAI.ts` (pure functions):
-- `pickRandomArgument()` — random from `[rock, paper, scissors]`
+- `pickRandomArgument()` — random from `[rock, paper, scissors, dummy]`
 - `pickRandomBet()` — random from `[product, energy, recycle, undefined]`
 - `pickRandomLocation(actorType)` — random valid location
 - `generateBotPlacements(botId, prefix)` — full 4-actor placement
