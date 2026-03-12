@@ -12,7 +12,7 @@ Accumulate the most **Victory Points (VP)** by the end of the final Turn.
 1 Victory Point = 1 Power + 1 Art + 1 Knowledge
 ```
 
-**Glory** is a wild-card Value that fills whichever of {Power, Art, Knowledge} you have the least of.
+**Fame** is a wild-card Value that fills whichever of {Power, Art, Knowledge} you have the least of.
 
 If players are tied in VP after the final Turn, they play one additional tie-breaker Turn.
 
@@ -105,7 +105,7 @@ When sending an Actor, you **may** attach a Bet by spending 1 Resource. Each Act
 - 👑 **Power** — created by Politicians
 - 🎨 **Art** — created by Artists
 - 📖 **Knowledge** — created by Scientists
-- ⭐ **Glory** — earned via Events (wild card, fills your lowest Value)
+- ⭐ **Fame** — earned via Events (wild card, fills your lowest Value)
 
 ### Resources (for Bets & Market)
 - ⚙️ **Production** — from Factory (also bets on Win)
@@ -118,13 +118,11 @@ When sending an Actor, you **may** attach a Bet by spending 1 Resource. Each Act
 
 ### Phase 1: Event (starts from Turn 2)
 
-A random **Event Card** is revealed. There are 7 possible events:
-
-**Compare Events** (reward: Glory):
-- **Political Repression** — player with the **least** Power gets Glory
-- **Educational Crisis** — player with the **least** Knowledge gets Glory
-- **Cultural Decline** — player with the **least** Art gets Glory
-- **Revolution** — player with the **most** Power gets Glory
+**Compare Events** (reward: Fame):
+- **Political Repression** — player with the **least** Power gets Fame
+- **Educational Crisis** — player with the **least** Knowledge gets Fame
+- **Cultural Decline** — player with the **least** Art gets Fame
+- **Revolution** — player with the **most** Power gets Fame
 
 **Discard Events** (reward: random Action Card):
 - **Help Poor Countries** — secretly discard Production; most discarded wins
@@ -223,10 +221,10 @@ Exchange one of your Values (Power, Knowledge, or Art) for one Value of another 
 
 | Event | Type | Condition | Reward |
 |---|---|---|---|
-| **Political Repression** | Compare | Least Power | Glory |
-| **Educational Crisis** | Compare | Least Knowledge | Glory |
-| **Cultural Decline** | Compare | Least Art | Glory |
-| **Revolution** | Compare | Most Power | Glory |
+| **Political Repression** | Compare | Least Power | Fame |
+| **Educational Crisis** | Compare | Least Knowledge | Fame |
+| **Cultural Decline** | Compare | Least Art | Fame |
+| **Revolution** | Compare | Most Power | Fame |
 | **Help Poor Countries** | Discard | Most Production discarded | Action Card |
 | **Earth Hour** | Discard | Most Electricity discarded | Action Card |
 | **Prevent Eco-Crisis** | Discard | Most Recycling discarded | Action Card |
@@ -237,7 +235,7 @@ Exchange one of your Values (Power, Knowledge, or Art) for one Value of another 
 
 At game end:
 
-1. **Distribute Glory:** Each Glory point is added to your lowest Value (Power, Art, or Knowledge), one at a time
+1. **Distribute Fame:** Each Fame point is added to your lowest Value (Power, Art, or Knowledge), one at a time
 2. **Calculate VP:** `VP = min(Power, Art, Knowledge)`
 3. **Winner:** Player with the most VP wins
 4. **Tie:** Play one additional Turn

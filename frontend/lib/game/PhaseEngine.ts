@@ -54,30 +54,28 @@ export const handleNextPhase = (
         return Math.min(pV, kV, aV);
     };
 
-    // --- WIN CONDITIONS (Checked at end of Phase 4 / start of Phase 5) ---
-    // CRITICAL: This MUST trigger before any phase advancement
+    // --- WIN CONDITIONS (Checked at end of Phase 4) ---
+    // CRITICAL: TRIGGER END GAME AT END OF TURN 5 PHASE 4
     if (phase === 4 && turn >= maxTurns) {
+        addLog(`--- TURN ${turn} CONCLUDED: CALCULATING FINAL RESULTS ---`);
         const playerVP = calculateVP(player.resources || {});
-        const opponentVPs = dynamicPlayers.map(p => ({ id: p.id, vp: calculateVP(p.resources || {}) }));
-        const allVPs = [{ id: player.citizenId || 'p1', vp: playerVP }, ...opponentVPs];
-        const topVP = Math.max(...allVPs.map(v => v.vp));
-
-        const winners = allVPs.filter(v => v.vp === topVP);
-        addLog(`[DEBUG] Turn ${turn}, MaxTurns ${maxTurns}, isTest ${isTest}, TopVP ${topVP}, Winners ${winners.length}`);
+        const opponentVPs = dynamicPlayers.map(p => ({ 
+            id: p.id, 
+            name: p.name, 
+            vp: calculateVP(p.resources || {}) 
+        }));
+        
+        const allResults = [{ id: player.citizenId || 'p1', name: player.name || '080', vp: playerVP }, ...opponentVPs];
+        const topVP = Math.max(...allResults.map(v => v.vp));
+        const winners = allResults.filter(v => v.vp === topVP);
 
         if (winners.length === 1) {
-            addLog(`--- GAME FINISHED: ${winners[0].id === (player.citizenId || 'p1') ? 'YOU' : 'OPPONENT'} WINS WITH ${topVP} VP ---`);
-            return { newPhase, newTurn, isGameOver: true };
+            addLog(`GAME FINISHED: ${winners[0].name.toUpperCase()} WINS WITH ${topVP} VP!`);
         } else {
-            if (turn === maxTurns) {
-                addLog("--- TIE DETECTED AT FINAL TURN: STARTING TIE-BREAKER TURN ---");
-                // For tie-breaker: advance to Phase 5 (Market) for tied players only, then one more turn
-                // Next turn WILL end the game
-            } else {
-                addLog("--- TIE STILL REMAINS AFTER TIE-BREAKER: GAME FINISHED AS A DRAW ---");
-                return { newPhase, newTurn, isGameOver: true };
-            }
+            addLog(`GAME FINISHED: IT'S A DRAW WITH ${topVP} VP!`);
         }
+        
+        return { newPhase, newTurn, isGameOver: true };
     }
 
 

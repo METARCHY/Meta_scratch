@@ -67,7 +67,7 @@ export function detectConflicts(
                     name: allPlayers.find(p => p.id === o.playerId)?.name || 'Unknown',
                     playerAvatar: allPlayers.find(p => p.id === o.playerId)?.avatar || '',
                 })),
-                resourceType: locDef?.resource || 'glory',
+                resourceType: locDef?.resource || 'fame',
                 isPeaceful: opponentsRaw.length === 0,
                 hasPlayer: actorsOfType.some(a => a.playerId === localPlayerId),
                 status: 'pending',

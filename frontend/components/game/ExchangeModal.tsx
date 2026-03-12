@@ -81,7 +81,7 @@ export default function ExchangeModal({
                             <div className="flex flex-col gap-3 w-full">
                                 {RESOURCES.map((res) => {
                                     const resourceKey = res.id === 'wisdom' ? 'knowledge' : res.id;
-                                    const count = playerResources[resourceKey] || 0;
+                                    const count = Number(playerResources[resourceKey]) || 0;
                                     const isDisabled = count <= 0;
 
                                     return (
@@ -136,7 +136,7 @@ export default function ExchangeModal({
                             <div className="flex flex-col gap-3 w-full">
                                 {RESOURCES.map((res) => {
                                     const resourceKey = res.id === 'wisdom' ? 'knowledge' : res.id;
-                                    const count = opponentResources[resourceKey] || 0;
+                                    const count = Number(opponentResources[resourceKey]) || 0;
                                     const isDisabled = count <= 0;
 
                                     return (

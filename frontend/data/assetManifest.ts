@@ -22,7 +22,7 @@ export const BID_ICONS: { [key: string]: string } = {
 };
 
 export const RESOURCE_ICONS: { [key: string]: string } = {
-    'fame': '/intangibles/resource_Glory.png',
+    'fame': '/intangibles/resource_Fame.png',
     'power': '/intangibles/resource_power.png',
     'art': '/intangibles/resource_Art.png',
     'knowledge': '/intangibles/resource_wisdom.png',

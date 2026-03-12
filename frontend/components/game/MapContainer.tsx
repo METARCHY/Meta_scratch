@@ -24,14 +24,15 @@ interface MapContainerProps {
     availableRelocationCards?: number;
     availableExchangeCards?: number;
     localPlayerId: string;
+    pendingRelocations: any[];
     onHexClick: (locId: string) => void;
     onPlayerClick: (actor: any, event: React.MouseEvent) => void;
 }
 
 const ACTOR_AVATARS: { [key: string]: string } = {
-    "politician": "/actors/actor_scientist.png",
-    "robot": "/actors/actor_politician.png",
-    "scientist": "/actors/actor_robot.png",
+    "politician": "/actors/actor_politician.png",
+    "robot": "/actors/actor_robot.png",
+    "scientist": "/actors/actor_scientist.png",
     "artist": "/actors/actor_artist.png"
 };
 
@@ -51,6 +52,7 @@ export default function MapContainer({
     availableRelocationCards,
     availableExchangeCards,
     localPlayerId,
+    pendingRelocations,
     onHexClick,
     onPlayerClick
 }: MapContainerProps) {
@@ -97,8 +99,14 @@ export default function MapContainer({
     };
 
     const activeActorId = relocationSource || hoveredActorId || selectedActorId;
-    const activeActor = activeActorId ? playerActorsV2.find(a => a.id === activeActorId) : null;
-    const validLocs = activeActor ? ALLOWED_MOVES[activeActor.type] || [] : [];
+    
+    // Resolve actor type from board state OR definition list
+    const actorOnBoard = activeActorId ? placedActors.find(a => a.actorId === activeActorId) : null;
+    const actorDefinition = activeActorId ? playerActorsV2.find(a => a.id === activeActorId) : null;
+    const activeActorType = (actorOnBoard?.actorType || actorDefinition?.type || '').toLowerCase();
+    
+    // Support plural or alternative keys if needed, but here we enforce consistency
+    const validLocs = activeActorType ? (ALLOWED_MOVES as any)[activeActorType] || [] : [];
 
     return (
         <div
@@ -249,7 +257,7 @@ export default function MapContainer({
                                                     bid={phase >= 4 ? a.bid : undefined}
                                                     hasSecretBid={(phase === 2 || phase === 3) && !!a.bid}
                                                     isDisabled={disabledLocations.includes(loc.id)}
-                                                    isRelocating={relocationSource === a.actorId}
+                                                    isRelocating={relocationSource === a.actorId || pendingRelocations.some(pr => pr.actorId === a.actorId)}
                                                     phase={phase}
                                                     p3Step={p3Step}
                                                     availableExchangeCards={availableExchangeCards}
@@ -275,7 +283,7 @@ export default function MapContainer({
                                                 token={token}
                                                 bid={a.bid}
                                                 isP1={true}
-                                                isRelocating={relocationSource === a.actorId}
+                                                isRelocating={relocationSource === a.actorId || pendingRelocations.some(pr => pr.actorId === a.actorId)}
                                                 isDisabled={disabledLocations.includes(loc.id)}
                                                 phase={phase}
                                                 p3Step={p3Step}
@@ -290,6 +298,41 @@ export default function MapContainer({
                         </div>
                     );
                 })}
+
+                {/* Relocation Arrows Layer */}
+                {phase === 3 && p3Step === 2 && relocationSource && selectedHex && (() => {
+                    const sourceLoc = LOCATIONS.find(l => placedActors.find(pa => pa.actorId === relocationSource)?.locId === l.id);
+                    const targetLoc = LOCATIONS.find(l => l.id === selectedHex);
+                    
+                    if (sourceLoc && targetLoc) {
+                        const startX = sourceLoc.x + sourceLoc.width / 2;
+                        const startY = sourceLoc.y + sourceLoc.height / 2;
+                        const endX = targetLoc.x + targetLoc.width / 2;
+                        const endY = targetLoc.y + targetLoc.height / 2;
+                        
+                        return (
+                            <svg className="absolute inset-0 pointer-events-none z-[150] w-full h-full overflow-visible">
+                                <defs>
+                                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                                        <polygon points="0 0, 10 3.5, 0 7" fill="#d4af37" />
+                                    </marker>
+                                </defs>
+                                <line 
+                                    x1={startX} y1={startY} 
+                                    x2={endX} y2={endY} 
+                                    stroke="#d4af37" 
+                                    strokeWidth="6" 
+                                    markerEnd="url(#arrowhead)"
+                                    strokeDasharray="12,8"
+                                    className="animate-pulse"
+                                />
+                                <circle cx={startX} cy={startY} r="8" fill="#d4af37" />
+                            </svg>
+                        );
+                    }
+                    return null;
+                })()}
+
             </div>
         </div>
     );

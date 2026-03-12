@@ -57,6 +57,15 @@ export const gameService = {
         if (index === -1) return null;
 
         const updatedGame = { ...games[index], ...updates };
+        
+        // Deep merge gameState if it exists in both
+        if (updates.gameState && games[index].gameState) {
+            updatedGame.gameState = {
+                ...games[index].gameState,
+                ...updates.gameState
+            };
+        }
+        
         games[index] = updatedGame;
         writeGames(games);
         return updatedGame;

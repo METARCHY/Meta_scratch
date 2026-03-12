@@ -5,10 +5,21 @@ interface NewPlayersPanelProps {
     players?: any[];
     p3Step?: number;
     availableExchangeCards?: number;
+    exchangeStep?: number;
+    opponentsData?: Record<string, any>;
     onExchangeClick?: (playerId: string, playerName: string) => void;
+    onOpponentResourceClick?: (playerId: string, resource: string) => void;
 }
 
-export default function NewPlayersPanel({ players = [], p3Step, availableExchangeCards, onExchangeClick }: NewPlayersPanelProps) {
+export default function NewPlayersPanel({ 
+    players = [], 
+    p3Step, 
+    availableExchangeCards, 
+    exchangeStep, 
+    opponentsData = {},
+    onExchangeClick,
+    onOpponentResourceClick
+}: NewPlayersPanelProps) {
     // Data unpacking: p1 is Index 0 (User), p2/p3 are Index 1/2 (Opponents)
     const userPlayer = players[0] || { name: 'Citizen', avatar: '/avatars/golden_avatar.png' };
     const p2 = players.length > 1 ? players[1] : null;
@@ -75,7 +86,7 @@ export default function NewPlayersPanel({ players = [], p3Step, availableExchang
                     >
                         <button
                             className="group/exchange w-7 h-7 rounded-full bg-[#1a1c23] border border-cyan-400/50 shadow-[0_0_10px_rgba(0,240,255,0.3)] flex items-center justify-center hover:bg-cyan-500/10 hover:border-cyan-400 hover:shadow-[0_0_15px_rgba(0,240,255,0.6)] hover:scale-110 transition-all cursor-pointer"
-                            onPointerDown={(e) => {
+                            onClick={(e) => {
                                 console.log("EXCHANGE BUTTON TRIGGERED", { playerId: player.id });
                                 e.preventDefault();
                                 e.stopPropagation();

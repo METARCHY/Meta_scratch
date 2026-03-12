@@ -9,8 +9,8 @@ import { LOCATIONS } from '@/lib/modules/core/constants';
 
 /**
  * Calculates Victory Points using the Metarchy formula:
- * VP = min(power, art, knowledge) after optimally distributing glory.
- * Glory fills the lowest value first.
+ * VP = min(power, art, knowledge) after optimally distributing fame.
+ * Fame fills the lowest value first.
  */
 export function calculateVictoryPoints(resources: PlayerResources): number {
     let { power, knowledge, art, fame } = resources;

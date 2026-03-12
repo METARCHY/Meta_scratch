@@ -24,6 +24,8 @@ import { ConflictResult, EventCardDefinition } from "@/lib/modules/core/types";
 import MarketOfferModal, { MarketOffer } from '@/components/game/MarketOfferModal';
 import MarketRevealModal from '@/components/game/MarketRevealModal';
 import BuyActionCardModal from '@/components/game/BuyActionCardModal';
+import InventoryStatsModal from '@/components/game/InventoryStatsModal';
+import { Briefcase } from 'lucide-react';
 import { formatLog } from '@/lib/logUtils';
 import { triggerBotPhase3Actions, triggerOpponentPlacements } from '@/lib/game/BotAI';
 import { handleNextPhase } from '@/lib/game/PhaseEngine';
@@ -69,6 +71,7 @@ const AUTO_PLACEMENTS = [
 
 interface OpponentData {
     id: string;
+    name: string;
     resources: Record<string, number>;
     cards: Record<string, number>;
 }
@@ -120,6 +123,10 @@ export default function GameBoardPage() {
     const [discardAmount, setDiscardAmount] = useState(0);
     const [eventResult, setEventResult] = useState<{ msg: string, win: boolean } | null>(null);
     const [eventTieBreakerActive, setEventTieBreakerActive] = useState<{ conflict: any } | null>(null);
+    const [isInventoryOpen, setIsInventoryOpen] = useState(false);
+
+    // Refs
+    const isDrawingRef = useRef(false);
 
 
 
@@ -135,8 +142,9 @@ export default function GameBoardPage() {
                 if (pid !== mainId) {
                     initialOpponents[pid] = {
                         id: pid,
+                        name: p.name || 'Anonymous',
                         resources: { gato: 1000, product: 1, electricity: 1, recycling: 1, power: 0, art: 0, knowledge: 0, fame: 0, victoryPoints: 0 },
-                        cards: isTest ? ACTION_CARDS.reduce((acc: any, c) => ({ ...acc, [c.id]: 2 }), {}) : {}
+                        cards: {}
                     };
                 }
             });
@@ -144,8 +152,9 @@ export default function GameBoardPage() {
             PLAYERS.forEach(opp => {
                 initialOpponents[opp.id] = {
                     id: opp.id,
+                    name: opp.name,
                     resources: { gato: 1000, product: 1, electricity: 1, recycling: 1, power: 0, art: 0, knowledge: 0, fame: 0, victoryPoints: 0 },
-                    cards: isTest ? ACTION_CARDS.reduce((acc: any, c) => ({ ...acc, [c.id]: 2 }), {}) : {}
+                    cards: {}
                 };
             });
         }
@@ -354,6 +363,120 @@ export default function GameBoardPage() {
         const myId = player.citizenId || player.address || 'p1';
         if (!game || !myId) return;
 
+        if (phase === 3 && p3Step === 1) {
+            setP3Step1Ready(true);
+            if (game.isTest) {
+                // Bots pass Step 1 immediately
+                setTimeout(() => {
+                    setOpponentsP3Step1Ready(prev => {
+                        const next = { ...prev };
+                        dynamicPlayers.forEach(p => {
+                            if (p.id !== myId) next[p.id] = true;
+                        });
+                        return next;
+                    });
+                }, 500);
+            }
+            return;
+        }
+
+        if (phase === 3 && p3Step === 2) {
+            if (relocationCardsCount === 0) {
+                handleNextPhaseWrapper();
+                return;
+            }
+            if (!relocationSource || !selectedHex) {
+                addLog("Please select an Actor and a Destination hex first.");
+                return;
+            }
+
+            // Actual execution on Submit
+            const actor = placedActors.find(a => a.actorId === relocationSource);
+            const extractedType = (actor?.actorType || (actor as any)?.type || 'Actor').toString().toLowerCase();
+            
+            setPendingRelocations(prev => {
+                const filtered = prev.filter(r => !(r.playerId === myId && r.actorId === relocationSource));
+                return [...filtered, { playerId: myId, actorId: relocationSource, targetLocId: selectedHex }];
+            });
+
+            // Deduct the card
+            setSelectedActionCards(prev => {
+                const next = { ...prev };
+                const relocKey = Object.keys(next).find(k => k.includes('relocation') && next[k] > 0);
+                if (relocKey) next[relocKey]--;
+                return next;
+            });
+
+            // Consume Card from hand visual representation
+            const cardIndex = actionHand.findIndex(c => c.id.includes('relocation'));
+            if (cardIndex !== -1) {
+                setActionHand(prev => {
+                    const newHand = [...prev];
+                    newHand.splice(cardIndex, 1);
+                    return newHand;
+                });
+            }
+
+            addLog(`Relocation Submitted: ${extractedType} to ${selectedHex.toUpperCase()}`);
+            
+            // Reset for next card
+            setRelocationSource(null);
+            setSelectedHex(null);
+            
+            // If no more relocation cards, the button label will change to "Done Relocation" (already handled by p3Step logic in render)
+            return;
+        }
+
+        if (phase === 3 && p3Step === 3) {
+            if (exchangeCardsCount === 0) {
+                handleNextPhaseWrapper();
+                return;
+            }
+            if (exchangeStep !== 2 || !exchangeSourceValue || !exchangeTargetPlayer || !exchangeTargetValue) {
+                addLog("Please finalize your exchange selection before submitting.");
+                return;
+            }
+
+            // Actual execution on Submit
+            setPendingExchanges(prev => [
+                ...prev, 
+                { 
+                    playerId: myId, 
+                    sourceValue: exchangeSourceValue, 
+                    targetPlayerId: exchangeTargetPlayer, 
+                    targetValue: exchangeTargetValue 
+                }
+            ]);
+
+            // Deduct the card
+            setSelectedActionCards(prev => {
+                const next = { ...prev };
+                const exchangeKey = Object.keys(next).find(k => k.includes('change_values') && next[k] > 0);
+                if (exchangeKey) next[exchangeKey]--;
+                return next;
+            });
+
+            // Consume Card from hand visual representation
+            const cardIndex = actionHand.findIndex(c => c.id.includes('change_values'));
+            if (cardIndex !== -1) {
+                setActionHand(prev => {
+                    const newHand = [...prev];
+                    newHand.splice(cardIndex, 1);
+                    return newHand;
+                });
+            }
+
+            addLog(`Exchange Submitted: Your ${exchangeSourceValue?.toUpperCase()} for ${opponentsData[exchangeTargetPlayer]?.name}'s ${exchangeTargetValue?.toUpperCase()}`);
+            
+            // Reset for next card OR end step
+            setExchangeStep(0);
+            setExchangeSourceValue(null);
+            setExchangeTargetPlayer(null);
+            setExchangeTargetValue(null);
+            
+            return;
+        }
+
         // Immediately set waiting state so UI button changes to "WAITING FOR OTHERS..."
         setIsWaitingForPlayers(true);
 
@@ -441,8 +564,9 @@ export default function GameBoardPage() {
                     const earnedResource = getActorRewardType(actorType, actor.locId);
 
                     if (earnedResource) {
-                        const isDouble = actor.bid === 'product';
-                        const finalReward = calculateReward(actorType as any, true, isDouble, [], '');
+                        const isProductBet = actor.bid === 'product';
+                        const bids = isProductBet ? [{ actorId: actor.actorId, bid: 'product' }] : [];
+                        const finalReward = calculateReward(actorType as any, true, false, bids, actor.actorId);
                         updateResource(earnedResource, finalReward);
                         addLog(`${player.name || '080'} secured ${finalReward} ${earnedResource.toUpperCase()} (uncontested ${actorType} at ${LOCATIONS.find(l => l.id === actor.locId)?.name})!`);
                     }
@@ -450,11 +574,15 @@ export default function GameBoardPage() {
             });
         }
 
-        // --- Execute Relocations Before Advancing ---
         if (phase === 3 && p3Step === 2 && pendingRelocations.length > 0) {
             addLog(`Resolving ${pendingRelocations.length} pending relocations...`);
             resolveActionRelocations();
-            return; // Exit early; resolveActionRelocations will call handleNextPhaseWrapper again when done
+            return; 
+        }
+
+        if (phase === 3 && p3Step === 3 && pendingExchanges.length > 0) {
+            await resolveActionExchanges();
+            // Continue below to advance to Phase 4
         }
 
         const { handleNextPhase } = await import('@/lib/game/PhaseEngine');
@@ -488,14 +616,34 @@ export default function GameBoardPage() {
             const mainPlayerId = player.citizenId || player.address || 'p1';
             const opponents = dynamicPlayers.filter(p => p.id !== mainPlayerId);
             const commits: Record<string, number[]> = {};
+            
+            let anyBotAction = false;
             opponents.forEach(opp => {
                 commits[opp.id] = [];
-                // Bots never block locations (no action cards on turn 1; future turns need card tracking)
-                // if (Math.random() < 0.3) commits[opp.id].push(1); // DISABLED: no cards
-                if (Math.random() < 0.5) commits[opp.id].push(2); // 50% chance Relocate
-                if (Math.random() < 0.6) commits[opp.id].push(3); // 60% chance Change Values
+                // Bots never block locations currently
+                if (Math.random() < 0.5) {
+                    commits[opp.id].push(2); // Relocate
+                    anyBotAction = true;
+                }
+                if (Math.random() < 0.6) {
+                    commits[opp.id].push(3); // Change Values
+                    anyBotAction = true;
+                }
             });
             botActionCommitsRef.current = commits;
+
+            // Check if player selected anything
+            const hasPlayerAction = Object.values(selectedActionCards).some(count => count > 0);
+            
+            if (!hasPlayerAction && !anyBotAction) {
+                addLog('No players selected Action Cards — skipping Action Phase.');
+                setPhase(4);
+                setP3Step(0);
+                setOpponentsReady(true);
+                addLog('PHASE 4 BEGINS');
+                setIsWaitingForPlayers(false);
+                return;
+            }
         }
 
 
@@ -605,7 +753,7 @@ export default function GameBoardPage() {
 
     console.log("GameBoardPage Rendering, Phase:", phase, "Turn:", turn);
 
-    const handleEventTieBreakerResolve = (result: any) => {
+    const handleEventTieBreakerResolve = (result: ConflictResult) => {
         if (result.restart) return; // Modal handles rerolls internally
 
         // Safety check: currentEvent should always be set at this point, but guard against null
@@ -616,33 +764,51 @@ export default function GameBoardPage() {
             return;
         }
 
-        if (result.winnerId === localPlayerId) {
-            if (currentEvent.reward === 'action_card') {
+        const isWin = result.winnerId === localPlayerId;
+        const rewardKey = currentEvent.reward || 'fame';
+        let logMsg = "";
+
+        if (isWin) {
+            if (rewardKey === 'action_card') {
                 const drawnCard = drawActionCard();
                 setActionHand(prev => [...prev, drawnCard]);
-                addLog(`${player.name || '080'} WON the Tie-Breaker Conflict and earned the Action Card: ${drawnCard.title}!`);
+                logMsg = `${player.name || '080'} WON the Tie-Breaker Conflict and earned the Action Card: ${drawnCard.title}!`;
+                setEventResult({ msg: `You won! Received Action Card: ${drawnCard.title}`, win: true });
             } else {
-                updateResource(currentEvent.reward || 'fame', 1);
-                addLog(`${player.name || '080'} WON the Tie-Breaker Conflict and earned ${currentEvent.reward || 'Fame'}!`);
+                updateResource(rewardKey as any, 1);
+                logMsg = `${player.name || '080'} WON the Tie-Breaker Conflict and earned 1 ${rewardKey.toUpperCase()}!`;
+                setEventResult({ msg: `You won! Received 1 ${rewardKey.toUpperCase()}`, win: true });
             }
         } else if (result.winnerId) {
-            const winnerName = dynamicPlayers.find(p => p.id === result.winnerId)?.name || 'Opponent';
+            const winId = result.winnerId;
+            const winnerName = dynamicPlayers.find(p => p.id === winId)?.name || 'Opponent';
             setOpponentsData((prev: any) => {
                 const next = { ...prev };
-                if (!next[result.winnerId]) return prev;
-                const oppRes = { ...next[result.winnerId].resources };
-                const key = currentEvent.reward || 'fame';
-                oppRes[key] = (oppRes[key] || 0) + 1;
-                next[result.winnerId] = { ...next[result.winnerId], resources: oppRes };
+                if (!next[winId]) return prev;
+                const oppRes = { ...next[winId].resources };
+                const key = rewardKey === 'action_card' ? 'action_card' : rewardKey;
+                
+                if (key === 'action_card') {
+                    // Logic for bots earning cards: increment their cards count
+                    const cards = { ...next[winId].cards };
+                    const firstCardId = ACTION_CARDS[0].id; // or any random card id
+                    cards[firstCardId] = (cards[firstCardId] || 0) + 1;
+                    next[winId] = { ...next[winId], cards };
+                } else {
+                    oppRes[key] = (oppRes[key] || 0) + 1;
+                    next[winId] = { ...next[winId], resources: oppRes };
+                }
                 return next;
             });
-            addLog(`${winnerName} WON the Tie-Breaker Conflict and received ${currentEvent.reward === 'action_card' ? 'an Action Card' : 'Fame'}.`);
+            logMsg = `${winnerName} WON the Tie-Breaker Conflict and received ${rewardKey === 'action_card' ? 'an Action Card' : 'Fame'}.`;
+            setEventResult({ msg: logMsg, win: false });
         } else if (result.isDraw && result.evictAll) {
-            addLog(`Tie-Breaker ended in a complete DISMISSAL. No one receives the reward.`);
+            logMsg = `Tie-Breaker ended in a complete DISMISSAL. No one receives the reward.`;
+            setEventResult({ msg: logMsg, win: false });
         }
 
+        addLog(logMsg);
         setEventTieBreakerActive(null);
-        closeEvent(); // Proceed to next phase
     };
 
     // Phase 2: Distribution / Placement
@@ -665,6 +831,14 @@ export default function GameBoardPage() {
         moves: { playerId: string, targetLocId: string, choice?: string }[];
     }
     const [playerConflictContext, setPlayerConflictContext] = useState<PlayerConflictContextType | null>(null);
+    const [p3Step1Ready, setP3Step1Ready] = useState(false);
+    const [opponentsP3Step1Ready, setOpponentsP3Step1Ready] = useState<Record<string, boolean>>({});
+
+    const [exchangeStep, setExchangeStep] = useState<0 | 1 | 2>(0); // 1: Choose own, 2: Choose target
+    const [exchangeSourceValue, setExchangeSourceValue] = useState<string | null>(null);
+    const [exchangeTargetPlayer, setExchangeTargetPlayer] = useState<string | null>(null);
+    const [exchangeTargetValue, setExchangeTargetValue] = useState<string | null>(null);
+    const [pendingExchanges, setPendingExchanges] = useState<any[]>([]);
 
     const [biddingActorId, setBiddingActorId] = useState<string | null>(null);
     const botActionCommitsRef = useRef<Record<string, number[]>>({});
@@ -679,8 +853,8 @@ export default function GameBoardPage() {
     const filteredActionHand = useMemo(() => {
         if (p3Step === 0) return actionHand; // Show all to select
         if (p3Step === 1) return actionHand.filter(c => c.type === 'turn off location');
-        if (p3Step === 2) return actionHand.filter(c => c.id.includes('relocation'));
-        if (p3Step === 3) return actionHand.filter(c => c.id.includes('change_values') || c.id.includes('exchange'));
+        if (p3Step === 2) return actionHand.filter(c => c.id.includes('relocation') || c.title?.includes('Relocation'));
+        if (p3Step === 3) return actionHand.filter(c => c.id.includes('change_values') || c.id.includes('exchange') || c.title?.includes('Change of Values'));
         return [];
     }, [p3Step, actionHand]);
 
@@ -688,19 +862,25 @@ export default function GameBoardPage() {
     const relocationCardsCount = useMemo(() => {
         let count = 0;
         Object.entries(selectedActionCards).forEach(([id, qty]) => {
-            if (id.includes('relocation')) count += qty;
+            const card = actionHand.find(c => c.id === id);
+            if (card && (card.id.includes('relocation') || card.title?.includes('Relocation'))) {
+                count += qty;
+            }
         });
         return count;
-    }, [selectedActionCards]);
+    }, [selectedActionCards, actionHand]);
 
     // Count available exchange cards from queued selection
     const exchangeCardsCount = useMemo(() => {
         let count = 0;
         Object.entries(selectedActionCards).forEach(([id, qty]) => {
-            if (id.includes('change_values') || id.includes('exchange')) count += qty;
+            const card = actionHand.find(c => c.id === id);
+            if (card && (card.id.includes('change_values') || card.id.includes('exchange') || card.title?.includes('Change of Values'))) {
+                count += qty;
+            }
         });
         return count;
-    }, [selectedActionCards]);
+    }, [selectedActionCards, actionHand]);
 
 
     // Derived: Current Active Conflict Object
@@ -829,11 +1009,35 @@ export default function GameBoardPage() {
                     const earnedResource = getActorRewardType(winActorType, realLocId || '');
 
                     if (earnedResource) {
-                        const isDouble = result.successfulBids?.some(b => b.bid === 'product' && b.actorId === result.winnerId);
-                        const finalReward = calculateReward(winActorType as any, true, isDouble, [], '');
+                        const bids = result.successfulBids || [];
+                        const finalReward = calculateReward(winActorType as any, true, false, bids, result.winnerId || '');
 
                         updateResource(earnedResource, finalReward);
                         addLog(`${player.name || '080'} WON ${finalReward} ${earnedResource.toUpperCase()} from ${winActorType?.toUpperCase()} conflict at ${locDef?.name}!`);
+                    }
+                }
+            } else if (result.winnerId) {
+                // Wait, it's a bot (since it's not localPlayerId)
+                // Find which bot won
+                const winnerActor = currentConflict?.opponents?.find((o: any) => o.actorId === result.winnerId);
+                if (winnerActor) {
+                    const winActorType = winnerActor.actorType?.toLowerCase();
+                    const earnedResource = getActorRewardType(winActorType, realLocId || '');
+                    if (earnedResource) {
+                        const bids = result.successfulBids || [];
+                        const finalReward = calculateReward(winActorType as any, true, false, bids, result.winnerId || '');
+                        const winnerPid = winnerActor.playerId;
+
+                        setOpponentsData((prev: any) => {
+                            if (!prev[winnerPid]) return prev;
+                            const next = { ...prev };
+                            const newResources = { ...next[winnerPid].resources };
+                            newResources[earnedResource] = (newResources[earnedResource] || 0) + finalReward;
+                            next[winnerPid] = { ...next[winnerPid], resources: newResources };
+                            return next;
+                        });
+                        const winnerName = dynamicPlayers.find(p => p.id === winnerPid)?.name || 'Opponent';
+                        addLog(`${winnerName} WON ${finalReward} ${earnedResource.toUpperCase()} from ${winActorType?.toUpperCase()} conflict at ${locDef?.name}!`);
                     }
                 }
             }
@@ -897,26 +1101,26 @@ export default function GameBoardPage() {
                     addLog(`EVENT DRAWN: ${event.title}`);
                 }
             } else {
-                // Only the primary host (or the local user in a bot match) draws to avoid race conditions
-                const isHost = player.citizenId === dynamicPlayers[0]?.id || game.isTest;
-                if (!isHost) return; 
+                if (isDrawingRef.current) return;
+                isDrawingRef.current = true;
 
                 let serverDeck = game.gameState?.eventDeck || [];
                 
-                // Shuffle a new deck if empty
                 if (serverDeck.length === 0) {
-                    serverDeck = [...EVENTS].map(e => e.id).sort(() => Math.random() - 0.5);
-                    addLog("Event Deck empty - reshuffled.");
+                    isDrawingRef.current = false;
+                    return; // Deck is empty, nothing to draw
                 }
                 
-                const nextEventId = serverDeck.pop();
+                const randomIndex = Math.floor(Math.random() * serverDeck.length);
+                const nextEventId = serverDeck[randomIndex];
                 const nextEvent = EVENTS.find(e => e.id === nextEventId);
                 
                 if (nextEvent) {
                     setCurrentEvent(nextEvent);
-                    addLog(`EVENT DRAWN: ${nextEvent.title}`);
                     
-                    // Sync the drawn event and new deck state to the backend
+                    const updatedDeck = serverDeck.filter((_: string, i: number) => i !== randomIndex);
+                    addLog(`EVENT DRAWN: ${nextEvent.title} (${updatedDeck.length} left)`);
+                    
                     fetch(`/api/games/${id}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
@@ -925,15 +1129,25 @@ export default function GameBoardPage() {
                             updates: {
                                 gameState: {
                                     ...game.gameState,
-                                    eventDeck: serverDeck,
+                                    eventDeck: updatedDeck,
                                     currentEventId: nextEvent.id,
                                     eventDeckTurn: currentTurn
                                 }
                             }
                         })
-                    }).catch(err => console.error("Failed to sync event deck", err));
+                    })
+                    .then(() => { isDrawingRef.current = false; })
+                    .catch(err => { 
+                        console.error("Failed to sync event deck", err);
+                        isDrawingRef.current = false;
+                    });
+                } else {
+                    isDrawingRef.current = false;
                 }
             }
+        } else {
+            // Reset drawing ref when phase changes away from Event Phase
+            isDrawingRef.current = false;
         }
     }, [phase, turn, currentEvent, game?.isTest]);
 
@@ -1124,20 +1338,23 @@ export default function GameBoardPage() {
         }
 
         if (win && currentEvent) {
-            if (currentEvent.reward === "fame") {
+            const rewardKey = currentEvent.reward || 'fame';
+            if (rewardKey === "fame") {
                 updateResource('fame', 1);
-            } else if (win && currentEvent?.reward === 'action_card') {
-            const drawn = drawActionCard();
-            setActionHand(prev => [...prev, drawn]);
-            msg += ` Found action card: ${drawn.title}`;
-        } else if (win && currentEvent?.reward) {
-                updateResource(currentEvent.reward, 1);
+            } else if (rewardKey === 'action_card') {
+                const drawn = drawActionCard();
+                setActionHand(prev => [...prev, drawn]);
+                msg += ` Found action card: ${drawn.title}`;
+            } else {
+                updateResource(rewardKey, 1);
             }
         }
 
         setEventResult({ msg, win });
         addLog(`Event Result: ${msg}`);
     };
+
+    // Event Logic Complete
 
     const closeEvent = () => {
         setEventResult(null);
@@ -1188,35 +1405,73 @@ export default function GameBoardPage() {
                 });
             }
 
-            // Smart-skip: only show sub-steps if relevant cards were selected by ANY player
-            let hasReloc = relocationCardsCount > 0;
-            let hasExchange = exchangeCardsCount > 0;
+            // Advance to Step 1 (STOP LOCATIONS)
+            const botIds = dynamicPlayers.filter(p => p.id.startsWith('bot') || p.id !== localPlayerId).map(p => p.id);
+            if (botIds.length === 0) {
+                 // No opponents? Just proceed to next sub-step immediately after delay if desired, 
+                 // but let's stick to the flow: Step 1 -> Click -> Step 2
+            }
+        }
+    }, [phase, p3Step]);
 
-            const commits = botActionCommitsRef.current || {};
-            Object.values(commits).forEach(botSteps => {
-                if (botSteps.includes(2)) hasReloc = true;
-                if (botSteps.includes(3)) hasExchange = true;
-            });
+    // Handle Phase 3 Step 1 Progression
+    useEffect(() => {
+        if (phase === 3 && p3Step === 1 && p3Step1Ready) {
+            const botIds = dynamicPlayers.filter(p => p.id.startsWith('bot') || p.id !== localPlayerId).map(p => p.id);
+            const allReady = botIds.every(id => opponentsP3Step1Ready[id]);
 
-            setTimeout(() => {
+            if (allReady) {
+                // Transition logic previously in Step 0
+                let hasReloc = relocationCardsCount > 0;
+                let hasExchange = exchangeCardsCount > 0;
+
+                const commits = botActionCommitsRef.current || {};
+                Object.values(commits).forEach(botSteps => {
+                    if (botSteps.includes(2)) hasReloc = true;
+                    if (botSteps.includes(3)) hasExchange = true;
+                });
+
                 if (hasReloc) {
-                    // Advance to Step 2 (Relocation) normally
                     setP3Step(2);
                     addLog('STEP: RELOCATION');
                 } else if (hasExchange) {
-                    // Skip Relocation, go straight to Step 3 (Change Values)
-                    addLog('No Relocation cards played — skipping Relocation step.');
-                    setP3Step(3);
-                    addLog('STEP: CHANGE VALUES');
+                    // Check if self has any values to exchange
+                    const hasSelfValue = resources.power > 0 || resources.knowledge > 0 || resources.art > 0 || resources.fame > 0;
+                    // Check if ANY opponent has any values to exchange
+                    const hasOpponentValue = dynamicPlayers.some(p => {
+                        if (p.id === localPlayerId) return false;
+                        const oppRes = opponentsData[p.id]?.resources || {};
+                        return oppRes.power > 0 || oppRes.knowledge > 0 || oppRes.art > 0 || oppRes.fame > 0;
+                    });
+
+                    if (!hasSelfValue) {
+                        addLog("You have no values to exchange! Change Values cards are returned to your hand.");
+                        // Return cards to hand
+                        const exchangeCount = exchangeCardsCount;
+                        if (exchangeCount > 0) {
+                            setSelectedActionCards(prev => {
+                                const next = { ...prev };
+                                Object.keys(next).forEach(k => { if (k.includes('change_values')) next[k] = 0; });
+                                return next;
+                            });
+                            // Hand already has them, just unselecting is enough for Step 3 logic
+                        }
+                        handleNextPhaseWrapper();
+                    } else if (!hasOpponentValue) {
+                        addLog("Opponents have no values for exchange! Change Values cards are returned to your hand.");
+                        handleNextPhaseWrapper();
+                    } else {
+                        setP3Step(3);
+                        setExchangeStep(1); 
+                        addLog('STEP: CHANGE VALUES - Choose one of your values to exchange.');
+                    }
                 } else {
-                    // No Relocation or Exchange cards — exit Phase 3
                     addLog('No Relocation or Exchange cards played — advancing to Conflicts.');
                     handleNextPhaseWrapper();
                 }
-            }, 1000); // 1s delay for UI to register the disabled locations
+            }
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [phase, p3Step]);
+    }, [phase, p3Step, p3Step1Ready, opponentsP3Step1Ready]);
 
 
 
@@ -1229,46 +1484,24 @@ export default function GameBoardPage() {
             if (!actor) return;
 
             // Validate Move - Enforce ALLOWED_MOVES for ALL Actors
-            const extractedType = actor.type || actor.actorType;
+            const extractedType = (actor.actorType || (actor as any).type || '').toString().toLowerCase();
+            console.log("[DEBUG] Relocating actor type:", extractedType, "to", locId);
+            
             if (extractedType) {
-                const validTargets = ALLOWED_MOVES[extractedType];
+                const validTargets = (ALLOWED_MOVES as any)[extractedType];
                 if (validTargets && !validTargets.includes(locId)) {
-                    addLog(`Invalid relocation for ${extractedType}! Must move to ${validTargets.map(t => t.toUpperCase()).join(', ')}`);
+                    addLog(`Invalid relocation for ${extractedType}! Must move to ${validTargets.map((t: string) => t.toUpperCase()).join(', ')}`);
                     return;
                 }
             }
 
             if (actor.locId === locId) {
-                addLog("Cannot relocate actor to its current location.");
+                addLog(`Cannot relocate ${extractedType} to its current location (${locId.toUpperCase()}).`);
                 return;
             }
 
-            // Execute Relocation Queue
-            setPendingRelocations(prev => [...prev, { playerId: localPlayerId, actorId: relocationSource, targetLocId: locId }]);
-            setRelocationSource(null);
-
-            // Deduct from queued action cards
-            setSelectedActionCards(prev => {
-                const next = { ...prev };
-                const relocKey = Object.keys(next).find(k => k.includes('relocation') && next[k] > 0);
-                if (relocKey) next[relocKey]--;
-                return next;
-            });
-
-            // Consume Card from hand visual representation
-            const cardIndex = actionHand.findIndex(c => c.id.includes('relocation'));
-            if (cardIndex !== -1) {
-                setActionHand(prev => {
-                    const newHand = [...prev];
-                    newHand.splice(cardIndex, 1);
-                    return newHand;
-                });
-            }
-
-            addLog(`${player.name || '080'} queued relocation target.`);
-
-            const actorSource = MY_ACTORS.find(a => a.id === actor.actorId);
-            await addLog(`${player.name || '080'} relocated ${actorSource?.name || actor.actorType} with ${actor.type.toUpperCase()} to ${locId.toUpperCase()}`);
+            setSelectedHex(locId);
+            addLog(`Direction set: ${extractedType} to ${locId.toUpperCase()}. Click 'Submit Relocation' to confirm.`);
             return;
         }
 
@@ -1278,9 +1511,11 @@ export default function GameBoardPage() {
             if (!actor) return;
 
             // Check Allowed locations (Validation logic)
-            const allowedLocs = ALLOWED_MOVES[actor.type] || [];
+            const type = (actor.type || '').toLowerCase();
+            const allowedLocs = (ALLOWED_MOVES as any)[type] || [];
             if (!allowedLocs.includes(locId)) {
-                console.log(`Placement blocked: ${actor.type} cannot go to ${locId}`);
+                addLog(`Placement blocked: ${actor.name} cannot go to ${locId.toUpperCase()}`);
+                console.log(`Placement blocked: ${type} cannot go to ${locId}`, allowedLocs);
                 return;
             }
 
@@ -1356,60 +1591,77 @@ export default function GameBoardPage() {
         setPendingPlacement(null);
     };
 
-    // Phase 3 Step 4: Exchange Logic
-    const handleExchangeConfirm = (give: 'power' | 'art' | 'wisdom', take: 'power' | 'art' | 'wisdom') => {
-        if (!exchangeTarget) return;
-
-        const opponentId = exchangeTarget.id;
-        const opponentName = exchangeTarget.name;
-
-        // Functional updates for safety
-        setOpponentsData(prev => {
-            const next = { ...prev };
-            if (!next[opponentId]) return prev;
-
-            const oppRes = { ...next[opponentId].resources };
-
-            // Adjust opponent resources
-            const giveKey = give === 'wisdom' ? 'knowledge' : give;
-            const takeKey = take === 'wisdom' ? 'knowledge' : take;
-
-            oppRes[giveKey] = (oppRes[giveKey] || 0) + 1;
-            oppRes[takeKey] = Math.max(0, (oppRes[takeKey] || 0) - 1);
-
-            next[opponentId] = { ...next[opponentId], resources: oppRes };
-            return next;
+    const resolveActionExchanges = async () => {
+        addLog("Resolving Exchanges...");
+        
+        // Group by target resource/player to find direct conflicts (multiple people wanting the same thing)
+        const targetGroups: Record<string, any[]> = {};
+        pendingExchanges.forEach(ex => {
+            const key = `${ex.targetPlayerId}-${ex.targetValue}`;
+            if (!targetGroups[key]) targetGroups[key] = [];
+            targetGroups[key].push(ex);
         });
 
-        // Update player resources
-        const playerGiveKey = give === 'wisdom' ? 'knowledge' : give;
-        const playerTakeKey = take === 'wisdom' ? 'knowledge' : take;
+        const winners: any[] = [];
+        const losers: any[] = [];
 
-        updateResource(playerGiveKey, -1); // delta -1
-        updateResource(playerTakeKey, 1);  // delta +1
-
-        addLog(`${player.name || '080'} exchanged ${give.toUpperCase()} for ${take.toUpperCase()} with ${opponentName}`);
-
-
-        // Deduct from queued action cards
-        setSelectedActionCards(prev => {
-            const next = { ...prev };
-            const key = Object.keys(next).find(k => (k.includes('change_values') || k.includes('exchange')) && next[k] > 0);
-            if (key) next[key] -= 1;
-            return next;
-        });
-
-        // Consume Card visually from hand
-        const cardIndex = actionHand.findIndex(c => c.id.includes('change_values') || c.id.includes('exchange'));
-        if (cardIndex !== -1) {
-            setActionHand(prev => {
-                const newHand = [...prev];
-                newHand.splice(cardIndex, 1);
-                return newHand;
-            });
+        for (const key of Object.keys(targetGroups)) {
+            const competitors = targetGroups[key];
+            if (competitors.length === 1) {
+                winners.push(competitors[0]);
+            } else {
+                addLog(`Conflict detected! Multiple players want ${key.split('-')[1].toUpperCase()} from ${opponentsData[key.split('-')[0]]?.name || 'an opponent'}.`);
+                // Simple resolution: first committed? Or random? 
+                // For MVP, we use the first one in the queue, others lose.
+                winners.push(competitors[0]);
+                losers.push(...competitors.slice(1));
+            }
         }
 
-        setExchangeTarget(null);
+        // Apply winners
+        for (const ex of winners) {
+            const { playerId, sourceValue, targetPlayerId, targetValue } = ex;
+            
+            // Check if players still have the values (can be depleted if winner of previous exchange)
+            // But here we process simultaneously unless circular.
+            
+            // Update Opponent (Target)
+            setOpponentsData(prev => {
+                const next = { ...prev };
+                if (next[targetPlayerId]) {
+                    const res = { ...next[targetPlayerId].resources };
+                    res[targetValue] = Math.max(0, (res[targetValue] || 0) - 1);
+                    res[sourceValue] = (res[sourceValue] || 0) + 1;
+                    next[targetPlayerId] = { ...next[targetPlayerId], resources: res };
+                }
+                if (next[playerId]) {
+                    const res = { ...next[playerId].resources };
+                    res[sourceValue] = Math.max(0, (res[sourceValue] || 0) - 1);
+                    res[targetValue] = (res[targetValue] || 0) + 1;
+                    next[playerId] = { ...next[playerId], resources: res };
+                }
+                return next;
+            });
+
+            // If player is local
+            if (playerId === localPlayerId) {
+                updateResource(sourceValue, -1);
+                updateResource(targetValue, 1);
+                addLog(`Exchange successful: Your ${sourceValue.toUpperCase()} for ${targetValue.toUpperCase()}`);
+            }
+            if (targetPlayerId === localPlayerId) {
+                updateResource(targetValue, -1);
+                updateResource(sourceValue, 1);
+                addLog(`Exchange successful: Opponent took your ${targetValue.toUpperCase()} for ${sourceValue.toUpperCase()}`);
+            }
+        }
+
+        losers.forEach(ex => {
+            const pName = dynamicPlayers.find(p => p.id === ex.playerId)?.name || 'Player';
+            addLog(`Exchange failed for ${pName}: Conflict lost.`);
+        });
+
+        setPendingExchanges([]);
     };
 
     const resolvePlayerConflictLogic = (context: PlayerConflictContextType) => {
@@ -1431,6 +1683,13 @@ export default function GameBoardPage() {
         } else {
             winners = context.moves; // All played same
             addLog(`Relocation Conflict DRAW! Everyone played ${choices[0]?.toUpperCase()}. Retrying...`);
+            
+            // AUTOMATIC BREAK: If it's a local test game and there's a recurring draw, 
+            // pick a random winner among tied parties to prevent infinite loops.
+            if (context.moves.length > 1 && context.moves.every(m => m.choice === choices[0])) {
+                 // In a real game we wait, but to prevent UI lockup in dev/test, we can force a result after logs.
+                 // For now, let's just make sure the state is handled correctly.
+            }
         }
 
         if (winners.length === 1) {
@@ -1448,20 +1707,18 @@ export default function GameBoardPage() {
                 }];
             });
             setPlayerConflictContext(null);
-            setTimeout(resolveActionRelocations, 1000);
+            setTimeout(() => resolveActionRelocations(), 1000);
         } else {
             // Tie-break among winners
-            setPendingRelocations(prev => {
-                const others = prev.filter(r => r.actorId !== context.actorId);
-                const tied = winners.map(w => ({
-                    playerId: w.playerId,
-                    actorId: context.actorId,
-                    targetLocId: w.targetLocId
-                }));
-                return [...others, ...tied];
-            });
+            const others = pendingRelocations.filter(r => r.actorId !== context.actorId);
+            const tied = winners.map(w => ({
+                playerId: w.playerId,
+                actorId: context.actorId,
+                targetLocId: w.targetLocId
+            }));
+            setPendingRelocations([...others, ...tied]);
             setPlayerConflictContext(null);
-            setTimeout(resolveActionRelocations, 1000);
+            setTimeout(() => resolveActionRelocations(), 1000);
         }
     };
 
@@ -1476,15 +1733,17 @@ export default function GameBoardPage() {
     };
 
     const resolveActionRelocations = () => {
-        // Group queued relocations by actorId
+        const currentQueue = pendingRelocations;
+        if (currentQueue.length === 0) return;
+
+        // Group queued relocations by actorId, ensuring uniqueness by playerId
         const groups: Record<string, typeof pendingRelocations> = {};
-        // Access latest via callback to prevent stale closures when called repeatedly
-        setPendingRelocations(latestQueue => {
-            latestQueue.forEach(r => {
-                if (!groups[r.actorId]) groups[r.actorId] = [];
+        currentQueue.forEach(r => {
+            if (!groups[r.actorId]) groups[r.actorId] = [];
+            // Robustness: Only add if this player doesn't already have a move for this actor in THIS group
+            if (!groups[r.actorId].find(m => m.playerId === r.playerId)) {
                 groups[r.actorId].push(r);
-            });
-            return latestQueue;
+            }
         });
 
         // Search for FIRST conflict
@@ -1522,10 +1781,35 @@ export default function GameBoardPage() {
         });
 
         if (validMoves.length > 0) {
-            setPlacedActors(prev => prev.map(a => {
+            const nextActors = placedActors.map(a => {
                 const move = validMoves.find(m => m.actorId === a.actorId);
                 return move ? { ...a, locId: move.targetLocId } : a;
-            }));
+            });
+
+            setPlacedActors(nextActors);
+
+            // Sync to backend to prevent state-sync overwrite
+            const mainPlayerId = player.citizenId || player.address || 'p1';
+            const actorsByPlayer = nextActors.reduce((acc: any, actor) => {
+                const pid = actor.playerId || mainPlayerId;
+                if (!acc[pid]) acc[pid] = [];
+                acc[pid].push(actor);
+                return acc;
+            }, {});
+
+            fetch(`/api/games/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'update',
+                    updates: {
+                        gameState: {
+                            ...game?.gameState,
+                            stagedActors: actorsByPlayer
+                        }
+                    }
+                })
+            }).catch(e => console.error("Failed to sync actor relocation", e));
         }
 
         setPendingRelocations([]);
@@ -1623,7 +1907,7 @@ export default function GameBoardPage() {
         setActionHand(prev => [...prev, mappedCard]);
         addLog(`${player.name || '080'} purchased action card: ${card.title}`);
         addLog("All players are ready");
-        handleNextPhaseWrapper();
+        // REMOVED immediate phase advancement to allow multiple purchases
     };
 
 
@@ -1688,6 +1972,7 @@ export default function GameBoardPage() {
                     playerActorsV2={MY_ACTORS}
                     players={dynamicPlayers}
                     localPlayerId={localPlayerId}
+                    pendingRelocations={pendingRelocations}
                     availableRelocationCards={relocationCardsCount}
                     availableExchangeCards={exchangeCardsCount}
                     onHexClick={handleHexClick}
@@ -1783,16 +2068,33 @@ export default function GameBoardPage() {
 
 
                     {/* Top Center: Resources (Layered ABOVE Header) */}
-                    <GameResources resources={resources} victoryPoints={victoryPoints} />
+                    <GameResources 
+                        resources={resources} 
+                        victoryPoints={victoryPoints} 
+                        isStep3={phase === 3 && p3Step === 3}
+                        exchangeStep={exchangeStep}
+                        onResourceClick={(res) => {
+                            if (exchangeStep === 1) {
+                                setExchangeSourceValue(res);
+                                setExchangeStep(2);
+                                addLog(`Selected ${res.toUpperCase()} for exchange. Choose an opponent's value.`);
+                            }
+                        }}
+                    />
 
                     {/* Top Left: New Players Panel (SVG) */}
                     <NewPlayersPanel
                         players={dynamicPlayers}
                         p3Step={p3Step}
                         availableExchangeCards={exchangeCardsCount}
-                        onExchangeClick={(id, name) => {
-                            const target = dynamicPlayers.find(p => p.id === id);
-                            setExchangeTarget({ id, name, avatar: target?.avatar || '/avatars/golden_avatar.png' });
+                        exchangeStep={exchangeStep}
+                        opponentsData={opponentsData}
+                        onOpponentResourceClick={(id, res) => {
+                            if (exchangeStep === 2) {
+                                setExchangeTargetPlayer(id);
+                                setExchangeTargetValue(res);
+                                addLog(`Target set: ${opponentsData[id]?.name}'s ${res.toUpperCase()}. Click 'Submit Exchange' to confirm.`);
+                            }
                         }}
                     />
 
@@ -1836,86 +2138,88 @@ export default function GameBoardPage() {
 
 
 
+                    {/* Game Over Screen - Top Level Overlay */}
+                    {isGameOver && (() => {
+                        // 1. Calculate final VPs for everyone
+                        const playersWithVP = dynamicPlayers.map((p) => {
+                            const isMain = p.id === localPlayerId;
+                            const res = isMain ? resources : (opponentsData[p.id]?.resources || {});
+                            const { power = 0, knowledge = 0, art = 0, fame = 0 } = res as any;
+
+                            let currP = power, currK = knowledge, currA = art, currF = fame;
+                            while (currF > 0) {
+                                if (currP <= currK && currP <= currA) currP++;
+                                else if (currK <= currP && currK <= currA) currK++;
+                                else currA++;
+                                currF--;
+                            }
+                            const finalVP = Math.min(currP, currK, currA);
+                            return { ...p, finalVP, isMain };
+                        });
+
+                        // 2. Find Max VP
+                        const maxVP = Math.max(...playersWithVP.map(p => p.finalVP));
+
+                        // 3. Check if local player won
+                        const localPlayerResults = playersWithVP.find(p => p.isMain);
+                        const playerWon = localPlayerResults && localPlayerResults.finalVP === maxVP;
+
+                        return (
+                            <div className="absolute inset-0 z-[5000] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-1000">
+                                <div className="flex flex-col items-center gap-10 p-16 border-[3px] border-[#d4af37]/50 bg-gradient-to-b from-[#1a1a24] to-[#0d0d12] rounded-[3rem] shadow-[0_0_150px_rgba(212,175,55,0.2)]">
+                                    <div className="text-center relative">
+                                        <h1 className={`text-8xl font-black uppercase tracking-[0.2em] animate-in slide-in-from-bottom-5 duration-700 ${playerWon ? 'text-[#d4af37] drop-shadow-[0_0_40px_rgba(212,175,55,0.8)]' : 'text-red-500 drop-shadow-[0_0_40px_rgba(255,0,0,0.8)]'}`}>
+                                            {playerWon ? 'VICTORY' : 'DEFEAT'}
+                                        </h1>
+                                        <p className="text-white/50 text-xl font-rajdhani uppercase tracking-[0.4em] mt-4">Simulation Concluded</p>
+                                    </div>
+
+                                    <div className="flex gap-16 mt-8">
+                                        {playersWithVP.sort((a, b) => b.finalVP - a.finalVP).map((p, idx) => {
+                                            const isWinner = p.finalVP === maxVP;
+                                            return (
+                                                <div key={p.id} className={`relative flex flex-col items-center gap-6 p-8 rounded-3xl border-2 transition-all duration-700 animate-in zoom-in-95 delay-${idx * 200} ${isWinner ? 'border-[#d4af37] bg-[#d4af37]/10 shadow-[0_0_50px_rgba(212,175,55,0.5)] scale-110 z-10' : 'border-white/10 bg-black/40 opacity-70 scale-95'}`}>
+
+                                                    {isWinner && (
+                                                        <div className="absolute -top-10 text-[#d4af37] animate-bounce drop-shadow-[0_0_20px_rgba(212,175,55,1)]">
+                                                            <Crown size={64} strokeWidth={2.5} />
+                                                        </div>
+                                                    )}
+
+                                                    <div className={`relative w-28 h-28 rounded-full border-4 p-1 ${isWinner ? 'border-[#d4af37]' : 'border-white/20'}`}>
+                                                        <Image src={p.avatar || '/avatars/golden_avatar.png'} fill className="object-cover rounded-full" alt={p.name} />
+                                                    </div>
+
+                                                    <div className="text-center">
+                                                        <p className="font-bold font-rajdhani text-white/80 uppercase tracking-widest text-lg">{p.name}</p>
+                                                        <p className={`text-5xl font-black mt-2 ${isWinner ? 'text-[#d4af37] drop-shadow-[0_0_15px_rgba(212,175,55,0.8)]' : 'text-white/60'}`}>{p.finalVP} <span className="text-2xl opacity-50">VP</span></p>
+                                                    </div>
+
+                                                    {p.isMain && (
+                                                        <div className="absolute -bottom-4 bg-black px-4 py-1 rounded-full border border-white/20 text-xs text-white/60 tracking-widest uppercase">
+                                                            You
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    <button
+                                        onClick={() => window.location.href = '/'}
+                                        className="mt-12 px-16 py-5 bg-gradient-to-r from-[#d4af37] to-[#f3bd48] text-black font-black text-xl uppercase tracking-[0.4em] rounded-2xl hover:from-[#ffe066] hover:to-[#ffd700] shadow-[0_0_40px_rgba(212,175,55,0.5)] transition-all transform hover:scale-105 active:scale-95"
+                                    >
+                                        Good Game!
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
                     {/* Bottom Right: Next Phase Button */}
                     <div className="absolute bottom-10 right-10 z-[300] pointer-events-auto">
                         {/* Only show Next Phase if not in Phase 2 OR if all actors distributed. And in Phase 4, only if all player conflicts are resolved. HIDE if game is over. */}
-                        {isGameOver && (() => {
-                            // 1. Calculate final VPs for everyone
-                            const playersWithVP = dynamicPlayers.map((p) => {
-                                const isMain = p.id === localPlayerId;
-                                const res = isMain ? resources : (opponentsData[p.id]?.resources || {});
-                                const { power = 0, knowledge = 0, art = 0, fame = 0 } = res as any;
-
-                                let currP = power, currK = knowledge, currA = art, currF = fame;
-                                while (currF > 0) {
-                                    if (currP <= currK && currP <= currA) currP++;
-                                    else if (currK <= currP && currK <= currA) currK++;
-                                    else currA++;
-                                    currF--;
-                                }
-                                const finalVP = Math.min(currP, currK, currA);
-                                return { ...p, finalVP, isMain };
-                            });
-
-                            // 2. Find Max VP
-                            const maxVP = Math.max(...playersWithVP.map(p => p.finalVP));
-
-                            // 3. Check if local player won
-                            const localPlayerResults = playersWithVP.find(p => p.isMain);
-                            const playerWon = localPlayerResults && localPlayerResults.finalVP === maxVP;
-
-                            return (
-                                <div className="absolute inset-0 z-[5000] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-1000">
-                                    <div className="flex flex-col items-center gap-10 p-16 border-[3px] border-[#d4af37]/50 bg-gradient-to-b from-[#1a1a24] to-[#0d0d12] rounded-[3rem] shadow-[0_0_150px_rgba(212,175,55,0.2)]">
-                                        <div className="text-center relative">
-                                            <h1 className={`text-8xl font-black uppercase tracking-[0.2em] animate-in slide-in-from-bottom-5 duration-700 ${playerWon ? 'text-[#d4af37] drop-shadow-[0_0_40px_rgba(212,175,55,0.8)]' : 'text-red-500 drop-shadow-[0_0_40px_rgba(255,0,0,0.8)]'}`}>
-                                                {playerWon ? 'VICTORY' : 'DEFEAT'}
-                                            </h1>
-                                            <p className="text-white/50 text-xl font-rajdhani uppercase tracking-[0.4em] mt-4">Simulation Concluded</p>
-                                        </div>
-
-                                        <div className="flex gap-16 mt-8">
-                                            {playersWithVP.sort((a, b) => b.finalVP - a.finalVP).map((p, idx) => {
-                                                const isWinner = p.finalVP === maxVP;
-                                                return (
-                                                    <div key={p.id} className={`relative flex flex-col items-center gap-6 p-8 rounded-3xl border-2 transition-all duration-700 animate-in zoom-in-95 delay-${idx * 200} ${isWinner ? 'border-[#d4af37] bg-[#d4af37]/10 shadow-[0_0_50px_rgba(212,175,55,0.5)] scale-110 z-10' : 'border-white/10 bg-black/40 opacity-70 scale-95'}`}>
-
-                                                        {isWinner && (
-                                                            <div className="absolute -top-10 text-[#d4af37] animate-bounce drop-shadow-[0_0_20px_rgba(212,175,55,1)]">
-                                                                <Crown size={64} strokeWidth={2.5} />
-                                                            </div>
-                                                        )}
-
-                                                        <div className={`relative w-28 h-28 rounded-full border-4 p-1 ${isWinner ? 'border-[#d4af37]' : 'border-white/20'}`}>
-                                                            <Image src={p.avatar || '/avatars/golden_avatar.png'} fill className="object-cover rounded-full" alt={p.name} />
-                                                        </div>
-
-                                                        <div className="text-center">
-                                                            <p className="font-bold font-rajdhani text-white/80 uppercase tracking-widest text-lg">{p.name}</p>
-                                                            <p className={`text-5xl font-black mt-2 ${isWinner ? 'text-[#d4af37] drop-shadow-[0_0_15px_rgba(212,175,55,0.8)]' : 'text-white/60'}`}>{p.finalVP} <span className="text-2xl opacity-50">VP</span></p>
-                                                        </div>
-
-                                                        {p.isMain && (
-                                                            <div className="absolute -bottom-4 bg-black px-4 py-1 rounded-full border border-white/20 text-xs text-white/60 tracking-widest uppercase">
-                                                                You
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-
-                                        <button
-                                            onClick={() => window.location.href = '/dashboard'}
-                                            className="mt-12 px-16 py-5 bg-gradient-to-r from-[#d4af37] to-[#f3bd48] text-black font-black text-xl uppercase tracking-[0.4em] rounded-2xl hover:from-[#ffe066] hover:to-[#ffd700] shadow-[0_0_40px_rgba(212,175,55,0.5)] transition-all transform hover:scale-105 active:scale-95"
-                                        >
-                                            Return to Lobby
-                                        </button>
-                                    </div>
-                                </div>
-                            );
-                        })()}
-                        {!isGameOver && phase !== 5 && ((phase !== 2 || availableActors.length === 0) && (phase !== 4 || stickyConflicts.filter(c => c.hasPlayer && !resolvedConflicts.includes(c.locId)).length === 0)) && (
+                        {!isGameOver && ((phase !== 2 || availableActors.length === 0) && (phase !== 4 || stickyConflicts.filter(c => c.hasPlayer && !resolvedConflicts.includes(c.locId)).length === 0)) && (
                             <button
                                 onClick={(isWaitingForPlayers || (game?.isTest && !opponentsReady)) ? undefined : commitTurn}
                                 disabled={isWaitingForPlayers || (game?.isTest && !opponentsReady)}
@@ -1925,12 +2229,14 @@ export default function GameBoardPage() {
                                     phase === 3 ? (
                                         p3Step === 0
                                             ? (actionHand.length === 0 ? "Play No Cards" : "Commit Action Cards")
-                                            : p3Step === 2
-                                                ? (relocationCardsCount > 0 ? "Done Relocation" : "No Relocation")
+                                            : p3Step === 1
+                                                ? (p3Step1Ready ? "Waiting for others..." : "Get It!")
+                                                : p3Step === 2
+                                                ? (relocationCardsCount > 0 ? "Submit Relocation" : "Done Relocation")
                                                 : p3Step === 3
-                                                    ? (exchangeCardsCount > 0 ? "Done Exchange" : "No Exchange")
-                                                    : "Next Phase"
-                                    ) : "Next Phase"}
+                                                ? (exchangeCardsCount > 0 ? (exchangeStep === 2 && exchangeTargetValue ? "Submit Exchange" : "Exchange Values") : "Done Exchange")
+                                                : "Next Phase"
+                                    ) : phase === 5 ? "Finish Phase" : "Next Phase"}
                             </button>
                         )}
                     </div>
@@ -1967,24 +2273,24 @@ export default function GameBoardPage() {
 
 
 
-                    {/* --- Exchange Modal --- */}
-                    {exchangeTarget && (
-                        <div className="fixed inset-0 z-[1000] pointer-events-auto overflow-hidden">
-                            <ExchangeModal
-                                isOpen={true}
-                                onClose={() => setExchangeTarget(null)}
-                                onConfirm={handleExchangeConfirm}
-                                targetName={exchangeTarget.name}
-                                targetAvatar={exchangeTarget.avatar}
-                                playerName={player.name || '080'}
-                                playerAvatar={player.avatar || '/avatars/golden_avatar.png'}
-                                playerResources={resources}
-                                opponentResources={opponentsData[exchangeTarget.id]?.resources || {}}
-                            />
-                        </div>
-                    )}
 
                     {/* --- Phase 1: Event Modal --- */}
+                    {
+                        phase === 1 && !currentEvent && (game.gameState?.eventDeck || []).length === 0 && (
+                            <div className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm pointer-events-auto">
+                                <div className="relative w-[600px] bg-[#0d0d12] border border-[#d4af37]/30 rounded-xl shadow-2xl p-10 flex flex-col items-center">
+                                    <h2 className="text-3xl font-black text-[#d4af37] mb-6 uppercase tracking-widest">End of Era</h2>
+                                    <p className="text-white text-xl text-center mb-8 font-rajdhani">There is no more Events in this game.</p>
+                                    <button
+                                        onClick={commitTurn}
+                                        className="px-12 py-4 bg-[#d4af37] text-black font-bold uppercase tracking-widest rounded-lg hover:bg-[#ffe066] transition-all"
+                                    >
+                                        Acknowledge
+                                    </button>
+                                </div>
+                            </div>
+                        )
+                    }
                     {
                         phase === 1 && currentEvent && (
                             <div className="absolute inset-0 z-40 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm pointer-events-auto">
@@ -2104,6 +2410,29 @@ export default function GameBoardPage() {
                         </div>
                     </div>
                 )}
+
+                {/* --- Inventory & Stats Trigger --- */}
+                <div className="fixed bottom-10 left-10 z-[300] pointer-events-auto">
+                    <button
+                        onClick={() => setIsInventoryOpen(true)}
+                        className="group flex items-center gap-4 px-6 py-3 bg-black/40 border border-[#d4af37]/30 hover:border-[#d4af37] rounded-2xl backdrop-blur-md transition-all hover:scale-105 active:scale-95"
+                    >
+                        <Briefcase size={20} className="text-[#d4af37] group-hover:animate-bounce" />
+                        <span className="font-rajdhani font-bold uppercase tracking-[0.2em] text-xs text-white/70 group-hover:text-[#d4af37]">Inventory & Stats</span>
+                    </button>
+                </div>
+
+                {/* --- Inventory & Stats Modal --- */}
+                <InventoryStatsModal
+                    isOpen={isInventoryOpen}
+                    onClose={() => setIsInventoryOpen(false)}
+                    actionHand={actionHand}
+                    players={dynamicPlayers}
+                    localPlayerId={localPlayerId}
+                    resources={resources}
+                    victoryPoints={victoryPoints}
+                    opponentsData={opponentsData}
+                />
 
             </main>
         </TooltipProvider>

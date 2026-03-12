@@ -43,13 +43,13 @@ export function resolveCompareEvent(
 
     const statsStr = `${playerName}: ${myStat}, ${opponentStats.map(o => `${o.name}: ${o.amount}`).join(', ')}`;
     const message = won
-        ? `${playerName} WON Glory! (Stats: ${statsStr})`
+        ? `${playerName} WON Fame! (Stats: ${statsStr})`
         : `${playerName} lost. (Stats: ${statsStr})`;
 
     return {
         won,
         message,
-        reward: won && event.reward === 'glory' ? { type: 'glory', amount: 1 } : undefined,
+        reward: won && event.reward === 'fame' ? { type: 'fame', amount: 1 } : undefined,
     };
 }
 

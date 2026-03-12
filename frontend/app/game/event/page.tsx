@@ -65,7 +65,7 @@ export default function EventPhasePage() {
                                     Discard any amount of the <span className="text-yellow-400 font-bold">Energy</span> resource.
                                 </p>
                                 <p className="text-sm text-gray-400 mt-1">
-                                    The player with the most discards wins <span className="text-purple-400 font-bold">Glory</span>.
+                                    The player with the most discards wins <span className="text-purple-400 font-bold">Fame</span>.
                                 </p>
                             </div>
 
