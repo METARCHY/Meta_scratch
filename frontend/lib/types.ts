@@ -42,5 +42,8 @@ export interface Game {
         phaseTicker: number;
         playerReady: Record<string, boolean>;
         stagedActors: Record<string, any[]>;
+        eventDeck?: string[];
+        actionDeck?: string[];
+        currentEventId?: string;
     };
 }

@@ -249,6 +249,7 @@ export default function MapContainer({
                                                     bid={phase >= 4 ? a.bid : undefined}
                                                     hasSecretBid={(phase === 2 || phase === 3) && !!a.bid}
                                                     isDisabled={disabledLocations.includes(loc.id)}
+                                                    isRelocating={relocationSource === a.actorId}
                                                     phase={phase}
                                                     p3Step={p3Step}
                                                     availableExchangeCards={availableExchangeCards}

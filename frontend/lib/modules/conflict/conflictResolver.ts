@@ -126,16 +126,22 @@ export function resolveConflictLogic(
         loserIds = participants.filter(p => p.choice === 'scissors').map(p => p.id);
         survivorIds = winnerIds;
     } else {
-        // One type present (e.g. all Rock) - this is a draw
-        isDraw = true;
-        survivorIds = participants.map(p => p.id);
+        // One type present (e.g. all Rock) - if Dummies exist, RPS players win. Otherwise true draw.
+        if (dummyIds.length > 0) {
+            winnerIds = participants.filter(p => choicesValues.includes(p.choice)).map(p => p.id);
+            loserIds = dummyIds;
+            survivorIds = winnerIds;
+            isDraw = false;
+        } else {
+            isDraw = true;
+            survivorIds = participants.map(p => p.id);
+        }
     }
 
     // CRITICAL: Dummy ALWAYS loses (unless ALL played Dummy, handled above)
-    // Add dummies to losers if there are any non-dummy choices
+    // Actors playing RPS are always surviving winners over Dummies.
     if (choicesValues.length > 0 && dummyIds.length > 0) {
         loserIds = Array.from(new Set([...loserIds, ...dummyIds]));
-        // Dummies are NOT survivors - they exit immediately
         survivorIds = survivorIds.filter(id => !dummyIds.includes(id));
     }
 
@@ -201,8 +207,8 @@ export function resolveConflictLogic(
     // --- Actor-Type Rules & Iteration ---
     if (isDraw) {
         const actorType = participants[0].actorType;
-        if (actorType === 'politician') {
-            logs.push('Politicians clash: Reroll required.');
+        if (actorType === 'politician' || actorType === 'player') {
+            logs.push('Conflict stall: Reroll required.');
             finalRestart = true;
         } else if (actorType === 'artist') {
             logs.push('Artists refuse to compromise: All exit.');

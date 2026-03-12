@@ -31,8 +31,8 @@ export const handleNextPhase = (
     // Calculate max turns based on player count
     const maxTurns = (() => {
         if (isTest) {
-            addLog(`[DEBUG] Test mode detected - maxTurns = 3`);
-            return 3;
+            addLog(`[DEBUG] Test mode detected - maxTurns = 5`);
+            return 5;
         }
         const playerCount = dynamicPlayers.length;
         if (playerCount === 2 || playerCount === 3) return 5;
@@ -69,10 +69,14 @@ export const handleNextPhase = (
             addLog(`--- GAME FINISHED: ${winners[0].id === (player.citizenId || 'p1') ? 'YOU' : 'OPPONENT'} WINS WITH ${topVP} VP ---`);
             return { newPhase, newTurn, isGameOver: true };
         } else {
-            addLog("--- TIE DETECTED AT FINAL TURN: STARTING TIE-BREAKER TURN ---");
-            // For tie-breaker: advance to Phase 5 (Market) for tied players only, then one more turn
-            // BUT we need to track that this is a tie-breaker turn
-            // For now, let it continue to Phase 5, but next turn WILL end the game
+            if (turn === maxTurns) {
+                addLog("--- TIE DETECTED AT FINAL TURN: STARTING TIE-BREAKER TURN ---");
+                // For tie-breaker: advance to Phase 5 (Market) for tied players only, then one more turn
+                // Next turn WILL end the game
+            } else {
+                addLog("--- TIE STILL REMAINS AFTER TIE-BREAKER: GAME FINISHED AS A DRAW ---");
+                return { newPhase, newTurn, isGameOver: true };
+            }
         }
     }
 
@@ -113,7 +117,9 @@ export const handleNextPhase = (
         if (newPhase === 3) {
             addLog("STEP: BLOCKING LOCATIONS");
             triggerBotPhase3ActionsWrapper(1);
-        } else if (newPhase === 4) {
+        } 
+        
+        if (newPhase === 4) {
             // Log detailing conflicts
             const locIdsWithActors = Array.from(new Set(placedActors.map(a => a.locId))).filter(id => !disabledLocations.includes(id));
             locIdsWithActors.forEach(locId => {

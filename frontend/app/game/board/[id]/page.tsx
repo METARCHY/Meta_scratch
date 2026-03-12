@@ -20,7 +20,7 @@ import ExchangeModal from "@/components/game/ExchangeModal";
 import ConflictsSidebar from "@/components/game/ConflictsSidebar";
 import ConflictResolutionView from "@/components/game/ConflictResolutionView";
 import BidRadialMenu from "@/components/game/BidRadialMenu";
-import { ConflictResult } from "@/lib/game/ConflictResolver";
+import { ConflictResult, EventCardDefinition } from "@/lib/modules/core/types";
 import MarketOfferModal, { MarketOffer } from '@/components/game/MarketOfferModal';
 import MarketRevealModal from '@/components/game/MarketRevealModal';
 import BuyActionCardModal from '@/components/game/BuyActionCardModal';
@@ -74,7 +74,33 @@ interface OpponentData {
 }
 export default function GameBoardPage() {
     const { id } = useParams();
-    // --- State Management ---
+    // --- Helper: Draw Action Card ---
+    const drawActionCard = () => {
+        let deck = game?.gameState?.actionDeck || [];
+        if (deck.length === 0) {
+            deck = [...ACTION_CARDS].map(c => c.id).sort(() => Math.random() - 0.5);
+            addLog("Action Deck empty - reshuffled.");
+        }
+        const cardId = deck.pop();
+        const card = ACTION_CARDS.find(c => c.id === cardId) || ACTION_CARDS[0];
+
+        if (game) {
+             const nextGameState = { ...game.gameState, actionDeck: deck };
+             // Update locally to prevent double drawing before fetch returns
+             setGame((prev: any) => prev ? { ...prev, gameState: nextGameState } : prev);
+             fetch(`/api/games/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'update',
+                    updates: { gameState: nextGameState }
+                })
+            }).catch(e => console.error("Failed syncing Action Deck", e));
+        }
+        return card;
+    };
+
+    // --- State Management ---    // Context / Local states
     const { resources, updateResource, player } = useGameState();
     // --- Core Game State ---
     const [game, setGame] = useState<any>(null);
@@ -88,6 +114,12 @@ export default function GameBoardPage() {
     const [activeConflictLocId, setActiveConflictLocId] = useState<string | null>(null);
     const [resolvedConflicts, setResolvedConflicts] = useState<string[]>([]);
     const localPlayerId = player.citizenId || player.address || 'p1';
+
+    // Initial value is a placeholder; actual event is set by useEffect when phase === 1
+    const [currentEvent, setCurrentEvent] = useState<EventCardDefinition | null>(null);
+    const [discardAmount, setDiscardAmount] = useState(0);
+    const [eventResult, setEventResult] = useState<{ msg: string, win: boolean } | null>(null);
+    const [eventTieBreakerActive, setEventTieBreakerActive] = useState<{ conflict: any } | null>(null);
 
 
 
@@ -418,6 +450,13 @@ export default function GameBoardPage() {
             });
         }
 
+        // --- Execute Relocations Before Advancing ---
+        if (phase === 3 && p3Step === 2 && pendingRelocations.length > 0) {
+            addLog(`Resolving ${pendingRelocations.length} pending relocations...`);
+            resolveActionRelocations();
+            return; // Exit early; resolveActionRelocations will call handleNextPhaseWrapper again when done
+        }
+
         const { handleNextPhase } = await import('@/lib/game/PhaseEngine');
 
         // Reset readiness if we are staying in Phase 3 or moving to a synced phase
@@ -484,6 +523,18 @@ export default function GameBoardPage() {
 
         if (gameEnded) {
             setIsGameOver(true);
+
+            // Sync game completion state to backend
+            try {
+                fetch(`/api/games/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'update', updates: { status: 'finished' } })
+                });
+            } catch (e) {
+                console.error("Failed to sync game over state", e);
+            }
+
             return; // CRITICAL: Exit early to prevent phase advancement when game is over
         }
 
@@ -554,13 +605,6 @@ export default function GameBoardPage() {
 
     console.log("GameBoardPage Rendering, Phase:", phase, "Turn:", turn);
 
-    // Phase 1: Events
-    // Initial value is a placeholder; actual event is set by useEffect when phase === 1
-    const [currentEvent, setCurrentEvent] = useState<EventCardDefinition | null>(null);
-    const [discardAmount, setDiscardAmount] = useState(0);
-    const [eventResult, setEventResult] = useState<{ msg: string, win: boolean } | null>(null);
-    const [eventTieBreakerActive, setEventTieBreakerActive] = useState<{ conflict: any } | null>(null);
-
     const handleEventTieBreakerResolve = (result: any) => {
         if (result.restart) return; // Modal handles rerolls internally
 
@@ -574,9 +618,9 @@ export default function GameBoardPage() {
 
         if (result.winnerId === localPlayerId) {
             if (currentEvent.reward === 'action_card') {
-                const randomCard = ACTION_CARDS[Math.floor(Math.random() * ACTION_CARDS.length)];
-                setActionHand(prev => [...prev, randomCard]);
-                addLog(`${player.name || '080'} WON the Tie-Breaker Conflict and earned the Action Card: ${randomCard.title}!`);
+                const drawnCard = drawActionCard();
+                setActionHand(prev => [...prev, drawnCard]);
+                addLog(`${player.name || '080'} WON the Tie-Breaker Conflict and earned the Action Card: ${drawnCard.title}!`);
             } else {
                 updateResource(currentEvent.reward || 'fame', 1);
                 addLog(`${player.name || '080'} WON the Tie-Breaker Conflict and earned ${currentEvent.reward || 'Fame'}!`);
@@ -838,15 +882,60 @@ export default function GameBoardPage() {
     }, [resources]);
 
     // --- Effects ---
+    // Phase 1: Draw from Event Deck (No repeats until all 7 are used)
     useEffect(() => {
-        // Pick a random event for this turn (Phase 1 only)
-        // NOTE: actionHand is NOT reset here — cards persist between turns.
-        // Cards are only consumed when played in Phase 3.
-        if (phase === 1) {
-            const randomEvent = EVENTS[Math.floor(Math.random() * EVENTS.length)];
-            setCurrentEvent(randomEvent);
+        // Only run when it's Phase 1, we haven't set the local event yet, and the game is loaded
+        if (phase === 1 && !currentEvent && game && !isWaitingForPlayers) {
+            const serverEventId = game.gameState?.currentEventId;
+            const currentTurn = turn;
+
+            if (serverEventId && game.gameState?.eventDeckTurn === currentTurn) {
+                // If the server already drew an event for this specific turn, just use it
+                const event = EVENTS.find(e => e.id === serverEventId);
+                if (event) {
+                    setCurrentEvent(event);
+                    addLog(`EVENT DRAWN: ${event.title}`);
+                }
+            } else {
+                // Only the primary host (or the local user in a bot match) draws to avoid race conditions
+                const isHost = player.citizenId === dynamicPlayers[0]?.id || game.isTest;
+                if (!isHost) return; 
+
+                let serverDeck = game.gameState?.eventDeck || [];
+                
+                // Shuffle a new deck if empty
+                if (serverDeck.length === 0) {
+                    serverDeck = [...EVENTS].map(e => e.id).sort(() => Math.random() - 0.5);
+                    addLog("Event Deck empty - reshuffled.");
+                }
+                
+                const nextEventId = serverDeck.pop();
+                const nextEvent = EVENTS.find(e => e.id === nextEventId);
+                
+                if (nextEvent) {
+                    setCurrentEvent(nextEvent);
+                    addLog(`EVENT DRAWN: ${nextEvent.title}`);
+                    
+                    // Sync the drawn event and new deck state to the backend
+                    fetch(`/api/games/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'update',
+                            updates: {
+                                gameState: {
+                                    ...game.gameState,
+                                    eventDeck: serverDeck,
+                                    currentEventId: nextEvent.id,
+                                    eventDeckTurn: currentTurn
+                                }
+                            }
+                        })
+                    }).catch(err => console.error("Failed to sync event deck", err));
+                }
+            }
         }
-    }, [phase, turn]);
+    }, [phase, turn, currentEvent, game?.isTest]);
 
 
     // --- Handlers ---
@@ -856,25 +945,90 @@ export default function GameBoardPage() {
         let win = false;
         let msg = "";
 
-        if (currentEvent.type === "discard") {
+        if (currentEvent && currentEvent.type === "discard") {
+            const humanOpponents = dynamicPlayers.filter(p => p.id !== localPlayerId && !p.id.startsWith('bot') && !game?.isTest);
+            if (humanOpponents.length > 0) {
+                setIsWaitingForPlayers(true);
+                // Expected: backend sync will resolve this instead of random bots
+                addLog(`Waiting for other players to discard...`);
+                return;
+            }
+
             const oppDiscards = dynamicPlayers
-                .filter(p => (p.citizenId || p.address) !== player.citizenId)
+                .filter(p => p.id !== localPlayerId)
                 .map(p => {
                     const amount = Math.floor(Math.random() * 4);
-                    return { name: p.name, amount };
+                    return { id: p.id, name: p.name, amount };
                 });
 
-            const maxOpponentDiscard = Math.max(...oppDiscards.map(o => o.amount), 0);
-            win = discardAmount > maxOpponentDiscard;
-            updateResource(currentEvent.targetResource!, -discardAmount); // clamp to 0 is inside updateResource
+            const statValues: { id: string; name: string; amount: number }[] = [];
+            statValues.push({ id: localPlayerId, name: player.name || '080', amount: discardAmount });
 
-            const winnerName = win ? player.name || '080' : (oppDiscards.filter(o => o.amount === maxOpponentDiscard)[0]?.name || 'Opponent');
-            const rewardText = currentEvent.reward === 'action_card' ? 'an Action Card' : 'Fame';
-            msg = win
-                ? `${player.name || '080'} discarded ${discardAmount} (Opponents: ${oppDiscards.map(o => `${o.name} discarded ${o.amount}`).join(', ')}). WINNER: ${winnerName} receives ${rewardText}!`
-                : `${player.name || '080'} discarded ${discardAmount} (Opponents: ${oppDiscards.map(o => `${o.name} discarded ${o.amount}`).join(', ')}). WINNER: ${winnerName} receives ${rewardText}. ${player.name || '080'} lost.`;
+            oppDiscards.forEach(opp => {
+                statValues.push({ id: opp.id, name: opp.name, amount: opp.amount });
+            });
 
-        } else {
+            const maxDiscard = Math.max(...statValues.map(s => s.amount));
+            const winners = statValues.filter(s => s.amount === maxDiscard);
+
+            // Deduct the resources that players decided to discard
+            updateResource(currentEvent.targetResource!, -discardAmount);
+
+            // Apply opponent discards graphically
+            setOpponentsData((prev: any) => {
+                const next = { ...prev };
+                oppDiscards.forEach(opp => {
+                    if (!next[opp.id]) next[opp.id] = { resources: { power: 0, art: 0, knowledge: 0, fame: 0 } };
+                    const oppRes = { ...next[opp.id].resources };
+                    const key = currentEvent.targetResource!;
+                    oppRes[key] = Math.max(0, (oppRes[key] || 0) - opp.amount);
+                    next[opp.id] = { ...next[opp.id], resources: oppRes };
+                });
+                return next;
+            });
+
+            const oppStatsStr = oppDiscards.map(o => `${o.name} discarded ${o.amount}`).join(', ');
+
+            if (winners.length > 1) {
+                if (winners.some(w => w.id === localPlayerId)) {
+                    addLog(`TIE DETECTED for Event: ${currentEvent.title}. Initiating Conflict Resolution!`);
+                    setEventTieBreakerActive({
+                        conflict: {
+                            locId: `event_tie_${Date.now()}`,
+                            locationName: currentEvent.title,
+                            playerActor: {
+                                actorType: 'player',
+                                actorId: localPlayerId,
+                                type: '', // Trigger selection menu
+                                playerId: localPlayerId,
+                                avatar: player.avatar
+                            },
+                            opponents: winners.filter(w => w.id !== localPlayerId).map((w, idx) => ({
+                                actorId: w.id,
+                                playerId: w.id,
+                                name: w.name,
+                                actorType: 'player',
+                                type: ['rock', 'paper', 'scissors'][Math.floor(Math.random() * 3)],
+                                playerAvatar: dynamicPlayers.find(p => p.id === w.id)?.avatar
+                            })),
+                            resourceType: currentEvent.reward || 'action_card'
+                        }
+                    });
+                    return; // Wait for the modal to resolve
+                } else {
+                    const randomBotWinner = winners[Math.floor(Math.random() * winners.length)];
+                    msg = `${player.name || '080'} discarded ${discardAmount} (Opponents: ${oppStatsStr}). WINNER: ${randomBotWinner.name} won the tie-breaker and receives an Action Card. ${player.name || '080'} lost.`;
+                    win = false;
+                }
+            } else if (winners[0].id === localPlayerId) {
+                win = true;
+                msg = `${player.name || '080'} discarded ${discardAmount} (Opponents: ${oppStatsStr}). WINNER: ${player.name || '080'} receives an Action Card!`;
+            } else {
+                win = false;
+                msg = `${player.name || '080'} discarded ${discardAmount} (Opponents: ${oppStatsStr}). WINNER: ${winners[0].name} receives an Action Card. ${player.name || '080'} lost.`;
+            }
+
+        } else if (currentEvent) {
             const statValues: { id: string; name: string; amount: number }[] = [];
             let statLabel = "";
 
@@ -912,13 +1066,20 @@ export default function GameBoardPage() {
                         conflict: {
                             locId: `event_tie_${Date.now()}`,
                             locationName: currentEvent.title,
-                            playerActor: { actorType: 'politician', actorId: 'player_event_actor', type: 'rock', playerId: localPlayerId },
+                            playerActor: {
+                                actorType: 'player',
+                                actorId: localPlayerId,
+                                type: '', // Trigger selection menu
+                                playerId: localPlayerId,
+                                avatar: player.avatar
+                            },
                             opponents: winners.filter(w => w.id !== localPlayerId).map((w, idx) => ({
-                                actorId: `bot_event_${idx}`,
+                                actorId: w.id,
                                 playerId: w.id,
                                 name: w.name,
-                                actorType: 'politician',
-                                type: ['rock', 'paper', 'scissors'][Math.floor(Math.random() * 3)]
+                                actorType: 'player',
+                                type: ['rock', 'paper', 'scissors'][Math.floor(Math.random() * 3)],
+                                playerAvatar: dynamicPlayers.find(p => p.id === w.id)?.avatar
                             })),
                             resourceType: currentEvent.reward || 'fame'
                         }
@@ -941,8 +1102,8 @@ export default function GameBoardPage() {
                 }
             } else if (winners[0].id === localPlayerId) {
                 win = true;
-                const rewardText = currentEvent.reward === 'action_card' ? 'Action Card: ' + ACTION_CARDS[Math.floor(Math.random() * ACTION_CARDS.length)].title : 'Fame';
-                msg = `WINNER: ${player.name || '080'} receives ${rewardText}! (Stats: Me: ${myStatAmount}, ${oppStatsStr})`;
+                const rewardText = currentEvent.reward === 'action_card' ? 'Action Card' : 'Fame';
+                msg = `${player.name || '080'} won the Event requirement! Reward: ${rewardText}`;
             } else {
                 win = false;
                 const winnerName = winners[0].name;
@@ -962,21 +1123,15 @@ export default function GameBoardPage() {
             }
         }
 
-        if (win) {
+        if (win && currentEvent) {
             if (currentEvent.reward === "fame") {
                 updateResource('fame', 1);
-            } else if (currentEvent.reward === "action_card") {
-                const randomCard = ACTION_CARDS[Math.floor(Math.random() * ACTION_CARDS.length)];
-
-                // Construct a unique ID so it works properly in hand
-                const mappedCard = {
-                    ...randomCard,
-                    id: `card_${Date.now()}_${Math.random()}`,
-                    instanceId: `${randomCard.id}_${Date.now()}`
-                };
-
-                setActionHand(prev => [...prev, mappedCard]);
-                msg = `${msg} You received the Action Card: ${randomCard.title}!`;
+            } else if (win && currentEvent?.reward === 'action_card') {
+            const drawn = drawActionCard();
+            setActionHand(prev => [...prev, drawn]);
+            msg += ` Found action card: ${drawn.title}`;
+        } else if (win && currentEvent?.reward) {
+                updateResource(currentEvent.reward, 1);
             }
         }
 
@@ -1033,9 +1188,15 @@ export default function GameBoardPage() {
                 });
             }
 
-            // Smart-skip: only show sub-steps if relevant cards were selected
-            const hasReloc = relocationCardsCount > 0;
-            const hasExchange = exchangeCardsCount > 0;
+            // Smart-skip: only show sub-steps if relevant cards were selected by ANY player
+            let hasReloc = relocationCardsCount > 0;
+            let hasExchange = exchangeCardsCount > 0;
+
+            const commits = botActionCommitsRef.current || {};
+            Object.values(commits).forEach(botSteps => {
+                if (botSteps.includes(2)) hasReloc = true;
+                if (botSteps.includes(3)) hasExchange = true;
+            });
 
             setTimeout(() => {
                 if (hasReloc) {
@@ -1067,12 +1228,12 @@ export default function GameBoardPage() {
             const actor = placedActors.find(p => p.actorId === relocationSource);
             if (!actor) return;
 
-            // Validate Move - Robot Requirement or general proximity if needed
-            // For now, if robot, we can strictly enforce ALLOWED_MOVES again as a "hint"
-            if (actor.type === 'robot') {
-                const validTargets = ALLOWED_MOVES[actor.type];
-                if (!validTargets?.includes(locId)) {
-                    addLog(`Invalid move for Robot! Must move to ${validTargets?.map(t => t.toUpperCase()).join(', ')}`);
+            // Validate Move - Enforce ALLOWED_MOVES for ALL Actors
+            const extractedType = actor.type || actor.actorType;
+            if (extractedType) {
+                const validTargets = ALLOWED_MOVES[extractedType];
+                if (validTargets && !validTargets.includes(locId)) {
+                    addLog(`Invalid relocation for ${extractedType}! Must move to ${validTargets.map(t => t.toUpperCase()).join(', ')}`);
                     return;
                 }
             }
@@ -1087,10 +1248,12 @@ export default function GameBoardPage() {
             setRelocationSource(null);
 
             // Deduct from queued action cards
-            setSelectedActionCards(prev => ({
-                ...prev,
-                'relocation': Math.max(0, (prev['relocation'] || 0) - 1)
-            }));
+            setSelectedActionCards(prev => {
+                const next = { ...prev };
+                const relocKey = Object.keys(next).find(k => k.includes('relocation') && next[k] > 0);
+                if (relocKey) next[relocKey]--;
+                return next;
+            });
 
             // Consume Card from hand visual representation
             const cardIndex = actionHand.findIndex(c => c.id.includes('relocation'));
@@ -1329,6 +1492,15 @@ export default function GameBoardPage() {
             if (moves.length > 1) {
                 const isLocal = moves.some(m => m.playerId === localPlayerId);
                 if (!isLocal) {
+                    const hasHuman = moves.some(m => {
+                        const p = dynamicPlayers.find(dp => dp.id === m.playerId);
+                        return p && !p.id.startsWith('bot') && !game?.isTest;
+                    });
+                    if (hasHuman) {
+                        setIsWaitingForPlayers(true);
+                        addLog(`Waiting for players to resolve their relocation conflict...`);
+                        return; // PAUSE Execution Loop here until conflict resolves via backend
+                    }
                     // Auto resolve bots immediately
                     const botMoves = moves.map(m => ({ ...m, choice: ['rock', 'paper', 'scissors'][Math.floor(Math.random() * 3)] }));
                     resolvePlayerConflictLogic({ actorId, moves: botMoves });
@@ -1374,6 +1546,9 @@ export default function GameBoardPage() {
         const opponents = dynamicPlayers.filter(p => p.id !== mainPlayerId);
 
         opponents.forEach(opp => {
+            const isHuman = !opp.id.startsWith('bot') && !game?.isTest;
+            if (isHuman) return; // Wait for backend sync for human offers
+
             // 30% chance a bot doesn't trade
             if (Math.random() < 0.3) {
                 offers[opp.id] = null;
@@ -1409,6 +1584,13 @@ export default function GameBoardPage() {
                 addLog(`${opp.name} offered ${botOffer.giveAmount} ${botOffer.giveType.toUpperCase()} for ${botOffer.takeAmount} ${botOffer.takeType.toUpperCase()}`);
             }
         });
+
+        const humanOpponents = opponents.filter(opp => !opp.id.startsWith('bot') && !game?.isTest);
+        if (humanOpponents.length > 0) {
+            setIsWaitingForPlayers(true);
+            addLog(`Waiting for other players to complete their market offers...`);
+            return;
+        }
 
         setBotMarketOffers(offers);
         setMarketMatchId(foundMatch);
@@ -1657,6 +1839,82 @@ export default function GameBoardPage() {
                     {/* Bottom Right: Next Phase Button */}
                     <div className="absolute bottom-10 right-10 z-[300] pointer-events-auto">
                         {/* Only show Next Phase if not in Phase 2 OR if all actors distributed. And in Phase 4, only if all player conflicts are resolved. HIDE if game is over. */}
+                        {isGameOver && (() => {
+                            // 1. Calculate final VPs for everyone
+                            const playersWithVP = dynamicPlayers.map((p) => {
+                                const isMain = p.id === localPlayerId;
+                                const res = isMain ? resources : (opponentsData[p.id]?.resources || {});
+                                const { power = 0, knowledge = 0, art = 0, fame = 0 } = res as any;
+
+                                let currP = power, currK = knowledge, currA = art, currF = fame;
+                                while (currF > 0) {
+                                    if (currP <= currK && currP <= currA) currP++;
+                                    else if (currK <= currP && currK <= currA) currK++;
+                                    else currA++;
+                                    currF--;
+                                }
+                                const finalVP = Math.min(currP, currK, currA);
+                                return { ...p, finalVP, isMain };
+                            });
+
+                            // 2. Find Max VP
+                            const maxVP = Math.max(...playersWithVP.map(p => p.finalVP));
+
+                            // 3. Check if local player won
+                            const localPlayerResults = playersWithVP.find(p => p.isMain);
+                            const playerWon = localPlayerResults && localPlayerResults.finalVP === maxVP;
+
+                            return (
+                                <div className="absolute inset-0 z-[5000] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-1000">
+                                    <div className="flex flex-col items-center gap-10 p-16 border-[3px] border-[#d4af37]/50 bg-gradient-to-b from-[#1a1a24] to-[#0d0d12] rounded-[3rem] shadow-[0_0_150px_rgba(212,175,55,0.2)]">
+                                        <div className="text-center relative">
+                                            <h1 className={`text-8xl font-black uppercase tracking-[0.2em] animate-in slide-in-from-bottom-5 duration-700 ${playerWon ? 'text-[#d4af37] drop-shadow-[0_0_40px_rgba(212,175,55,0.8)]' : 'text-red-500 drop-shadow-[0_0_40px_rgba(255,0,0,0.8)]'}`}>
+                                                {playerWon ? 'VICTORY' : 'DEFEAT'}
+                                            </h1>
+                                            <p className="text-white/50 text-xl font-rajdhani uppercase tracking-[0.4em] mt-4">Simulation Concluded</p>
+                                        </div>
+
+                                        <div className="flex gap-16 mt-8">
+                                            {playersWithVP.sort((a, b) => b.finalVP - a.finalVP).map((p, idx) => {
+                                                const isWinner = p.finalVP === maxVP;
+                                                return (
+                                                    <div key={p.id} className={`relative flex flex-col items-center gap-6 p-8 rounded-3xl border-2 transition-all duration-700 animate-in zoom-in-95 delay-${idx * 200} ${isWinner ? 'border-[#d4af37] bg-[#d4af37]/10 shadow-[0_0_50px_rgba(212,175,55,0.5)] scale-110 z-10' : 'border-white/10 bg-black/40 opacity-70 scale-95'}`}>
+
+                                                        {isWinner && (
+                                                            <div className="absolute -top-10 text-[#d4af37] animate-bounce drop-shadow-[0_0_20px_rgba(212,175,55,1)]">
+                                                                <Crown size={64} strokeWidth={2.5} />
+                                                            </div>
+                                                        )}
+
+                                                        <div className={`relative w-28 h-28 rounded-full border-4 p-1 ${isWinner ? 'border-[#d4af37]' : 'border-white/20'}`}>
+                                                            <Image src={p.avatar || '/avatars/golden_avatar.png'} fill className="object-cover rounded-full" alt={p.name} />
+                                                        </div>
+
+                                                        <div className="text-center">
+                                                            <p className="font-bold font-rajdhani text-white/80 uppercase tracking-widest text-lg">{p.name}</p>
+                                                            <p className={`text-5xl font-black mt-2 ${isWinner ? 'text-[#d4af37] drop-shadow-[0_0_15px_rgba(212,175,55,0.8)]' : 'text-white/60'}`}>{p.finalVP} <span className="text-2xl opacity-50">VP</span></p>
+                                                        </div>
+
+                                                        {p.isMain && (
+                                                            <div className="absolute -bottom-4 bg-black px-4 py-1 rounded-full border border-white/20 text-xs text-white/60 tracking-widest uppercase">
+                                                                You
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        <button
+                                            onClick={() => window.location.href = '/dashboard'}
+                                            className="mt-12 px-16 py-5 bg-gradient-to-r from-[#d4af37] to-[#f3bd48] text-black font-black text-xl uppercase tracking-[0.4em] rounded-2xl hover:from-[#ffe066] hover:to-[#ffd700] shadow-[0_0_40px_rgba(212,175,55,0.5)] transition-all transform hover:scale-105 active:scale-95"
+                                        >
+                                            Return to Lobby
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })()}
                         {!isGameOver && phase !== 5 && ((phase !== 2 || availableActors.length === 0) && (phase !== 4 || stickyConflicts.filter(c => c.hasPlayer && !resolvedConflicts.includes(c.locId)).length === 0)) && (
                             <button
                                 onClick={(isWaitingForPlayers || (game?.isTest && !opponentsReady)) ? undefined : commitTurn}
@@ -1739,15 +1997,28 @@ export default function GameBoardPage() {
                                     <p className="text-white text-center mb-6">{currentEvent.desc}</p>
 
                                     {!eventResult ? (
-                                        <div className="flex gap-4">
-                                            {currentEvent.type === "discard" && (
-                                                <div className="flex items-center gap-2">
-                                                    <button onClick={() => setDiscardAmount(d => Math.max(0, d - 1))} className="p-2 border rounded hover:bg-white/10">-</button>
-                                                    <span className="font-bold text-xl">{discardAmount}</span>
-                                                    <button onClick={() => setDiscardAmount(d => Math.min((resources as any)[currentEvent.targetResource!] || 0, d + 1))} className="p-2 border rounded hover:bg-white/10">+</button>
-                                                </div>
-                                            )}
-                                            <button onClick={handleEventConfirm} className="px-6 py-2 bg-[#d4af37] text-black font-bold rounded hover:bg-[#ffe066]">CONFIRM</button>
+                                        <div className="flex flex-col items-center gap-4">
+                                            <div className="flex gap-4">
+                                                {currentEvent.type === "discard" && (
+                                                    <div className="flex items-center gap-2 text-white">
+                                                        <button onClick={() => setDiscardAmount(d => Math.max(0, d - 1))} className="p-2 border rounded hover:bg-white/10">-</button>
+                                                        <span className="font-bold text-xl">{discardAmount}</span>
+                                                        <button onClick={() => setDiscardAmount(d => Math.min((resources as any)[currentEvent.targetResource!] || 0, d + 1))} className="p-2 border rounded hover:bg-white/10">+</button>
+                                                    </div>
+                                                )}
+                                                <button onClick={handleEventConfirm} className="px-6 py-2 bg-[#d4af37] text-black font-bold rounded hover:bg-[#ffe066]">CONFIRM</button>
+                                            </div>
+
+                                            {/* --- TEMPORARY DEBUG BUTTON --- */}
+                                            <button
+                                                onClick={() => {
+                                                    setCurrentEvent(null);
+                                                    setEventResult(null);
+                                                }}
+                                                className="text-[10px] uppercase tracking-widest text-white/30 hover:text-white/60 transition-colors mt-4"
+                                            >
+                                                Debug: Next Event (Test Deck Lifecycle)
+                                            </button>
                                         </div>
                                     ) : (
                                         <div className="flex flex-col items-center gap-4">
@@ -1806,86 +2077,7 @@ export default function GameBoardPage() {
                         />
                     )}
 
-                    {/* --- Game Over Overlay --- */}
-                    {isGameOver && (() => {
-                        // 1. Calculate final VPs for everyone
-                        const playersWithVP = dynamicPlayers.map((p) => {
-                            const isMain = p.id === localPlayerId;
-                            const res = isMain ? resources : (opponentsData[p.id]?.resources || {});
-                            const { power = 0, knowledge = 0, art = 0, fame = 0 } = res as any;
-
-                            let currP = power, currK = knowledge, currA = art, currF = fame;
-                            while (currF > 0) {
-                                if (currP <= currK && currP <= currA) currP++;
-                                else if (currK <= currP && currK <= currA) currK++;
-                                else currA++;
-                                currF--;
-                            }
-                            const finalVP = Math.min(currP, currK, currA);
-                            return { ...p, finalVP, isMain };
-                        });
-
-                        // 2. Find Max VP
-                        const maxVP = Math.max(...playersWithVP.map(p => p.finalVP));
-
-                        // 3. Check if local player won
-                        const localPlayerResults = playersWithVP.find(p => p.isMain);
-                        const playerWon = localPlayerResults && localPlayerResults.finalVP === maxVP;
-
-                        return (
-                            <div className="absolute inset-0 z-[2000] flex items-center justify-center bg-black/95 backdrop-blur-xl animate-in fade-in duration-1000">
-                                <div className="flex flex-col items-center gap-10 p-16 border-[3px] border-[#d4af37]/50 bg-gradient-to-b from-[#1a1a24] to-[#0d0d12] rounded-[3rem] shadow-[0_0_150px_rgba(212,175,55,0.2)]">
-                                    <div className="text-center relative">
-                                        <h1 className={`text-8xl font-black uppercase tracking-[0.2em] animate-in slide-in-from-bottom-5 duration-700 ${playerWon ? 'text-[#d4af37] drop-shadow-[0_0_40px_rgba(212,175,55,0.8)]' : 'text-red-500 drop-shadow-[0_0_40px_rgba(255,0,0,0.8)]'}`}>
-                                            {playerWon ? 'VICTORY' : 'DEFEAT'}
-                                        </h1>
-                                        <p className="text-white/50 text-xl font-rajdhani uppercase tracking-[0.4em] mt-4">Simulation Concluded</p>
-                                    </div>
-
-                                    <div className="flex gap-16 mt-8">
-                                        {playersWithVP.sort((a, b) => b.finalVP - a.finalVP).map((p, idx) => {
-                                            const isWinner = p.finalVP === maxVP;
-                                            return (
-                                                <div key={p.id} className={`relative flex flex-col items-center gap-6 p-8 rounded-3xl border-2 transition-all duration-700 animate-in zoom-in-95 delay-${idx * 200} ${isWinner ? 'border-[#d4af37] bg-[#d4af37]/10 shadow-[0_0_50px_rgba(212,175,55,0.5)] scale-110 z-10' : 'border-white/10 bg-black/40 opacity-70 scale-95'}`}>
-
-                                                    {/* Laurels / Crown for Winner */}
-                                                    {isWinner && (
-                                                        <div className="absolute -top-10 text-[#d4af37] animate-bounce drop-shadow-[0_0_20px_rgba(212,175,55,1)]">
-                                                            <Crown size={64} strokeWidth={2.5} />
-                                                        </div>
-                                                    )}
-
-                                                    <div className={`relative w-28 h-28 rounded-full border-4 p-1 ${isWinner ? 'border-[#d4af37]' : 'border-white/20'}`}>
-                                                        <Image src={p.avatar} fill className="object-cover rounded-full" alt={p.name} />
-                                                    </div>
-
-                                                    <div className="text-center">
-                                                        <p className="font-bold font-rajdhani text-white/80 uppercase tracking-widest text-lg">{p.name}</p>
-                                                        <p className={`text-5xl font-black mt-2 ${isWinner ? 'text-[#d4af37] drop-shadow-[0_0_15px_rgba(212,175,55,0.8)]' : 'text-white/60'}`}>{p.finalVP} <span className="text-2xl opacity-50">VP</span></p>
-                                                    </div>
-
-                                                    {p.isMain && (
-                                                        <div className="absolute -bottom-4 bg-black px-4 py-1 rounded-full border border-white/20 text-xs text-white/60 tracking-widest uppercase">
-                                                            You
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-
-                                    <button
-                                        onClick={() => window.location.href = '/dashboard'}
-                                        className="mt-12 px-16 py-5 bg-gradient-to-r from-[#d4af37] to-[#f3bd48] text-black font-black text-xl uppercase tracking-[0.4em] rounded-2xl hover:from-[#ffe066] hover:to-[#ffd700] shadow-[0_0_40px_rgba(212,175,55,0.5)] transition-all transform hover:scale-105 active:scale-95"
-                                    >
-                                        Return to Lobby
-                                    </button>
-                                </div>
-                            </div>
-                        );
-                    })()}
-
-
+                    {/* Modals End Here */}
                 </div>
 
                 {/* Player Conflict Modal */}

@@ -31,7 +31,7 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
     const [step, setStep] = useState<'intro' | 'reveal' | 'outcome_rsp' | 'outcome_bid'>('intro');
 
     // State for choices. Player uses their placed type.
-    const [playerChoice, setPlayerChoice] = useState<string>(conflict.playerActor.type || 'rock');
+    const [playerChoice, setPlayerChoice] = useState<string>(conflict.playerActor.type || '');
     const [opponentChoices, setOpponentChoices] = useState<{ [id: string]: string }>({});
 
     // Calculated Result
@@ -226,12 +226,25 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
 
                     {/* Actor Body */}
                     <div className="relative w-full h-[120%]">
-                        <Image
-                            src={ACTOR_IMAGES[conflict.playerActor?.actorType?.toLowerCase()] || ACTOR_IMAGES['politician']}
-                            fill
-                            className="object-contain object-bottom drop-shadow-[0_0_30px_rgba(0,0,0,0.8)]"
-                            alt="Player Actor"
-                        />
+                        {conflict.playerActor?.actorType === 'player' ? (
+                            <div className="absolute inset-0 flex items-center justify-center p-12">
+                                <div className="relative w-full h-full rounded-2xl overflow-hidden border-4 border-[#d4af37] shadow-[0_0_50px_rgba(212,175,55,0.3)]">
+                                    <Image
+                                        src={conflict.playerActor.avatar || player?.avatar || '/avatars/golden_avatar.png'}
+                                        fill
+                                        className="object-cover"
+                                        alt="Player Avatar"
+                                    />
+                                </div>
+                            </div>
+                        ) : (
+                            <Image
+                                src={ACTOR_IMAGES[conflict.playerActor?.actorType?.toLowerCase()] || ACTOR_IMAGES['politician']}
+                                fill
+                                className="object-contain object-bottom drop-shadow-[0_0_30px_rgba(0,0,0,0.8)]"
+                                alt="Player Actor"
+                            />
+                        )}
                     </div>
 
                     {/* Tag */}
@@ -288,12 +301,25 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
 
                             {/* Actor Body */}
                             <div className="relative w-full h-[120%]">
-                                <Image
-                                    src={ACTOR_IMAGES[opp.actorType?.toLowerCase()] || ACTOR_IMAGES['robot']}
-                                    fill
-                                    className={`object-contain object-bottom drop-shadow-[0_0_30px_rgba(0,0,0,0.8)] ${idx % 2 === 0 ? 'sepia-0' : 'sepia'}`}
-                                    alt="Opponent Actor"
-                                />
+                                {opp.actorType === 'player' ? (
+                                    <div className="absolute inset-0 flex items-center justify-center p-12">
+                                        <div className="relative w-full h-full rounded-2xl overflow-hidden border-4 border-white/40 shadow-2xl">
+                                            <Image
+                                                src={opp.playerAvatar || '/avatars/viper.png'}
+                                                fill
+                                                className="object-cover"
+                                                alt="Opponent Avatar"
+                                            />
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <Image
+                                        src={ACTOR_IMAGES[opp.actorType?.toLowerCase()] || ACTOR_IMAGES['robot']}
+                                        fill
+                                        className={`object-contain object-bottom drop-shadow-[0_0_30px_rgba(0,0,0,0.8)] ${idx % 2 === 0 ? 'sepia-0' : 'sepia'}`}
+                                        alt="Opponent Actor"
+                                    />
+                                )}
                             </div>
 
                             {/* Tag */}
@@ -399,10 +425,13 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
                                                         <Image
                                                             src={(() => {
                                                                 const actorType = conflict.playerActor?.actorType?.toLowerCase();
+                                                                // Use resourceType from conflict first (passed from event reward)
+                                                                if (conflict.resourceType) return RESOURCE_ICONS[conflict.resourceType] || RESOURCE_ICONS['fame'];
+
                                                                 if (actorType === 'politician') return RESOURCE_ICONS['power'];
                                                                 if (actorType === 'scientist') return RESOURCE_ICONS['knowledge'];
                                                                 if (actorType === 'artist') return RESOURCE_ICONS['art'];
-                                                                return RESOURCE_ICONS[conflict.resourceType] || '/resources/resource_product.png';
+                                                                return RESOURCE_ICONS['fame'];
                                                             })()}
                                                             fill className="object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]" alt="Resource Won"
                                                         />

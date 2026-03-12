@@ -3,6 +3,7 @@ import { gameService } from '@/lib/gameService';
 import { Game } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { formatLog } from '@/lib/logUtils';
+import { EVENTS, ACTION_CARDS } from '@/data/gameConstants';
 
 export async function GET(request: NextRequest) {
     try {
@@ -46,7 +47,14 @@ export async function POST(request: NextRequest) {
             bidAmount: 0,
             logs: [formatLog(displayId, `GAME CREATED BY ${hostPlayer.name}${isTest ? ' [TEST MODE]' : ''}`)],
             transactions: [],
-            messages: []
+            messages: [],
+            gameState: {
+                phaseTicker: 0,
+                playerReady: {},
+                stagedActors: {},
+                eventDeck: [...EVENTS].map(e => e.id).sort(() => Math.random() - 0.5),
+                actionDeck: [...ACTION_CARDS].map(c => c.id).sort(() => Math.random() - 0.5)
+            }
         };
 
         const createdGame = gameService.create(newGame);

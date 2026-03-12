@@ -36,6 +36,8 @@ interface GameState {
     createRoom: (name: string, maxPlayers: number, isPrivate: boolean, id?: string, isTest?: boolean) => Promise<any>;
     joinRoom: (gameId: string, player: Player) => Promise<void>;
     leaveRoom: () => void;
+    eventDeck: any[];
+    setEventDeck: React.Dispatch<React.SetStateAction<any[]>>;
 }
 
 const initialState: GameState = {
@@ -67,6 +69,8 @@ const initialState: GameState = {
     createRoom: async () => { },
     joinRoom: async () => { },
     leaveRoom: () => { },
+    eventDeck: [],
+    setEventDeck: () => { },
 };
 
 const GameStateContext = createContext<GameState>(initialState);
@@ -75,6 +79,7 @@ export function GameStateProvider({ children }: { children: ReactNode }) {
     const [resources, setResources] = useState(initialState.resources);
     const [player, setPlayer] = useState(initialState.player);
     const [lobby, setLobby] = useState(initialState.lobby);
+    const [eventDeck, setEventDeck] = useState<any[]>(initialState.eventDeck);
 
     // updateResource: adds `delta` to the resource (positive or negative).
     // The resource can never go below 0.
@@ -178,13 +183,13 @@ export function GameStateProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const contextValue = React.useMemo(() => ({
-        resources, player, lobby, games,
+        resources, player, lobby, games, eventDeck,
         updateResource, setPlayerName, setPlayerAddress, setCitizenId, setPlayerAvatar, setPlayer: setPlayerUpdate,
-        createRoom, joinRoom, leaveRoom
+        createRoom, joinRoom, leaveRoom, setEventDeck
     }), [
-        resources, player, lobby, games,
+        resources, player, lobby, games, eventDeck,
         updateResource, setPlayerName, setPlayerAddress, setCitizenId, setPlayerAvatar, setPlayerUpdate,
-        createRoom, joinRoom, leaveRoom
+        createRoom, joinRoom, leaveRoom, setEventDeck
     ]);
 
     return (
