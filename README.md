@@ -91,4 +91,4 @@ The application will be available at [http://localhost:3000](http://localhost:30
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the [MIT License](https://opensource.org/license/MIT).
