@@ -27,7 +27,7 @@ export default function PlacedActorMarker({ actor, token, bid, isP1, isRelocatin
     const { showTooltip, hideTooltip } = useTooltip();
     const phaseScaleAdjust = phase && phase >= 3 ? 1.5 : 1.25;
 
-    const canRelocate = phase === 3 && p3Step === 3 && availableRelocationCards && availableRelocationCards > 0 && !isRelocating;
+    const canRelocate = phase === 3 && p3Step === 2 && availableRelocationCards && availableRelocationCards > 0 && !isRelocating;
 
     return (
         <div
@@ -76,8 +76,8 @@ export default function PlacedActorMarker({ actor, token, bid, isP1, isRelocatin
                         </button>
                     )}
 
-                    {/* Step 3: Relocation Interaction (Only if cards available) */}
-                    {p3Step === 3 && availableRelocationCards && availableRelocationCards > 0 && !isRelocating && (
+                    {/* Step 2: Relocation Interaction (Only if cards available) */}
+                    {p3Step === 2 && availableRelocationCards && availableRelocationCards > 0 && !isRelocating && (
                         <button
                             onClick={(e) => { e.stopPropagation(); onClick?.(e); }}
                             className="pointer-events-auto group/relocate w-16 h-16 rounded-full bg-[#d4af37] border-4 border-white/20 flex flex-col items-center justify-center hover:bg-[#ffe066] hover:scale-110 transition-all shadow-[0_0_30px_rgba(212,175,55,0.8)] z-50 animate-pulse"

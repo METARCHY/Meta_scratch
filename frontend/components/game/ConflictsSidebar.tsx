@@ -86,7 +86,7 @@ export default function ConflictsSidebar({ conflicts, resolvedIds, activeConflic
                             <div className="flex flex-col gap-1 flex-grow min-w-0">
                                 <div className="flex items-center justify-between">
                                     <span className={`text-[11px] font-bold uppercase tracking-wider truncate ${isActive ? 'text-[#d4af37]' : 'text-gray-300'}`}>
-                                        {conflict.locationName}
+                                        {conflict.locationName} {(conflict as any).isPeaceful && <span className="ml-1 text-[9px] text-blue-400 font-black">[UNDISPUTED]</span>}
                                     </span>
                                     {isResolved && (
                                         <span className="text-[9px] font-black text-[#d4af37] bg-[#d4af37]/20 px-1.5 py-0.5 rounded border border-[#d4af37]/40">VIEWED</span>

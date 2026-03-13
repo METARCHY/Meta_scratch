@@ -28,6 +28,7 @@ interface GameState {
     lobby: Lobby;
     games: any[];
     updateResource: (resource: string, amount: number) => void;
+    setResources: (resources: any) => void;
     setPlayerName: (name: string) => void;
     setPlayerAddress: (address: string) => void;
     setCitizenId: (id: string) => void;
@@ -61,6 +62,7 @@ const initialState: GameState = {
     },
     games: [],
     updateResource: () => { },
+    setResources: () => { },
     setPlayerName: () => { },
     setPlayerAddress: () => { },
     setCitizenId: () => { },
@@ -84,10 +86,15 @@ export function GameStateProvider({ children }: { children: ReactNode }) {
     // updateResource: adds `delta` to the resource (positive or negative).
     // The resource can never go below 0.
     const updateResource = useCallback((resource: string, delta: number) => {
-        setResources(prev => ({
-            ...prev,
-            [resource]: Math.max(0, (prev[resource as keyof typeof prev] || 0) + delta),
-        }));
+        setResources(prev => {
+            const current = (prev[resource as keyof typeof prev] || 0);
+            const next = Math.max(0, current + delta);
+            console.log(`[RESOURCE SYNC] ${resource}: ${current} -> ${next} (delta: ${delta})`);
+            return {
+                ...prev,
+                [resource]: next,
+            };
+        });
     }, []);
 
     const setPlayerName = useCallback((name: string) => {
@@ -184,7 +191,7 @@ export function GameStateProvider({ children }: { children: ReactNode }) {
 
     const contextValue = React.useMemo(() => ({
         resources, player, lobby, games, eventDeck,
-        updateResource, setPlayerName, setPlayerAddress, setCitizenId, setPlayerAvatar, setPlayer: setPlayerUpdate,
+        updateResource, setResources, setPlayerName, setPlayerAddress, setCitizenId, setPlayerAvatar, setPlayer: setPlayerUpdate,
         createRoom, joinRoom, leaveRoom, setEventDeck
     }), [
         resources, player, lobby, games, eventDeck,

@@ -28,8 +28,11 @@ export const triggerBotPhase3Actions = async (
         if (botHasCardForStep && Math.random() < 0.5) {
             if (step === 1) { // Stopping Locations — only if bot played a Block card
                 const targetLoc = LOCATIONS[Math.floor(Math.random() * LOCATIONS.length)];
-                setDisabledLocations(prev => [...prev, targetLoc.id]);
-                await addLog(`${opp.name} activated Under Construction - ${targetLoc.name.toUpperCase()} is now DISABLED`);
+                setDisabledLocations(prev => {
+                    if (prev.includes(targetLoc.id)) return prev;
+                    return [...prev, targetLoc.id];
+                });
+                await addLog(`${opp.name} activated Construction Work - ${targetLoc.name.toUpperCase()} is now DISABLED`);
             } else if (step === 2) { // Relocation — only if bot played a Relocation card
                 const botActors = placedActors.filter(a => a.playerId === opp.id);
                 if (botActors.length > 0) {
@@ -46,12 +49,12 @@ export const triggerBotPhase3Actions = async (
                     }
                 }
             } else if (step === 3) { // Exchange — only if bot played a Change Values card
-                const resTypes = ['POWER', 'ART', 'KNOWLEDGE'];
+                const resTypes = ['power', 'art', 'knowledge'];
                 const give = resTypes[Math.floor(Math.random() * 3)];
                 let take = resTypes[Math.floor(Math.random() * 3)];
                 while (take === give) take = resTypes[Math.floor(Math.random() * 3)];
 
-                await addLog(`${opp.name} used Change of Values: exchanged ${give} for ${take} with the Bank`);
+                await addLog(`${opp.name} used Change Values: exchanged ${give.toUpperCase()} for ${take.toUpperCase()}`);
             }
         }
         await new Promise(r => setTimeout(r, 800));

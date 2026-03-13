@@ -172,9 +172,9 @@ Phase Transition: Once all players (humans and bots) have committed their turns,
 This phase is divided into multiple sequential sub-steps (p3Step in the code).
 
 #### Step 0: Action: Select Cards
-- UI shows Action Card board to aplayer. Even if a player don't have any Action Cards.
+- UI shows Action Card board to a player. Even if a player don't have any Action Cards.
 
-Player Action: The player selects which cards they want to activate this turn (they can pick 0 or multiple). Once selection is complete, the player must click "Commit Action Cards" (or "Play No Cards" if none selected).
+Player Action: The player selects which cards they want to activate this turn (they can pick 0 or multiple). Once selection is complete, the player must click "Commit Action Cards" (or "Play No Cards" if none selected). The player's button changes to "WAITING FOR OTHERS..." until the other players finish to select action cards, and click on "Commit Action Cards" (or "Play No Cards" if none selected).
 
 After all players selected cards to play, the game gets the information about Action Cards that will be played and goes to the next Step:
 - If Block Location Cards (Construction Work, Charity Event, Student Protests, Sabotage, Cable Stolen, Environmental Protests) have not been selected, then the game should skip Step 1

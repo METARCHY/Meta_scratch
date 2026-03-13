@@ -22,6 +22,7 @@ export const handleNextPhase = (
     setResolvedConflicts: Dispatch<SetStateAction<string[]>>,
     setDisabledLocations: Dispatch<SetStateAction<string[]>>,
     setOpponentsReady: Dispatch<SetStateAction<boolean>>,
+    allActionCommits?: Record<string, number[]>, // New: tracks which steps have cards for which player
     isTest?: boolean
 ): { newPhase: number, newTurn: number, isGameOver: boolean } => {
     let newPhase = phase;
@@ -80,16 +81,40 @@ export const handleNextPhase = (
 
 
 
-    // Phase 3 Sub-step Logic
+    // Phase 3 Sub-step Logic (Now with dynamic skipping)
     if (phase === 3) {
-        if (p3Step < 3) {
-            const nextStep = (p3Step + 1) as 0 | 1 | 2 | 3;
-            setP3Step(nextStep);
-            const stepNames = ["SELECTION", "BLOCKING LOCATIONS", "RELOCATION", "CHANGE VALUES"];
-            addLog("All players are ready");
-            addLog(`STEP: ${stepNames[nextStep]}`);
+        const stepNames = ["SELECTION", "BLOCKING LOCATIONS", "RELOCATION", "CHANGE VALUES", "SUMMARY"];
+        
+        const getNextValidStep = (current: number): number => {
+            if (!allActionCommits) return current + 1;
+            
+            // Check steps 1, 2, 3
+            for (let s = current + 1; s <= 3; s++) {
+                const anyCommit = Object.values(allActionCommits).some(steps => 
+                    Array.isArray(steps) && steps.includes(s)
+                );
+                if (anyCommit) return s;
+                
+                // Log that we are skipping this step
+                addLog(`SKIPPING ${stepNames[s]}: No cards played.`);
+            }
+            return 4; // Go to Summary / Done
+        };
 
-            triggerBotPhase3ActionsWrapper(nextStep);
+        if (p3Step < 4) {
+            const nextStep = getNextValidStep(p3Step) as 0 | 1 | 2 | 3 | 4;
+            setP3Step(nextStep);
+            
+            if (nextStep < 4) {
+                addLog("All players are ready");
+                addLog(`STEP: ${stepNames[nextStep]}`);
+                setOpponentsReady(false); // Reset readiness for the new step
+                triggerBotPhase3ActionsWrapper(nextStep);
+            } else {
+                addLog("ACTION PHASE CONCLUDED");
+                // Reset readiness for Phase 4 transition
+                setOpponentsReady(true);
+            }
             return { newPhase, newTurn, isGameOver };
         }
     }
@@ -136,9 +161,11 @@ export const handleNextPhase = (
                 });
             });
             setOpponentsReady(true);
-        } else {
-            // For Phase 5
+        } else if (newPhase === 5) {
             setOpponentsReady(true);
+        } else if (newPhase === 3) {
+            // Reset readiness for sub-step actions
+            setOpponentsReady(false);
         }
 
         addLog(`PHASE ${newPhase} BEGINS`);

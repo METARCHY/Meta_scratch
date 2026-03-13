@@ -41,15 +41,24 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
                 logs: [...(game.logs || []), formattedMsg]
             }) || game;
         } else if (action === 'sync-turn' && body.citizenId) {
-            const state = game.gameState || {
+            const state: any = game.gameState || {
                 phaseTicker: 0,
                 playerReady: {},
-                stagedActors: {}
+                stagedActors: {},
+                playerResources: {}
             };
 
             state.playerReady[body.citizenId] = true;
             if (body.placedActors) {
                 state.stagedActors[body.citizenId] = body.placedActors;
+            }
+            if (body.resources) {
+                if (!state.playerResources) state.playerResources = {};
+                state.playerResources[body.citizenId] = body.resources;
+            }
+            if (body.decisions) {
+                if (!state.decisions) state.decisions = {};
+                Object.assign(state.decisions, body.decisions);
             }
 
             // Check if all joined players are ready
@@ -58,6 +67,20 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
                 state.phaseTicker += 1;
                 state.playerReady = {};
             }
+
+            game = gameService.update(params.id, { gameState: state }) || game;
+        } else if (action === 'sync-decision' && body.citizenId && body.decisions) {
+            const state: any = game.gameState || {
+                phaseTicker: 0,
+                playerReady: {},
+                stagedActors: {},
+                playerResources: {}
+            };
+            
+            if (!state.decisions) state.decisions = {};
+            // Group decisions by player for easier management
+            if (!state.decisions[body.citizenId]) state.decisions[body.citizenId] = {};
+            Object.assign(state.decisions[body.citizenId], body.decisions);
 
             game = gameService.update(params.id, { gameState: state }) || game;
         } else if (action === 'update' && updates) {

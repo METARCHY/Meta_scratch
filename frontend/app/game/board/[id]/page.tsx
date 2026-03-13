@@ -104,7 +104,7 @@ export default function GameBoardPage() {
     };
 
     // --- State Management ---    // Context / Local states
-    const { resources, updateResource, player } = useGameState();
+    const { resources, updateResource, setResources, player } = useGameState();
     // --- Core Game State ---
     const [game, setGame] = useState<any>(null);
     const [phase, setPhase] = useState(2); // Game starts at T1P2
@@ -289,11 +289,11 @@ export default function GameBoardPage() {
             // Process ALL locations where actors exist, ignoring disabled locations
             if (!disabledLocations.includes(locId)) {
                 // Determine all actor types present at this location to identify conflicts/peaceful resolutions
-                const actorTypesAtLoc = Array.from(new Set(actors.map(a => a.actorType)));
+                const actorTypesAtLoc = Array.from(new Set(actors.map(a => (a.actorType || a.type || 'unknown').toLowerCase())));
 
                 actorTypesAtLoc.forEach(actorType => {
-                    // Find all actors of this type at this location
-                    const actorsOfType = actors.filter(a => a.actorType === actorType);
+                    // Find all actors of this type at this location (case-insensitive)
+                    const actorsOfType = actors.filter(a => (a.actorType || a.type || '').toLowerCase() === actorType);
 
                     // A "conflict" object is created if there's at least one actor (Peaceful or VS)
                     const locDef = LOCATIONS.find(l => l.id === locId);
@@ -307,14 +307,14 @@ export default function GameBoardPage() {
                     const opponentsRaw = actorsOfType.filter(a => a.actorId !== playerActorRaw.actorId);
 
                     const playerActorSource = MY_ACTORS.find(p => p.id === playerActorRaw.actorId) ||
-                        { avatar: playerActorRaw.avatar, headAvatar: playerActorRaw.headAvatar, type: playerActorRaw.actorType, name: playerActorRaw.name };
+                        { avatar: playerActorRaw.avatar, headAvatar: playerActorRaw.headAvatar, type: actorType, name: playerActorRaw.name };
 
                     const playerActor = {
                         ...playerActorRaw,
-                        avatar: playerActorSource?.avatar || '',
-                        headAvatar: playerActorSource?.headAvatar || '',
-                        type: playerActorRaw.type || 'rock', // this is the rock/paper/scissors token
-                        actorType: playerActorRaw.actorType || playerActorSource?.type || 'unknown'
+                        avatar: playerActorRaw.avatar || playerActorSource?.avatar || '',
+                        headAvatar: playerActorRaw.headAvatar || playerActorSource?.headAvatar || '',
+                        type: playerActorRaw.type || 'rock', 
+                        actorType: actorType
                     };
 
                     conflicts.push({
@@ -326,6 +326,9 @@ export default function GameBoardPage() {
                             ...o,
                             name: dynamicPlayers.find(p => p.id === o.playerId)?.name || PLAYERS.find(p => p.id === o.playerId)?.name || 'Unknown',
                             playerAvatar: dynamicPlayers.find(p => p.id === o.playerId)?.avatar || PLAYERS.find(p => p.id === o.playerId)?.avatar || '',
+                            actorType: actorType,
+                            avatar: o.avatar || ACTOR_TYPES[actorType as keyof typeof ACTOR_TYPES]?.avatar || '',
+                            headAvatar: o.headAvatar || ACTOR_TYPES[actorType as keyof typeof ACTOR_TYPES]?.headAvatar || ''
                         })),
                         resourceType: locDef?.resource || 'fame',
                         isPeaceful: opponentsRaw.length === 0,
@@ -351,32 +354,47 @@ export default function GameBoardPage() {
 
     // Auto-proceed test games if player has committed but was waiting on opponents
     useEffect(() => {
-        if (game?.isTest && isWaitingForPlayers && opponentsReady && phase !== 4) {
+        if (game?.isTest && isWaitingForPlayers && opponentsReady) {
             setIsWaitingForPlayers(false);
             handleNextPhaseWrapper();
             addLog("All players are ready");
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isWaitingForPlayers, opponentsReady, game?.isTest]);
+ 
+    // Phase 4: Auto-advance for peaceful/resolved players
+    useEffect(() => {
+        if (phase === 4 && game?.isTest && opponentsReady) {
+            const myConflicts = activeConflicts.filter(c => c.hasPlayer);
+            // PERSISTENCE FIX: We MUST require all conflicts (even peaceful ones) to be explicitly viewed/resolved by the player
+            // as per Rule 4 "Conflicts Reveal" which says players click on the Sidebar to open the board.
+            const allResolved = myConflicts.every(c => resolvedConflicts.includes(c.locId));
+            
+            console.log(`[DEBUG] Phase 4 Auto-Advance Check:`, {
+                allResolved,
+                myConflictsCount: myConflicts.length,
+                resolvedConflicts,
+                activeConflicts: activeConflicts.map(c => c.locId)
+            });
+
+            // Fix: Auto-advance even if myConflicts is empty (player has no actors or only non-conflicting ones)
+            if (allResolved) {
+                const timer = setTimeout(() => {
+                    const msg = myConflicts.length > 0 ? "All conflicts secured. Advancing to Market..." : "No active conflicts. Advancing to Market...";
+                    addLog(msg);
+                    handleNextPhaseWrapper();
+                }, 1500);
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [phase, activeConflicts, resolvedConflicts, opponentsReady, game?.isTest]);
 
     const commitTurn = async () => {
         const myId = player.citizenId || player.address || 'p1';
         if (!game || !myId) return;
 
         if (phase === 3 && p3Step === 1) {
-            setP3Step1Ready(true);
-            if (game.isTest) {
-                // Bots pass Step 1 immediately
-                setTimeout(() => {
-                    setOpponentsP3Step1Ready(prev => {
-                        const next = { ...prev };
-                        dynamicPlayers.forEach(p => {
-                            if (p.id !== myId) next[p.id] = true;
-                        });
-                        return next;
-                    });
-                }, 500);
-            }
+            setIsWaitingForPlayers(true);
             return;
         }
 
@@ -394,9 +412,10 @@ export default function GameBoardPage() {
             const actor = placedActors.find(a => a.actorId === relocationSource);
             const extractedType = (actor?.actorType || (actor as any)?.type || 'Actor').toString().toLowerCase();
             
+            const newMove = { playerId: myId, actorId: relocationSource, targetLocId: selectedHex };
             setPendingRelocations(prev => {
                 const filtered = prev.filter(r => !(r.playerId === myId && r.actorId === relocationSource));
-                return [...filtered, { playerId: myId, actorId: relocationSource, targetLocId: selectedHex }];
+                return [...filtered, newMove];
             });
 
             // Deduct the card
@@ -419,11 +438,17 @@ export default function GameBoardPage() {
 
             addLog(`Relocation Submitted: ${extractedType} to ${selectedHex.toUpperCase()}`);
             
+            // Check if we have more relocation cards to play
+            const remainingCards = relocationCardsCount - 1;
+
             // Reset for next card
             setRelocationSource(null);
             setSelectedHex(null);
-            
-            // If no more relocation cards, the button label will change to "Done Relocation" (already handled by p3Step logic in render)
+
+            if (remainingCards <= 0) {
+                // PASS the final move directly to avoid race condition with state
+                resolveActionRelocations([newMove]);
+            }
             return;
         }
 
@@ -438,15 +463,14 @@ export default function GameBoardPage() {
             }
 
             // Actual execution on Submit
-            setPendingExchanges(prev => [
-                ...prev, 
-                { 
-                    playerId: myId, 
-                    sourceValue: exchangeSourceValue, 
-                    targetPlayerId: exchangeTargetPlayer, 
-                    targetValue: exchangeTargetValue 
-                }
-            ]);
+            const newExchange = { 
+                playerId: myId, 
+                sourceValue: exchangeSourceValue, 
+                targetPlayerId: exchangeTargetPlayer, 
+                targetValue: exchangeTargetValue 
+            };
+
+            setPendingExchanges(prev => [...prev, newExchange]);
 
             // Deduct the card
             setSelectedActionCards(prev => {
@@ -468,12 +492,22 @@ export default function GameBoardPage() {
 
             addLog(`Exchange Submitted: Your ${exchangeSourceValue?.toUpperCase()} for ${opponentsData[exchangeTargetPlayer]?.name}'s ${exchangeTargetValue?.toUpperCase()}`);
             
+            // Check if we have more exchange cards to play
+            const remainingCards = exchangeCardsCount - 1;
+
             // Reset for next card OR end step
-            setExchangeStep(0);
             setExchangeSourceValue(null);
             setExchangeTargetPlayer(null);
             setExchangeTargetValue(null);
-            
+
+            if (remainingCards <= 0) {
+                setExchangeDone(true);
+                // Immediately resolve so users see the result
+                await resolveActionExchanges([newExchange]);
+                // resolveActionExchanges will handle the 3s summary and handleNextPhaseWrapper()
+            } else {
+                setExchangeStep(1); // Repeat for next card
+            }
             return;
         }
 
@@ -497,13 +531,39 @@ export default function GameBoardPage() {
             const mainPlayerId = myId;
             const myActors = placedActors.filter(a => a.playerId === mainPlayerId);
 
+            // Calculate player intentions for Phase 3 Step 0
+            let p3Steps: number[] | undefined = undefined;
+            if (phase === 3 && p3Step === 0) {
+                const steps: number[] = [];
+                Object.entries(selectedActionCards).forEach(([cid, qty]) => {
+                    if (qty <= 0) return;
+                    const card = actionHand.find(c => c.id === cid);
+                    if (!card) return;
+                    const title = (card.title || '').toLowerCase();
+                    const cardId = (card.id || '').toLowerCase();
+
+                    if (cardId.includes('stop') || cardId.includes('turn_off') || title.includes('stop') || title.includes('block')) {
+                        steps.push(1);
+                    }
+                    if (cardId.includes('relocation') || title.includes('relocation')) {
+                        steps.push(2);
+                    }
+                    if (cardId.includes('change_values') || cardId.includes('exchange') || title.includes('change') || title.includes('exchange')) {
+                        steps.push(3);
+                    }
+                });
+                p3Steps = Array.from(new Set(steps));
+            }
+
             await fetch(`/api/games/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     action: 'sync-turn',
                     citizenId: mainPlayerId,
-                    placedActors: myActors
+                    placedActors: myActors,
+                    resources: resources, // PERSISTENCE FIX
+                    decisions: p3Steps ? { [mainPlayerId]: { phase3Steps: p3Steps } } : undefined
                 })
             });
         } catch (e) {
@@ -513,27 +573,59 @@ export default function GameBoardPage() {
     };
 
 
-    // Client polling listener for global Phase Advance
+    // Client polling listener for global State Sync
     useEffect(() => {
         if (!game || !game.gameState) return;
 
+        const myId = player.citizenId || player.address || 'p1';
+        
+        // 0. Initialize Resources from Server if available (Persistence Fix)
+        if (game.gameState.playerResources && game.gameState.playerResources[myId]) {
+            const serverResources = game.gameState.playerResources[myId];
+            
+            // Only update if they differ to avoid loops.
+            const keys = Object.keys(serverResources);
+            const isDifferent = keys.some(k => (serverResources as any)[k] !== (resources as any)[k]);
+            
+            // CRITICAL: Only accept server state if we are NOT in a local phase advance (which would overwrite our just-updated state)
+            if (isDifferent) {
+                console.log("[DEBUG] Initializing local resources from server state:", serverResources);
+                setResources(serverResources);
+            }
+        }
+
+        // 1. Phase Advance Logic (Consensus)
         if (game.gameState.phaseTicker > localPhaseTicker.current) {
             localPhaseTicker.current = game.gameState.phaseTicker;
-
-            // Merge staged actors from everyone
-            let allStagedActors: any[] = [];
-            Object.values(game.gameState.stagedActors || {}).forEach((actors: any) => {
-                allStagedActors = [...allStagedActors, ...actors];
-            });
-
-            if (allStagedActors.length > 0) {
-                setPlacedActors(allStagedActors);
-            }
-
             setIsWaitingForPlayers(false);
             setTriggerGlobalPhaseAdvance(prev => prev + 1);
         }
-    }, [game?.gameState?.phaseTicker]);
+
+        // 2. Real-time Actor Sync (Board state)
+        // Decoupled from phaseTicker so players see each other's placements/moves in real-time
+        let allStagedActors: any[] = [];
+        Object.values(game.gameState.stagedActors || {}).forEach((actors: any) => {
+            allStagedActors = [...allStagedActors, ...actors];
+        });
+
+        if (allStagedActors.length > 0) {
+            // Only update if the total count or IDs changed to avoid jitter
+            setPlacedActors(prev => {
+                if (prev.length === allStagedActors.length) {
+                    // Quick check if IDs are different
+                    const prevIds = prev.map(a => a.actorId).sort().join(',');
+                    const nextIds = allStagedActors.map(a => a.actorId).sort().join(',');
+                    if (prevIds === nextIds) {
+                        // IDs match, check for locId changes (moves)
+                        const prevLocs = prev.map(a => `${a.actorId}:${a.locId}`).sort().join(',');
+                        const nextLocs = allStagedActors.map(a => `${a.actorId}:${a.locId}`).sort().join(',');
+                        if (prevLocs === nextLocs) return prev;
+                    }
+                }
+                return allStagedActors;
+            });
+        }
+    }, [game?.gameState]);
 
     // Triggers local progression with fresh states once sync resolves
     useEffect(() => {
@@ -542,39 +634,54 @@ export default function GameBoardPage() {
         }
     }, [triggerGlobalPhaseAdvance]);
 
-    const handleNextPhaseWrapper = async () => {
+    const triggerBotPhase3ActionsWrapper = async (step: number) => {
+        const { triggerBotPhase3Actions } = await import('@/lib/game/BotAI');
+        await triggerBotPhase3Actions(
+            game,
+            step,
+            dynamicPlayers.filter(p => (p.citizenId || p.address || 'p1') !== localPlayerId),
+            placedActors,
+            addLog,
+            setDisabledLocations,
+            setPlacedActors,
+            setOpponentsReady,
+            setPendingRelocations,
+            botActionCommitsRef.current
+        );
+    };
+
+    const handleNextPhaseWrapper = async (skipResolution = false) => {
+        const localPlayerId = player.citizenId || player.address || 'p1';
+
         // --- End of Phase 4 Rewards ---
         if (phase === 4) {
-            // Give rewards to PEACEFUL (uncontested) actors — those that won without a conflict.
-            // Conflict WINNERS are awarded inside handleConflictResolve directly.
-            const localPlayerId = player.citizenId || player.address || 'p1';
             placedActors.forEach(actor => {
-                if (actor.playerId !== localPlayerId) return; // Not my actor
-                if (disabledLocations.includes(actor.locId)) return; // Disabled location
-
-                // Only give reward if this actor was NOT part of any active conflict
-                // (conflict actors already got their reward from handleConflictResolve)
-                const wasInConflict = activeConflicts.some(c =>
-                    c.playerActor?.actorId === actor.actorId ||
-                    c.opponents?.some((o: any) => o.actorId === actor.actorId)
+                if (actor.playerId !== localPlayerId) return;
+                if (disabledLocations.includes(actor.locId)) return;
+                const wasInContestedConflict = activeConflicts.some(c =>
+                    !c.isPeaceful && (
+                        c.playerActor?.actorId === actor.actorId ||
+                        c.opponents?.some((o: any) => o.actorId === actor.actorId)
+                    )
                 );
-                if (wasInConflict) return;
-                if (actor) {
-                    const actorType = actor.actorType?.toLowerCase();
-                    const earnedResource = getActorRewardType(actorType, actor.locId);
+                if (wasInContestedConflict) return;
 
-                    if (earnedResource) {
-                        const isProductBet = actor.bid === 'product';
-                        const bids = isProductBet ? [{ actorId: actor.actorId, bid: 'product' }] : [];
-                        const finalReward = calculateReward(actorType as any, true, false, bids, actor.actorId);
-                        updateResource(earnedResource, finalReward);
-                        addLog(`${player.name || '080'} secured ${finalReward} ${earnedResource.toUpperCase()} (uncontested ${actorType} at ${LOCATIONS.find(l => l.id === actor.locId)?.name})!`);
-                    }
+                // PERSISTENCE FIX: If the location (even peaceful) was already manually resolved/viewed, 
+                // don't apply the fallback reward! This prevents double rewards.
+                const isAlreadyResolved = resolvedConflicts.some(id => id.startsWith(actor.locId) && id.includes(actor.actorType || ''));
+                if (isAlreadyResolved) return;
+
+                const actorType = actor.actorType?.toLowerCase();
+                const earnedResource = getActorRewardType(actorType, actor.locId);
+                if (earnedResource) {
+                    const finalReward = calculateReward(actorType as any, true, false, (actor.bid === 'product' ? [{ actorId: actor.actorId, bid: 'product' }] : []), actor.actorId);
+                    updateResource(earnedResource, finalReward);
+                    addLog(`${player.name || '080'} secured ${finalReward} ${earnedResource.toUpperCase()} (uncontested ${actorType} at ${LOCATIONS.find(l => l.id === actor.locId)?.name})!`);
                 }
             });
         }
 
-        if (phase === 3 && p3Step === 2 && pendingRelocations.length > 0) {
+        if (!skipResolution && phase === 3 && p3Step === 2 && pendingRelocations.length > 0) {
             addLog(`Resolving ${pendingRelocations.length} pending relocations...`);
             resolveActionRelocations();
             return; 
@@ -582,111 +689,120 @@ export default function GameBoardPage() {
 
         if (phase === 3 && p3Step === 3 && pendingExchanges.length > 0) {
             await resolveActionExchanges();
-            // Continue below to advance to Phase 4
         }
 
         const { handleNextPhase } = await import('@/lib/game/PhaseEngine');
 
-        // Reset readiness if we are staying in Phase 3 or moving to a synced phase
-        if (game?.isTest && (phase === 3 || (phase === 2 && availableActors.length === 0))) {
-            setOpponentsReady(false);
-        }
+        // Construct all action commits for synchronization
+        const playerSteps: number[] = [];
+        Object.entries(selectedActionCards).forEach(([id, qty]) => {
+            if (qty <= 0) return;
+            const card = actionHand.find(c => c.id === id);
+            if (!card) return;
+            const title = (card.title || '').toLowerCase();
+            const cardId = (card.id || '').toLowerCase();
 
-        // Custom wrapper for bot actions
-        const triggerBotPhase3ActionsWrapper = async (step: number) => {
-            if (isStepActionRef.current) return;
-            isStepActionRef.current = true;
-            try {
-                const { triggerBotPhase3Actions } = await import('@/lib/game/BotAI');
-                await triggerBotPhase3Actions(
-                    game, step,
-                    dynamicPlayers.filter(p => (p.citizenId || p.address || 'p1') !== (player.citizenId || player.address || 'p1')),
-                    placedActors, addLog, setDisabledLocations, setPlacedActors,
-                    setOpponentsReady, setPendingRelocations, botActionCommitsRef.current
-                );
-            } finally {
-                isStepActionRef.current = false;
+            if (cardId.includes('stop') || cardId.includes('turn_off') || title.includes('stop') || title.includes('block')) {
+                playerSteps.push(1);
             }
-        };
+            if (cardId.includes('relocation') || title.includes('relocation')) {
+                playerSteps.push(2);
+            }
+            if (cardId.includes('change_values') || cardId.includes('exchange') || title.includes('change') || title.includes('exchange')) {
+                playerSteps.push(3);
+            }
+        });
 
         // SIMULTANEOUS COMMITS: Before leaving Step 0, lock bot actions alongside the player.
-        // Bots start with 0 action cards, so they can NEVER play Block Location (step 1).
-        // Only Relocation (step 2) and Exchange (step 3) can be committed if bots had cards in future turns.
-        if (phase === 3 && p3Step === 0) {
-            const mainPlayerId = player.citizenId || player.address || 'p1';
-            const opponents = dynamicPlayers.filter(p => p.id !== mainPlayerId);
-            const commits: Record<string, number[]> = {};
-            
-            let anyBotAction = false;
-            opponents.forEach(opp => {
-                commits[opp.id] = [];
-                // Bots never block locations currently
-                if (Math.random() < 0.5) {
-                    commits[opp.id].push(2); // Relocate
-                    anyBotAction = true;
-                }
-                if (Math.random() < 0.6) {
-                    commits[opp.id].push(3); // Change Values
-                    anyBotAction = true;
-                }
-            });
-            botActionCommitsRef.current = commits;
+        let finalCommits: Record<string, number[]> = {
+            [localPlayerId]: Array.from(new Set(playerSteps))
+        };
 
-            // Check if player selected anything
-            const hasPlayerAction = Object.values(selectedActionCards).some(count => count > 0);
+        if (phase === 3 && p3Step === 0) {
+            const opponents = dynamicPlayers.filter(p => (p.id || p.citizenId) !== localPlayerId);
+            const botCommits: Record<string, number[]> = {};
+            let anyBotAction = false;
             
-            if (!hasPlayerAction && !anyBotAction) {
-                addLog('No players selected Action Cards — skipping Action Phase.');
-                setPhase(4);
-                setP3Step(0);
+            opponents.forEach(opp => {
+                const id = opp.id || opp.citizenId || 'bot';
+                botCommits[id] = [];
+                
+                // Bot decision logic: Only play if they actually HAVE the card in opponentsData
+                const oppInv = opponentsData[id]?.cards || {};
+                const hasBlock = Object.keys(oppInv).some(k => (k.includes('stop') || k.includes('block')) && oppInv[k] > 0);
+                const hasReloc = Object.keys(oppInv).some(k => k.includes('relocation') && oppInv[k] > 0);
+                const hasExch = Object.keys(oppInv).some(k => (k.includes('change_values') || k.includes('exchange')) && oppInv[k] > 0);
+
+                if (hasBlock && Math.random() < 0.8) { botCommits[id].push(1); anyBotAction = true; } 
+                if (hasReloc && Math.random() < 0.8) { botCommits[id].push(2); anyBotAction = true; } 
+                if (hasExch && Math.random() < 0.8) { botCommits[id].push(3); anyBotAction = true; }
+            });
+            
+            botActionCommitsRef.current = botCommits;
+            
+            // Merge bot commits into finalCommits (FLAT structure)
+            Object.assign(finalCommits, botCommits);
+
+            // SYNC HUMANS: Reconstruct commitments from server state
+            if (game?.gameState?.decisions) {
+                Object.entries(game.gameState.decisions).forEach(([pid, d]: [string, any]) => {
+                    // Only merge if this is a known human player and they have phase3Steps
+                    const isHuman = dynamicPlayers.some(p => (p.id || p.citizenId) === pid && !p.id.startsWith('bot'));
+                    if (isHuman && d.phase3Steps) {
+                        finalCommits[pid] = d.phase3Steps;
+                    }
+                });
+            }
+
+            const hasAnyAction = Object.values(finalCommits).some(steps => steps.length > 0);
+            if (!hasAnyAction) {
+                // No actions at all - skipping to Step 4 (Summary)
+                setP3Step(4);
+                addLog('No players selected Action Cards — Check Summary.');
                 setOpponentsReady(true);
-                addLog('PHASE 4 BEGINS');
                 setIsWaitingForPlayers(false);
                 return;
             }
+        } else {
+            // If not Step 0, use existing bot commits
+            Object.assign(finalCommits, botActionCommitsRef.current);
         }
 
-
         const { isGameOver: gameEnded } = handleNextPhase(
-            turn,
-            phase,
-            p3Step,
-            player,
-            dynamicPlayers,
-            placedActors,
-            disabledLocations,
-            addLog,
-            triggerBotPhase3ActionsWrapper,
-            setPhase,
-            setP3Step as any,
-            setP5Step as any,
-            setTurn,
-            setPlacedActors,
-            setResolvedConflicts,
-            setDisabledLocations,
-            setOpponentsReady,
-            game?.isTest
+            turn, phase, p3Step, player, dynamicPlayers, placedActors, disabledLocations, 
+            addLog, triggerBotPhase3ActionsWrapper, setPhase, setP3Step, setP5Step, 
+            setTurn, setPlacedActors, setResolvedConflicts, setDisabledLocations, 
+            setOpponentsReady, finalCommits, game?.isTest
         );
-
 
         if (gameEnded) {
             setIsGameOver(true);
-
-            // Sync game completion state to backend
             try {
                 fetch(`/api/games/${id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: 'update', updates: { status: 'finished' } })
                 });
-            } catch (e) {
-                console.error("Failed to sync game over state", e);
-            }
-
-            return; // CRITICAL: Exit early to prevent phase advancement when game is over
+            } catch (e) { console.error("Failed to sync game over state", e); }
+            return;
         }
 
-
+        // FINAL SYNC before moving or waiting for next phase
+        if (game && game.id && !game.isTest) {
+            try {
+                await fetch(`/api/games/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'sync-turn',
+                        citizenId: localPlayerId,
+                        resources: resources // PERSISTENCE FIX: Final resources for this phase
+                    })
+                });
+            } catch (e) {
+                console.error("End-of-phase sync error", e);
+            }
+        }
     };
 
     // --- Opponent Emulation ---
@@ -831,6 +947,9 @@ export default function GameBoardPage() {
         moves: { playerId: string, targetLocId: string, choice?: string }[];
     }
     const [playerConflictContext, setPlayerConflictContext] = useState<PlayerConflictContextType | null>(null);
+    const [relocResults, setRelocResults] = useState<{ actorId: string, fromLocId: string, toLocId: string, pName: string }[] | null>(null);
+    const [exchangeResults, setExchangeResults] = useState<{ pName: string, sourceVal: string, targetName: string, targetVal: string }[] | null>(null);
+    const [exchangeDone, setExchangeDone] = useState(false);
     const [p3Step1Ready, setP3Step1Ready] = useState(false);
     const [opponentsP3Step1Ready, setOpponentsP3Step1Ready] = useState<Record<string, boolean>>({});
 
@@ -842,7 +961,7 @@ export default function GameBoardPage() {
 
     const [biddingActorId, setBiddingActorId] = useState<string | null>(null);
     const botActionCommitsRef = useRef<Record<string, number[]>>({});
-    const [p3Step, setP3Step] = useState<0 | 1 | 2 | 3>(0); // 0: Select, 1: Stop, 2: Relocate, 3: Exchange
+    const [p3Step, setP3Step] = useState<0 | 1 | 2 | 3 | 4>(0); // 0: Select, 1: Stop, 2: Relocate, 3: Exchange, 4: Summary
     const [p5Step, setP5Step] = useState<1 | 2 | 3>(1); // 1: Market Offer, 2: Market Reveal, 3: Buy Cards
     const [playerMarketOffer, setPlayerMarketOffer] = useState<MarketOffer | null>(null);
     const [botMarketOffers, setBotMarketOffers] = useState<{ [id: string]: MarketOffer | null }>({});
@@ -1437,42 +1556,39 @@ export default function GameBoardPage() {
                 } else if (hasExchange) {
                     // Check if self has any values to exchange
                     const hasSelfValue = resources.power > 0 || resources.knowledge > 0 || resources.art > 0 || resources.fame > 0;
-                    // Check if ANY opponent has any values to exchange
-                    const hasOpponentValue = dynamicPlayers.some(p => {
-                        if (p.id === localPlayerId) return false;
-                        const oppRes = opponentsData[p.id]?.resources || {};
-                        return oppRes.power > 0 || oppRes.knowledge > 0 || oppRes.art > 0 || oppRes.fame > 0;
-                    });
-
                     if (!hasSelfValue) {
-                        addLog("You have no values to exchange! Change Values cards are returned to your hand.");
-                        // Return cards to hand
-                        const exchangeCount = exchangeCardsCount;
-                        if (exchangeCount > 0) {
-                            setSelectedActionCards(prev => {
-                                const next = { ...prev };
-                                Object.keys(next).forEach(k => { if (k.includes('change_values')) next[k] = 0; });
-                                return next;
-                            });
-                            // Hand already has them, just unselecting is enough for Step 3 logic
-                        }
-                        handleNextPhaseWrapper();
-                    } else if (!hasOpponentValue) {
-                        addLog("Opponents have no values for exchange! Change Values cards are returned to your hand.");
+                        addLog("You have no values to exchange! Change Values card returned.");
                         handleNextPhaseWrapper();
                     } else {
                         setP3Step(3);
-                        setExchangeStep(1); 
-                        addLog('STEP: CHANGE VALUES - Choose one of your values to exchange.');
                     }
                 } else {
-                    addLog('No Relocation or Exchange cards played — advancing to Conflicts.');
+                    addLog('No further actions — advancing to Conflicts.');
                     handleNextPhaseWrapper();
                 }
             }
         }
-    }, [phase, p3Step, p3Step1Ready, opponentsP3Step1Ready]);
+    }, [phase, p3Step, p3Step1Ready, opponentsP3Step1Ready, game?.isTest, opponentsReady, relocationCardsCount, exchangeCardsCount, resources, dynamicPlayers, localPlayerId, handleNextPhaseWrapper, addLog]);
 
+    // --- Phase 3 Step 3: Change Values Initialization ---
+    useEffect(() => {
+        if (phase === 3 && p3Step === 3 && exchangeStep === 0 && (exchangeCardsCount > 0)) {
+            setExchangeStep(1);
+            addLog('STEP: CHANGE VALUES - Choose one of your values to exchange.');
+            console.log("[DEBUG] exchangeStep initialized to 1 for Change Values modal");
+        }
+    }, [phase, p3Step, exchangeStep, exchangeCardsCount, addLog]);
+
+    // --- Phase 3 Step 2: Auto-Consensus for Idle Players ---
+    useEffect(() => {
+        if (phase === 3 && p3Step === 2 && relocationCardsCount === 0 && opponentsReady) {
+            const timer = setTimeout(() => {
+                addLog("You have no relocations to perform. Advancing...");
+                handleNextPhaseWrapper();
+            }, 1000);
+            return () => clearTimeout(timer);
+        }
+    }, [phase, p3Step, relocationCardsCount, opponentsReady, addLog, handleNextPhaseWrapper]);
 
 
     const handleHexClick = async (locId: string) => {
@@ -1591,40 +1707,39 @@ export default function GameBoardPage() {
         setPendingPlacement(null);
     };
 
-    const resolveActionExchanges = async () => {
+    const resolveActionExchanges = async (extraMoves: typeof pendingExchanges = []) => {
         addLog("Resolving Exchanges...");
-        
-        // Group by target resource/player to find direct conflicts (multiple people wanting the same thing)
+        const currentQueue = [...pendingExchanges, ...extraMoves];
+        if (currentQueue.length === 0) {
+            handleNextPhaseWrapper();
+            return;
+        }
+
+        // Group by target resource/player to find direct conflicts
         const targetGroups: Record<string, any[]> = {};
-        pendingExchanges.forEach(ex => {
+        currentQueue.forEach(ex => {
             const key = `${ex.targetPlayerId}-${ex.targetValue}`;
             if (!targetGroups[key]) targetGroups[key] = [];
             targetGroups[key].push(ex);
         });
 
         const winners: any[] = [];
-        const losers: any[] = [];
+        const summary: typeof exchangeResults = [];
 
         for (const key of Object.keys(targetGroups)) {
             const competitors = targetGroups[key];
-            if (competitors.length === 1) {
-                winners.push(competitors[0]);
-            } else {
-                addLog(`Conflict detected! Multiple players want ${key.split('-')[1].toUpperCase()} from ${opponentsData[key.split('-')[0]]?.name || 'an opponent'}.`);
-                // Simple resolution: first committed? Or random? 
-                // For MVP, we use the first one in the queue, others lose.
-                winners.push(competitors[0]);
-                losers.push(...competitors.slice(1));
-            }
+            // Simplification: first committed wins
+            winners.push(competitors[0]);
         }
 
         // Apply winners
         for (const ex of winners) {
             const { playerId, sourceValue, targetPlayerId, targetValue } = ex;
+            const pName = dynamicPlayers.find(p => p.id === playerId)?.name || 'Player';
+            const tName = dynamicPlayers.find(p => p.id === targetPlayerId)?.name || 'Opponent';
             
-            // Check if players still have the values (can be depleted if winner of previous exchange)
-            // But here we process simultaneously unless circular.
-            
+            summary.push({ pName, sourceVal: sourceValue, targetName: tName, targetVal: targetValue });
+
             // Update Opponent (Target)
             setOpponentsData(prev => {
                 const next = { ...prev };
@@ -1643,25 +1758,27 @@ export default function GameBoardPage() {
                 return next;
             });
 
-            // If player is local
+            // Local updates
             if (playerId === localPlayerId) {
                 updateResource(sourceValue, -1);
                 updateResource(targetValue, 1);
-                addLog(`Exchange successful: Your ${sourceValue.toUpperCase()} for ${targetValue.toUpperCase()}`);
             }
             if (targetPlayerId === localPlayerId) {
                 updateResource(targetValue, -1);
                 updateResource(sourceValue, 1);
-                addLog(`Exchange successful: Opponent took your ${targetValue.toUpperCase()} for ${sourceValue.toUpperCase()}`);
             }
+            addLog(`Exchange: ${pName} took ${targetValue.toUpperCase()} from ${tName} for ${sourceValue.toUpperCase()}`);
         }
 
-        losers.forEach(ex => {
-            const pName = dynamicPlayers.find(p => p.id === ex.playerId)?.name || 'Player';
-            addLog(`Exchange failed for ${pName}: Conflict lost.`);
-        });
-
-        setPendingExchanges([]);
+        setExchangeResults(summary);
+        
+        // Final sync and exit
+        setTimeout(() => {
+            setExchangeResults(null);
+            setExchangeDone(false);
+            setPendingExchanges([]);
+            handleNextPhaseWrapper();
+        }, 3000);
     };
 
     const resolvePlayerConflictLogic = (context: PlayerConflictContextType) => {
@@ -1722,19 +1839,13 @@ export default function GameBoardPage() {
         }
     };
 
-    const handlePlayerConflictSubmit = (choice: string) => {
-        if (!playerConflictContext) return;
-        const updatedMoves = playerConflictContext.moves.map(m => {
-            if (m.playerId === localPlayerId) return { ...m, choice };
-            if (!m.choice) return { ...m, choice: ['rock', 'paper', 'scissors'][Math.floor(Math.random() * 3)] };
-            return m;
-        });
-        resolvePlayerConflictLogic({ ...playerConflictContext, moves: updatedMoves });
-    };
 
-    const resolveActionRelocations = () => {
-        const currentQueue = pendingRelocations;
-        if (currentQueue.length === 0) return;
+    const resolveActionRelocations = (extraMoves: typeof pendingRelocations = []) => {
+        const currentQueue = [...pendingRelocations, ...extraMoves];
+        if (currentQueue.length === 0) {
+            handleNextPhaseWrapper(); // Ensure we don't get stuck if called with nothing
+            return;
+        }
 
         // Group queued relocations by actorId, ensuring uniqueness by playerId
         const groups: Record<string, typeof pendingRelocations> = {};
@@ -1772,15 +1883,21 @@ export default function GameBoardPage() {
         }
 
         // Apply all valid moves (Since there are no remaining > 1 groups)
+        const summary: typeof relocResults = [];
         const validMoves: typeof pendingRelocations = [];
         Object.entries(groups).forEach(([actorId, moves]) => {
             validMoves.push(moves[0]);
             const pName = dynamicPlayers.find(p => p.id === moves[0].playerId)?.name || 'Player';
-            const actorName = placedActors.find(a => a.actorId === actorId)?.actorType || 'Actor';
+            const actor = placedActors.find(a => a.actorId === actorId);
+            const actorName = actor?.actorType || 'Actor';
+            const fromLoc = actor?.locId || 'Unknown';
+            
+            summary.push({ actorId, fromLocId: fromLoc, toLocId: moves[0].targetLocId, pName });
             addLog(`Relocation complete: ${pName} relocated a ${actorName} to ${moves[0].targetLocId.toUpperCase()}`);
         });
 
         if (validMoves.length > 0) {
+            setRelocResults(summary);
             const nextActors = placedActors.map(a => {
                 const move = validMoves.find(m => m.actorId === a.actorId);
                 return move ? { ...a, locId: move.targetLocId } : a;
@@ -1788,7 +1905,7 @@ export default function GameBoardPage() {
 
             setPlacedActors(nextActors);
 
-            // Sync to backend to prevent state-sync overwrite
+            // Sync to backend
             const mainPlayerId = player.citizenId || player.address || 'p1';
             const actorsByPlayer = nextActors.reduce((acc: any, actor) => {
                 const pid = actor.playerId || mainPlayerId;
@@ -1810,10 +1927,16 @@ export default function GameBoardPage() {
                     }
                 })
             }).catch(e => console.error("Failed to sync actor relocation", e));
-        }
 
-        setPendingRelocations([]);
-        handleNextPhaseWrapper();
+            // Show results for 3 seconds then clear and advance
+            setTimeout(() => {
+                setRelocResults(null);
+                setPendingRelocations([]);
+                handleNextPhaseWrapper();
+            }, 3000);
+        } else {
+            handleNextPhaseWrapper();
+        }
     };
 
     // Local phase advancement removed and delegated to PhaseEngine
@@ -2014,7 +2137,263 @@ export default function GameBoardPage() {
 
                 {/* 2. UI Overlay Layer (Z-Indexed) */}
                 <div className="absolute inset-0 z-[200] pointer-events-none">
-                    {/* Top Center: Header (Snapped) */}
+                    {/* Step 1: Blocked Locations Board */}
+                    {phase === 3 && p3Step === 1 && (
+                        <div className="absolute inset-0 z-[400] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm pointer-events-auto">
+                            <div className="relative w-[500px] bg-[#0d0d12] border border-[#d4af37]/30 rounded-xl shadow-2xl p-8 flex flex-col items-center">
+                                <h2 className="text-3xl font-black text-[#d4af37] mb-6 uppercase tracking-widest">Blocked Locations</h2>
+                                
+                                {disabledLocations.length > 0 ? (
+                                    <div className="flex flex-col items-center gap-2 mb-8">
+                                        {disabledLocations.map(locId => (
+                                            <p key={locId} className="text-white text-xl font-rajdhani uppercase tracking-wider">
+                                                <span className="text-red-500 font-bold">{LOCATIONS.find(l => l.id === locId)?.name || locId}</span> will not work this turn.
+                                            </p>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-white/50 text-xl font-rajdhani mb-8">No locations blocked this turn.</p>
+                                )}
+
+                                <button
+                                    onClick={commitTurn}
+                                    disabled={isWaitingForPlayers || (game?.isTest && !opponentsReady)}
+                                    className={`px-12 py-4 font-bold uppercase tracking-widest rounded-lg transition-all transform hover:scale-105 ${
+                                        (isWaitingForPlayers || (game?.isTest && !opponentsReady))
+                                            ? 'bg-gray-600 text-gray-400 cursor-not-allowed border-2 border-gray-500'
+                                            : 'bg-gradient-to-r from-[#d4af37] to-[#f3bd48] text-black hover:from-[#ffe066] hover:to-[#ffd700]'
+                                    }`}
+                                >
+                                    {(isWaitingForPlayers || (game?.isTest && !opponentsReady)) ? "WAITING FOR OTHERS..." : "Get It!"}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Step 2: Relocation Waiting/Non-Acting Overlay */}
+                    {phase === 3 && p3Step === 2 && (relocationCardsCount === 0 || (isWaitingForPlayers && !playerConflictContext)) && (
+                        <div className="absolute inset-0 z-[400] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm pointer-events-auto">
+                            <div className="relative w-[500px] bg-[#0d0d12] border border-[#d4af37]/30 rounded-xl shadow-2xl p-12 flex flex-col items-center">
+                                <h2 className="text-3xl font-black text-[#d4af37] mb-6 uppercase tracking-widest text-center">
+                                    {isWaitingForPlayers ? "Conflict Resolution" : "Relocation Stage"}
+                                </h2>
+                                
+                                <p className="text-white text-2xl font-rajdhani text-center mb-10 animate-pulse">
+                                    {isWaitingForPlayers ? "Waiting for the Conflict Resolution..." : "Waiting for the Relocation..."}
+                                </p>
+
+                                <div className="w-16 h-16 border-4 border-[#d4af37]/20 border-t-[#d4af37] rounded-full animate-spin mb-10" />
+
+                                {/* Backup Escape Button: Only show if opponents are ready or after 5 seconds of waiting */}
+                                {opponentsReady && (
+                                    <button 
+                                        onClick={() => handleNextPhaseWrapper()}
+                                        className="px-8 py-3 bg-[#d4af37] text-black font-black rounded-xl uppercase tracking-widest hover:bg-[#ffe066] transition-all transform hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(212,175,55,0.4)]"
+                                    >
+                                        Get It!
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                    {/* Step 2: Relocation Results Overlay */}
+                    {phase === 3 && p3Step === 2 && relocResults && (
+                        <div className="absolute inset-0 z-[500] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md pointer-events-auto">
+                            <div className="relative w-[600px] bg-[#0d0d12] border-2 border-[#d4af37] rounded-3xl shadow-[0_0_50px_rgba(212,175,55,0.3)] p-10 flex flex-col items-center">
+                                <h2 className="text-4xl font-black text-[#d4af37] mb-8 uppercase tracking-[0.3em] font-rajdhani">Relocation Report</h2>
+                                
+                                <div className="w-full flex flex-col gap-4 mb-10">
+                                    {relocResults.map((res, i) => (
+                                        <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] text-[#d4af37] uppercase font-bold tracking-widest">{res.pName}</span>
+                                                <span className="text-white font-rajdhani text-xl font-bold">
+                                                    {placedActors.find(a => a.actorId === res.actorId)?.actorType.toUpperCase()}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-4">
+                                                <span className="text-white/40 text-sm font-bold">{LOCATIONS.find(l => l.id === res.fromLocId)?.name}</span>
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d4af37" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                                                    <path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>
+                                                </svg>
+                                                <span className="text-[#d4af37] text-xl font-black">{LOCATIONS.find(l => l.id === res.toLocId)?.name}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="text-white/40 text-[10px] uppercase font-bold tracking-[0.5em] animate-pulse">
+                                    Syncing New State...
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {/* Step 3: Change Values - Waiting Overlay for Idle Players */}
+                    {phase === 3 && p3Step === 3 && exchangeCardsCount === 0 && (
+                        <div className="absolute inset-0 z-[400] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm pointer-events-auto">
+                            <div className="relative w-[500px] bg-[#0d0d12] border border-[#d4af37]/30 rounded-xl shadow-2xl p-12 flex flex-col items-center">
+                                <h2 className="text-3xl font-black text-[#d4af37] mb-6 uppercase tracking-widest text-center">Change Values</h2>
+                                <p className="text-white text-2xl font-rajdhani text-center mb-10 animate-pulse">Waiting for Values Exchange...</p>
+                                <div className="w-16 h-16 border-4 border-[#d4af37]/20 border-t-[#d4af37] rounded-full animate-spin" />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Step 3: Change Values - Action Selection Board */}
+                    {phase === 3 && p3Step === 3 && exchangeCardsCount > 0 && !exchangeDone && (
+                        <div className="absolute inset-0 z-[400] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm pointer-events-auto">
+                            <div className="relative w-[600px] bg-[#0d0d12] border-2 border-[#d4af37] rounded-3xl shadow-[0_0_50px_rgba(212,175,55,0.2)] p-10 flex flex-col items-center animate-in zoom-in duration-300">
+                                <h2 className="text-3xl font-black text-[#d4af37] mb-2 uppercase tracking-widest font-rajdhani">Change Values</h2>
+                                <p className="text-white/60 text-sm mb-8 uppercase tracking-[0.2em]">
+                                    {exchangeStep === 0 ? "Select a card to play" : 
+                                     exchangeStep === 1 ? "Choose one of your values to give" : 
+                                     "Choose an opponent's value to take"}
+                                </p>
+
+                                <div className="w-full flex flex-col gap-8">
+                                    {/* Modal Step 1: My Values */}
+                                    {exchangeStep === 1 && (
+                                        <div className="flex justify-center gap-6">
+                                            {['power', 'knowledge', 'art'].map(res => {
+                                                const val = resources[res as keyof typeof resources] || 0;
+                                                const isSelected = exchangeSourceValue === res;
+                                                return (
+                                                    <button
+                                                        key={res}
+                                                        disabled={val <= 0}
+                                                        onClick={() => setExchangeSourceValue(res as any)}
+                                                        className={`flex flex-col items-center p-6 rounded-2xl border-2 transition-all ${
+                                                            val <= 0 ? 'opacity-30 grayscale cursor-not-allowed' : 
+                                                            isSelected ? 'bg-[#d4af37] border-[#ffe066] scale-110 shadow-[0_0_30px_#d4af37]' : 
+                                                            'bg-white/5 border-white/10 hover:border-[#d4af37]/50'
+                                                        }`}
+                                                    >
+                                                        <Image src={`/resources/resource_${res}.png`} width={48} height={48} alt={res} />
+                                                        <span className={`mt-3 font-bold uppercase ${isSelected ? 'text-black' : 'text-white'}`}>{res}</span>
+                                                        <span className={`text-xl font-black ${isSelected ? 'text-black' : 'text-[#d4af37]'}`}>{val}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+
+                                    {/* Modal Step 2: Opponent Values */}
+                                    {exchangeStep === 2 && (
+                                        <div className="flex flex-col gap-6">
+                                            {dynamicPlayers.filter(p => p.id !== localPlayerId).map(p => {
+                                                const oppRes = opponentsData[p.id]?.resources || {};
+                                                return (
+                                                    <div key={p.id} className="flex flex-col gap-3 p-4 bg-white/5 rounded-2xl border border-white/10">
+                                                        <div className="flex items-center gap-3">
+                                                            <Image src={p.avatar} width={32} height={32} className="rounded-full border border-[#d4af37]" alt={p.name} />
+                                                            <span className="text-white font-bold uppercase text-xs">{p.name}</span>
+                                                        </div>
+                                                        <div className="flex gap-4">
+                                                            {['power', 'knowledge', 'art'].map(res => {
+                                                                const val = oppRes[res as keyof typeof oppRes] || 0;
+                                                                const isSelected = exchangeTargetPlayer === p.id && exchangeTargetValue === res;
+                                                                return (
+                                                                    <button
+                                                                        key={res}
+                                                                        disabled={val <= 0}
+                                                                        onClick={() => {
+                                                                            setExchangeTargetPlayer(p.id);
+                                                                            setExchangeTargetValue(res as any);
+                                                                        }}
+                                                                        className={`flex-1 flex items-center gap-2 p-3 rounded-xl border-2 transition-all ${
+                                                                            val <= 0 ? 'opacity-30 grayscale cursor-not-allowed' : 
+                                                                            isSelected ? 'bg-[#d4af37] border-[#ffe066] scale-105' : 
+                                                                            'bg-black/40 border-white/10 hover:border-[#d4af37]/30'
+                                                                        }`}
+                                                                    >
+                                                                        <Image src={`/resources/resource_${res}.png`} width={20} height={20} alt={res} />
+                                                                        <span className={`text-sm font-bold ${isSelected ? 'text-black' : 'text-white'}`}>{val}</span>
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="mt-10 flex gap-4">
+                                    {exchangeStep === 1 && (
+                                        <button
+                                            disabled={!exchangeSourceValue}
+                                            onClick={() => setExchangeStep(2)}
+                                            className="px-12 py-4 bg-gradient-to-r from-[#d4af37] to-[#f3bd48] text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 disabled:grayscale disabled:opacity-50 transition-all"
+                                        >
+                                            Choose Value
+                                        </button>
+                                    )}
+                                    {exchangeStep === 2 && (
+                                        <>
+                                            <button onClick={() => setExchangeStep(1)} className="px-8 py-4 border border-white/20 text-white font-bold uppercase rounded-xl hover:bg-white/5">Back</button>
+                                            <button
+                                                disabled={!exchangeTargetValue || !exchangeTargetPlayer}
+                                                onClick={commitTurn}
+                                                className="px-12 py-4 bg-gradient-to-r from-[#d4af37] to-[#f3bd48] text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 disabled:grayscale disabled:opacity-50 transition-all"
+                                            >
+                                                Change Values
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {/* Step 3: Change Values - Results Summary Overlay */}
+                    {phase === 3 && p3Step === 3 && exchangeResults && (
+                        <div className="absolute inset-0 z-[500] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md pointer-events-auto">
+                            <div className="relative w-[600px] bg-[#0d0d12] border-2 border-[#d4af37] rounded-3xl shadow-[0_0_50px_rgba(212,175,55,0.3)] p-10 flex flex-col items-center">
+                                <h2 className="text-4xl font-black text-[#d4af37] mb-8 uppercase tracking-[0.3em] font-rajdhani">Exchange Report</h2>
+                                
+                                <div className="w-full flex flex-col gap-4 mb-10">
+                                    {exchangeResults.map((res, i) => (
+                                        <div key={i} className="flex flex-col p-6 bg-white/5 rounded-2xl border border-white/10 gap-4">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[#d4af37] font-bold text-xs uppercase tracking-widest">{res.pName}</span>
+                                                    <span className="text-white/40 text-[10px] uppercase">Gives</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-white/40 text-[10px] uppercase">Takes</span>
+                                                    <span className="text-[#d4af37] font-bold text-xs uppercase tracking-widest">{res.pName}</span>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <Image src={`/resources/resource_${res.sourceVal}.png`} width={32} height={32} alt={res.sourceVal} />
+                                                    <span className="text-white font-black text-xl">{res.sourceVal.toUpperCase()}</span>
+                                                </div>
+                                                <div className="flex flex-col items-center">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d4af37" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                        <path d="M7 10l5 5 5-5"/>
+                                                        <path d="M17 14l-5-5-5 5"/>
+                                                    </svg>
+                                                    <span className="text-[8px] text-[#d4af37] font-bold uppercase tracking-tighter">EXCHANGED</span>
+                                                </div>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-white font-black text-xl">{res.targetVal.toUpperCase()}</span>
+                                                    <Image src={`/resources/resource_${res.targetVal}.png`} width={32} height={32} alt={res.targetVal} />
+                                                </div>
+                                            </div>
+                                            <div className="text-center text-white/20 text-[10px] uppercase tracking-widest font-bold">
+                                                Target: {res.targetName}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="text-white/40 text-[10px] uppercase font-bold tracking-[0.5em] animate-pulse">
+                                    Finalizing Action Phase...
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     <GameHeader
                         turn={turn}
                         phase={phase}
@@ -2046,6 +2425,7 @@ export default function GameBoardPage() {
                     {phase === 4 && activeConflictLocId && currentConflict && (
                         <div className="absolute inset-0 z-0 pointer-events-auto">
                             <ConflictResolutionView
+                                game={game}
                                 conflict={currentConflict}
                                 onResolve={handleConflictResolve}
                                 onClose={() => setActiveConflictLocId(null)}
@@ -2058,6 +2438,7 @@ export default function GameBoardPage() {
                     {phase === 1 && eventTieBreakerActive && (
                         <div className="absolute inset-0 z-[400] pointer-events-auto">
                             <ConflictResolutionView
+                                game={game}
                                 conflict={eventTieBreakerActive.conflict}
                                 onResolve={(result) => handleEventTieBreakerResolve(result)}
                                 onClose={() => { setEventTieBreakerActive(null); closeEvent(); }}
@@ -2386,27 +2767,43 @@ export default function GameBoardPage() {
                     {/* Modals End Here */}
                 </div>
 
-                {/* Player Conflict Modal */}
+                {/* Player Conflict Modal (Relocation) */}
                 {playerConflictContext && (
-                    <div className="fixed inset-0 z-[160] bg-black/80 backdrop-blur-sm flex items-center justify-center pointer-events-auto animate-in fade-in">
+                    <div className="absolute inset-0 z-[400] pointer-events-auto">
                         <div className="bg-[#171B21] border-2 border-[#d4af37] p-8 rounded-3xl flex flex-col items-center max-w-md w-full shadow-[0_0_50px_rgba(212,175,55,0.2)]">
-                            <h2 className="text-2xl font-rajdhani font-bold text-white mb-2 tracking-widest uppercase text-center">Relocation Conflict</h2>
-                            <p className="text-[#d4af37] text-center mb-6 text-sm">
-                                Multiple players are competing to relocate a {placedActors.find(a => a.actorId === playerConflictContext.actorId)?.actorType.toUpperCase()}!<br /><br />
-                                Choose your Argument to decide the winner:
-                            </p>
-
-                            <div className="flex gap-6 mb-2">
-                                {['rock', 'paper', 'scissors'].map(token => (
-                                    <button
-                                        key={token}
-                                        onClick={() => handlePlayerConflictSubmit(token)}
-                                        className="w-24 h-24 rounded-full border-2 border-white/20 bg-white/5 hover:bg-[#d4af37]/20 hover:border-[#d4af37] hover:scale-110 transition-all flex items-center justify-center shadow-[0_0_20px_rgba(255,255,255,0.1)] group"
-                                    >
-                                        <Image src={RSP_ICONS[token as keyof typeof RSP_ICONS]} width={50} height={50} className="group-hover:drop-shadow-[0_0_15px_rgba(212,175,55,0.8)]" alt={token} />
-                                    </button>
-                                ))}
-                            </div>
+                            <ConflictResolutionView
+                                game={game}
+                                conflict={{
+                                    locId: playerConflictContext.actorId, // Use actorId as key for reloc conflicts
+                                    locationName: "Relocation Conflict",
+                                    playerActor: {
+                                        id: localPlayerId,
+                                        type: playerConflictContext.moves.find(m => m.playerId === localPlayerId)?.choice || 'rock'
+                                    },
+                                    opponents: playerConflictContext.moves.filter(m => m.playerId !== localPlayerId).map(m => ({
+                                        actorId: m.playerId,
+                                        name: dynamicPlayers.find(p => p.id === m.playerId)?.name || 'Opponent',
+                                        avatar: dynamicPlayers.find(p => p.id === m.playerId)?.avatar || '/avatars/golden_avatar.png',
+                                        actorType: 'player',
+                                        type: m.choice || 'rock'
+                                    })),
+                                    resourceType: 'relocation'
+                                }}
+                                onResolve={(result) => {
+                                    if (!playerConflictContext) return;
+                                    const winnerId = result.winnerId;
+                                    const winner = playerConflictContext.moves.find(m => m.playerId === winnerId);
+                                    setPendingRelocations(prev => {
+                                        const others = prev.filter(r => r.actorId !== playerConflictContext.actorId);
+                                        if (winner) return [...others, { playerId: winner.playerId, actorId: playerConflictContext.actorId, targetLocId: winner.targetLocId }];
+                                        return others; 
+                                    });
+                                    setPlayerConflictContext(null);
+                                    setTimeout(() => resolveActionRelocations(), 500);
+                                }}
+                                onClose={() => setPlayerConflictContext(null)}
+                                hasNextConflict={false}
+                            />
                         </div>
                     </div>
                 )}
@@ -2434,6 +2831,32 @@ export default function GameBoardPage() {
                     opponentsData={opponentsData}
                 />
 
+                {/* Action Phase Summary Overlay */}
+                {phase === 3 && p3Step === 4 && (
+                    <div className="absolute inset-0 z-[400] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm pointer-events-auto">
+                        <div className="relative w-[500px] bg-[#0d0d12] border border-[#d4af37]/30 rounded-xl shadow-2xl p-8 flex flex-col items-center">
+                            <h2 className="text-3xl font-black text-[#d4af37] mb-6 uppercase tracking-widest">Action Phase Summary</h2>
+                            
+                            {(() => {
+                                const playerHasAction = Object.values(selectedActionCards).some(c => c > 0);
+                                const botsHaveAction = Object.values(botActionCommitsRef.current || {}).some(steps => steps.length > 0);
+                                
+                                return (!playerHasAction && !botsHaveAction) ? (
+                                    <p className="text-white text-xl text-center mb-8 font-rajdhani">No Actions this turn.</p>
+                                ) : (
+                                    <p className="text-white text-xl text-center mb-8 font-rajdhani">Actions concluded.</p>
+                                );
+                            })()}
+
+                            <button
+                                onClick={() => handleNextPhaseWrapper(true)}
+                                className="px-12 py-4 bg-gradient-to-r from-[#d4af37] to-[#f3bd48] text-black font-bold uppercase tracking-widest rounded-lg hover:from-[#ffe066] hover:to-[#ffd700] transition-all transform hover:scale-105"
+                            >
+                                Get It!
+                            </button>
+                        </div>
+                    </div>
+                )}
             </main>
         </TooltipProvider>
     );

@@ -9,6 +9,7 @@ import { ConflictResult } from '@/lib/modules/core/types';
 import { resolveConflictLogic } from '@/lib/modules/conflict/conflictResolver';
 
 interface ConflictResolutionViewProps {
+    game: any;
     conflict: {
         locId: string;
         locationName: string;
@@ -26,7 +27,7 @@ import { LOCATION_IMAGES, RSP_ICONS, BID_ICONS, RESOURCE_ICONS, ACTOR_IMAGES } f
 
 import { useGameState } from '@/context/GameStateContext';
 
-export default function ConflictResolutionView({ conflict, isResolved, hasNextConflict, onResolve, onClose }: ConflictResolutionViewProps) {
+export default function ConflictResolutionView({ game, conflict, isResolved, hasNextConflict, onResolve, onClose }: ConflictResolutionViewProps) {
     const { player } = useGameState();
     const [step, setStep] = useState<'intro' | 'reveal' | 'outcome_rsp' | 'outcome_bid'>('intro');
 
@@ -41,7 +42,7 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
 
     const localPlayerId = player.citizenId || player.address || 'p1';
 
-    // 1. Initialize Opponent Choices (Random for now)
+    // 1. Initialize Opponent Choices (Random for bots, Synced for humans)
     useEffect(() => {
         if (isResolved) {
             setStep('outcome_rsp');
@@ -56,12 +57,50 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
             choices[opp.actorId] = opp.type || 'rock';
         });
         setOpponentChoices(choices);
-        setStep('intro');
-        setResult(null);
+        
+        // PERSISTENCE FIX: If peaceful, jump straight to outcome
+        if (conflict.opponents.length === 0) {
+            const res = resolveConflictLogic(
+                localPlayerId,
+                conflict.playerActor.type || 'rock',
+                true,
+                { ...conflict, opponents: [] },
+                {},
+                { id: localPlayerId, name: player.name || 'Player' }
+            );
+            setResult(res);
+            setStep('outcome_rsp');
+        } else {
+            setStep('intro');
+            setResult(null);
+        }
         setIsRoundTwo(false);
     }, [conflict.locId, isResolved, conflict.opponents, localPlayerId]);
 
-    // 2. Logic: Resolve the Conflict
+    // 2. Real-time Sync for PvP Choices
+    useEffect(() => {
+        if (!game?.gameState?.decisions || step !== 'intro') return;
+
+        const decisions = game.gameState.decisions;
+        const newOppChoices = { ...opponentChoices };
+        let changed = false;
+
+        conflict.opponents.forEach(opp => {
+            if (decisions[opp.actorId]?.conflictChoices?.[conflict.locId]) {
+                const remoteChoice = decisions[opp.actorId].conflictChoices[conflict.locId];
+                if (newOppChoices[opp.actorId] !== remoteChoice) {
+                    newOppChoices[opp.actorId] = remoteChoice;
+                    changed = true;
+                }
+            }
+        });
+
+        if (changed) {
+            setOpponentChoices(newOppChoices);
+        }
+    }, [game?.gameState?.decisions, conflict.locId, conflict.opponents, step, opponentChoices]);
+
+    // 3. Logic: Resolve the Conflict
     const resolveConflict = (pChoice: string, applyBids: boolean = true): ConflictResult => {
         // Filter conflict for current survivors
         const currentConflictInput = {
@@ -77,6 +116,33 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
             opponentChoices,
             { id: localPlayerId, name: player.name || 'Player' }
         );
+    };
+
+    // Broadcast local choice to server
+    const broadcastChoice = async (choice: string) => {
+        const gameId = game?.id || (window.location.pathname.split('/').pop());
+        if (!gameId || game?.isTest) return; // Don't sync in bot tests
+
+        try {
+            await fetch(`/api/games/${gameId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'sync-decision',
+                    citizenId: localPlayerId,
+                    decisions: {
+                        conflictChoices: { [conflict.locId]: choice }
+                    }
+                })
+            });
+        } catch (e) {
+            console.error("Failed to broadcast RSP choice", e);
+        }
+    };
+
+    const handleChoiceSelect = (token: string) => {
+        setPlayerChoice(token);
+        broadcastChoice(token);
     };
 
 
@@ -110,8 +176,14 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
         const newOppChoices: { [id: string]: string } = {};
         conflict.opponents.forEach(opp => {
             if (newSurvivors.includes(opp.actorId)) {
-                const roll = Math.random();
-                newOppChoices[opp.actorId] = roll < 0.33 ? 'rock' : roll < 0.66 ? 'paper' : 'scissors';
+                // If bot, randomize. If human, it will be synced via useEffect.
+                const isBot = opp.actorId.startsWith('bot');
+                if (isBot) {
+                    const roll = Math.random();
+                    newOppChoices[opp.actorId] = roll < 0.33 ? 'rock' : roll < 0.66 ? 'paper' : 'scissors';
+                } else {
+                    newOppChoices[opp.actorId] = opponentChoices[opp.actorId]; // Keep previous until synced
+                }
             }
         });
         setOpponentChoices(newOppChoices);
@@ -190,13 +262,13 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
             <div className="relative z-10 w-full max-w-[1400px] h-full flex items-end justify-between px-10 pb-0">
 
                 {/* Left: Player */}
-                <div className={`relative w-[350px] h-[550px] flex items-end justify-center transition-all duration-1000 ${isActorLoser('p1') ? 'grayscale opacity-60' : ''}`}>
+                <div className={`relative w-[350px] h-[550px] flex items-end justify-center transition-all duration-1000 ${isActorLoser(localPlayerId) ? 'grayscale opacity-60' : ''}`}>
                     {/* Stack Above Head (Bottom to Top: Avatar -> RSP -> Bid) */}
                     <div className="absolute bottom-[100%] mb-4 flex flex-col-reverse items-center gap-3 z-30">
                         {/* 1. Player Avatar */}
                         <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-[#d4af37] shadow-[0_0_15px_rgba(212,175,55,0.4)] relative bg-[#1a1a1c]">
                             <Image
-                                src={player?.avatar || '/avatars/golden_avatar.png'}
+                                src={conflict.playerActor.playerAvatar || player?.avatar || '/avatars/golden_avatar.png'}
                                 fill
                                 className="object-cover"
                                 alt="Player"
@@ -343,8 +415,8 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
                                 {['rock', 'paper', 'scissors'].map(token => (
                                     <button
                                         key={token}
-                                        onClick={() => setPlayerChoice(token)}
-                                        className="w-20 h-20 rounded-full border-2 border-white/20 hover:border-[#d4af37] hover:bg-[#d4af37]/20 transition-all flex items-center justify-center hover:scale-110 shadow-lg"
+                                        onClick={() => handleChoiceSelect(token)}
+                                        className={`w-20 h-20 rounded-full border-2 transition-all flex items-center justify-center hover:scale-110 shadow-lg ${playerChoice === token ? 'border-[#d4af37] bg-[#d4af37]/40 scale-110' : 'border-white/20 hover:border-[#d4af37] hover:bg-[#d4af37]/20'}`}
                                     >
                                         <Image src={RSP_ICONS[token]} width={40} height={40} alt={token} />
                                     </button>
@@ -354,9 +426,18 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
                     ) : (
                         <button
                             onClick={handleReveal}
-                            className="px-16 py-4 bg-[#d4af37] text-black font-black text-2xl uppercase tracking-[0.2em] rounded-sm hover:bg-[#ffe066] shadow-[0_0_40px_rgba(212,175,55,0.4)] transition-transform hover:scale-105 active:scale-95 animate-in zoom-in duration-300"
+                            disabled={(() => {
+                                // Disable Reveal if any human participant hasn't committed yet
+                                const humans = [localPlayerId, ...conflict.opponents.map(o => o.actorId)].filter(id => !id.startsWith('bot'));
+                                return humans.some(id => id === localPlayerId ? !playerChoice : !opponentChoices[id]);
+                            })()}
+                            className="px-16 py-4 bg-[#d4af37] text-black font-black text-2xl uppercase tracking-[0.2em] rounded-sm hover:bg-[#ffe066] shadow-[0_0_40px_rgba(212,175,55,0.4)] transition-transform hover:scale-105 active:scale-95 animate-in zoom-in duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:grayscale"
                         >
-                            Reveal Conflict
+                            {(() => {
+                                const humans = [localPlayerId, ...conflict.opponents.map(o => o.actorId)].filter(id => !id.startsWith('bot'));
+                                const pendingCount = humans.filter(id => id === localPlayerId ? !playerChoice : !opponentChoices[id]).length;
+                                return pendingCount > 0 ? `WAITING (${pendingCount}/${humans.length})` : 'Reveal Conflict';
+                            })()}
                         </button>
                     )}
                 </div>
@@ -425,12 +506,14 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
                                                         <Image
                                                             src={(() => {
                                                                 const actorType = conflict.playerActor?.actorType?.toLowerCase();
-                                                                // Use resourceType from conflict first (passed from event reward)
-                                                                if (conflict.resourceType) return RESOURCE_ICONS[conflict.resourceType] || RESOURCE_ICONS['fame'];
-
+                                                                
+                                                                // Prioritize Actor Production Type (Rule 5 & 6)
                                                                 if (actorType === 'politician') return RESOURCE_ICONS['power'];
                                                                 if (actorType === 'scientist') return RESOURCE_ICONS['knowledge'];
                                                                 if (actorType === 'artist') return RESOURCE_ICONS['art'];
+                                                                
+                                                                // Fallback to Location/Conflict resource (for Robots and Events)
+                                                                if (conflict.resourceType) return RESOURCE_ICONS[conflict.resourceType] || RESOURCE_ICONS['fame'];
                                                                 return RESOURCE_ICONS['fame'];
                                                             })()}
                                                             fill className="object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]" alt="Resource Won"
@@ -455,9 +538,13 @@ export default function ConflictResolutionView({ conflict, isResolved, hasNextCo
                                                         <Image
                                                             src={(() => {
                                                                 const actorType = conflict.playerActor?.actorType?.toLowerCase();
+                                                                
+                                                                // Prioritize Actor Production Type
                                                                 if (actorType === 'politician') return RESOURCE_ICONS['power'];
                                                                 if (actorType === 'scientist') return RESOURCE_ICONS['knowledge'];
                                                                 if (actorType === 'artist') return RESOURCE_ICONS['art'];
+                                                                
+                                                                // Fallback
                                                                 return RESOURCE_ICONS[conflict.resourceType] || '/resources/resource_product.png';
                                                             })()}
                                                             fill className="object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]" alt="Resource Won"

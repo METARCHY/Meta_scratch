@@ -189,6 +189,7 @@ export interface Game {
         phaseTicker: number;
         playerReady: Record<string, boolean>;
         stagedActors: Record<string, PlacedActor[]>;
+        playerResources: Record<string, PlayerResources>;
     };
 }
 

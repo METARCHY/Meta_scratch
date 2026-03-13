@@ -301,12 +301,28 @@ export default function MapContainer({
 
                 {/* Relocation Arrows Layer */}
                 {phase === 3 && p3Step === 2 && relocationSource && selectedHex && (() => {
-                    const sourceLoc = LOCATIONS.find(l => placedActors.find(pa => pa.actorId === relocationSource)?.locId === l.id);
+                    const actor = placedActors.find(pa => pa.actorId === relocationSource);
+                    const sourceLocId = actor?.locId;
+                    const sourceLoc = LOCATIONS.find(l => l.id === sourceLocId);
                     const targetLoc = LOCATIONS.find(l => l.id === selectedHex);
                     
-                    if (sourceLoc && targetLoc) {
-                        const startX = sourceLoc.x + sourceLoc.width / 2;
-                        const startY = sourceLoc.y + sourceLoc.height / 2;
+                    if (sourceLoc && targetLoc && actor) {
+                        // Re-calculate the actor's specific slot position
+                        const actorsAtSource = placedActors.filter(p => p.locId === sourceLocId);
+                        const actorIndex = actorsAtSource.findIndex(a => a.actorId === relocationSource);
+                        
+                        const spread = 100;
+                        const spreadStartX = -((actorsAtSource.length - 1) * spread) / 2;
+                        const actorOffsetX = spreadStartX + (actorIndex * spread);
+                        
+                        const baseSlotY = phase >= 3 ? -4 : -34;
+                        const opponentYOffset = actor.playerId !== 'p1' ? -80 : 0;
+                        const actorOffsetY = baseSlotY + opponentYOffset;
+
+                        // Hex Center + Actor Offset
+                        const startX = sourceLoc.x + (sourceLoc.width / 2) + actorOffsetX;
+                        const startY = sourceLoc.y + (sourceLoc.height / 2) + actorOffsetY;
+                        
                         const endX = targetLoc.x + targetLoc.width / 2;
                         const endY = targetLoc.y + targetLoc.height / 2;
                         
