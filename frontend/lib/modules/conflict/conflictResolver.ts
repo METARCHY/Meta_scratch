@@ -148,7 +148,8 @@ export function resolveConflictLogic(
             isDraw = true;
             survivorIds.push(p.id);
         } else if (hasLoses) {
-            if (p.bid === 'electricity') {
+            // Electricity saves only work on Round 1 (when applyBids is true)
+            if (applyBids && p.bid === 'electricity') {
                 survivorIds.push(p.id);
             } else {
                 loserIds.push(p.id);
@@ -161,7 +162,8 @@ export function resolveConflictLogic(
         survivorIds = survivorIds.filter(id => {
             const isClearWinner = winnerIds.includes(id);
             const player = participants.find(p => p.id === id);
-            const isElectricitySave = player?.bid === 'electricity';
+            // Electricity saves only work on Round 1
+            const isElectricitySave = applyBids && player?.bid === 'electricity';
             if (isClearWinner || isElectricitySave) return true;
             if (!loserIds.includes(id)) loserIds.push(id);
             return false;
@@ -265,7 +267,7 @@ export function resolveConflictLogic(
             finalShareRewards = true;
         }
     } else if (!isDraw && survivorIds.length > 1) {
-        logs.push(`Multi-Winner Tie: ${survivorIds.length} actors remain for re-roll.`);
+        logs.push(`Confrontation continues: ${survivorIds.length} actors remain for re-roll.`);
         finalRestart = true;
     } else if (survivorIds.length === 1 && !isDraw) {
         finalWinnerId = survivorIds[0];

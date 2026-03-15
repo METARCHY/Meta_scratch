@@ -40,7 +40,7 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
     const [survivorIds, setSurvivorIds] = useState<string[]>([]);
     const [reRollCount, setReRollCount] = useState(0);
 
-    const isRoundTwo = history.length > 0 || reRollCount > 0;
+    const isRoundTwo = reRollCount > 0;
     const [rewardAccumulator, setRewardAccumulator] = useState(0);
 
     const localPlayerId = player.citizenId || player.address || 'p1';
@@ -497,25 +497,46 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                         >
                             {/* Header */}
                             <div className="bg-[#1a1a20] p-6 border-b border-white/5 text-center">
-                                <h2 className={`font-rajdhani font-bold text-4xl tracking-widest uppercase ${(result?.isDraw || result?.restart) ? 'text-blue-400' : result?.winnerId === localPlayerId ? 'text-[#d4af37]' : 'text-red-500'}`}>
-                                    {(result?.isDraw || result?.restart)
-                                        ? 'DRAW'
-                                        : result?.winnerId === localPlayerId
-                                            ? (conflict.opponents.length === 0 ? 'SECURED' : 'WIN')
-                                            : 'LOSE'}
-                                </h2>
-                                <p className="text-white/60 text-sm mt-2 italic font-mono">
-                                    {result?.isDraw
-                                        ? (result.evictAll
-                                            ? "Refusing to compromise, all Artists leave the location."
-                                            : result.shareRewards
-                                                ? "Mutual advancement: individual research leads to success."
-                                                : "The negotiation stalled. A new argument is required.")
-                                        : result?.winnerId === localPlayerId
-                                            ? (conflict.opponents.length === 0 ? "Mining operations secured without opposition." : "Your arguments prevailed over the opposition.")
-                                            : "You failed to convince the assembly."
+                                {(() => {
+                                    const isSurvivor = result?.survivorIds.includes(localPlayerId);
+                                    const isLoser = result?.loserIds.includes(localPlayerId);
+                                    const isWinner = result?.winnerId === localPlayerId;
+                                    const isDrawTrue = result?.isDraw;
+                                    const isRestart = result?.restart;
+
+                                    let header = "DRAW";
+                                    let textColor = "text-blue-400";
+                                    let subtext = "";
+
+                                    if (isWinner) {
+                                        header = conflict.opponents.length === 0 ? "SECURED" : "WIN";
+                                        textColor = "text-[#d4af37]";
+                                        subtext = conflict.opponents.length === 0 ? "Mining operations secured without opposition." : "Your arguments prevailed over the opposition.";
+                                    } else if (isLoser) {
+                                        header = "LOSE";
+                                        textColor = "text-red-500";
+                                        subtext = "You failed to convince the assembly.";
+                                    } else if (isRestart) {
+                                        header = isDrawTrue ? "DRAW" : "RESTART";
+                                        textColor = isDrawTrue ? "text-blue-400" : "text-purple-400";
+                                        subtext = isDrawTrue ? "The negotiation stalled. A new argument is required." : "The confrontation continues. Prepare for another round.";
+                                    } else if (isDrawTrue) {
+                                        header = "DRAW";
+                                        textColor = "text-blue-400";
+                                        subtext = result?.evictAll ? "Refusing to compromise, all Artists leave the location." : "Mutual advancement: individual research leads to success.";
                                     }
-                                </p>
+
+                                    return (
+                                        <>
+                                            <h2 className={`font-rajdhani font-bold text-4xl tracking-widest uppercase ${textColor}`}>
+                                                {header}
+                                            </h2>
+                                            <p className="text-white/60 text-sm mt-2 italic font-mono">
+                                                {subtext}
+                                            </p>
+                                        </>
+                                    );
+                                })()}
                             </div>
 
                             {/* Body */}
@@ -590,6 +611,9 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                                                 const isTie = result?.tieIds?.includes(id);
                                                 const isLoser = result?.loserIds.includes(id);
                                                 const isSurvivor = result?.survivorIds.includes(id);
+                                                
+                                                // If they were a participant but didn't win and aren't survivors, they are losers
+                                                const isExitedEarly = !isWinner && !isSurvivor;
 
                                                 let status = "DRAW";
                                                 let rewardText = "nothing";
@@ -629,7 +653,7 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                                                         const capitalizedResName = resName.charAt(0).toUpperCase() + resName.slice(1);
                                                         rewardText = `1 ${label}${capitalizedResName ? ` (${capitalizedResName})` : ''}`;
                                                     }
-                                                } else if (isLoser) {
+                                                } else if (isLoser || isExitedEarly) {
                                                     status = "LOSE";
                                                     statusColor = "text-red-500";
                                                 } else if (isSurvivor && result?.restart) {

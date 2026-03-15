@@ -559,16 +559,18 @@ export default function GameBoardPage() {
                 return next;
             });
 
-            // Consume Card from hand visual representation
-            const cardIndex = actionHand.findIndex(c => c.id.includes('change_values'));
-            if (cardIndex !== -1) {
-                const consumed = actionHand[cardIndex];
-                setActionDiscardPile(prev => [...prev, consumed]);
-                setActionHand(prev => {
-                    const newHand = [...prev];
-                    newHand.splice(cardIndex, 1);
-                    return newHand;
-                });
+            // Consume Card from hand
+            const cardToUse = actionHand.find(c => c.id.includes('change_values'));
+            let newHand = actionHand;
+            let newDiscard = actionDiscardPile;
+
+            if (cardToUse) {
+                newHand = actionHand.filter(c => c.instanceId !== cardToUse.instanceId);
+                newDiscard = [...actionDiscardPile, cardToUse];
+                
+                // Update local state for immediate feedback
+                setActionHand(newHand);
+                setActionDiscardPile(newDiscard);
             }
 
             addLog(`Exchange Submitted: Your ${exchangeSourceValue?.toUpperCase()} for ${opponentsData[exchangeTargetPlayer]?.name}'s ${exchangeTargetValue?.toUpperCase()}`);
@@ -589,12 +591,7 @@ export default function GameBoardPage() {
                 setExchangeDone(true);
                 setCurrentExchangeIndex(0); // Reset for next turn
 
-                // Calculate NEW states to pass down
-                const cardToDiscard = actionHand.find(c => c.id.includes('change_values'));
-                const newHand = cardToDiscard ? actionHand.filter(c => c.instanceId !== cardToDiscard.instanceId) : actionHand;
-                const newDiscard = cardToDiscard ? [...actionDiscardPile, cardToDiscard] : actionDiscardPile;
-
-                // Immediately resolve so users see the result
+                // Use the already calculated states
                 await resolveActionExchanges([newExchange], newHand, newDiscard);
             } else {
                 setCurrentExchangeIndex(prev => prev + 1);
@@ -1389,9 +1386,9 @@ export default function GameBoardPage() {
                 let serverDeck = game.gameState?.eventDeck || [];
                 
                 if (serverDeck.length === 0) {
-                    // RESHUFFLE PERSISTENCE FIX: If deck is empty, reshuffle from constants
-                    addLog("Event Deck empty - reshuffling from all events.");
-                    serverDeck = [...EVENTS].map(e => e.id).sort(() => Math.random() - 0.5);
+                    addLog("All events have occurred.");
+                    isDrawingRef.current = false;
+                    return;
                 }
                 
                 const randomIndex = Math.floor(Math.random() * serverDeck.length);
