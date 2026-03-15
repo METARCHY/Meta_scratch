@@ -127,6 +127,7 @@ export function resolveConflictLogic(
     let winnerIds: string[] = [];
     let loserIds: string[] = [];
     let survivorIds: string[] = [];
+    let tieIds: string[] = [];
     let isDraw = false;
 
     // Determine outcomes based on pairs
@@ -134,26 +135,19 @@ export function resolveConflictLogic(
         const results = Object.entries(matchResults[p.id]).filter(([otherId]) => otherId !== p.id);
         const hasWins = results.some(([_, res]) => res === 'win');
         const hasLoses = results.some(([_, res]) => res === 'lose');
-        const allLoses = results.every(([_, res]) => res === 'lose');
         const allDraws = results.every(([_, res]) => res === 'draw');
 
         if (hasWins) {
-            // You beat at least one person!
             if (!hasLoses) {
-                // Clear Winner (God Tier)
                 winnerIds.push(p.id);
                 survivorIds.push(p.id);
             } else {
-                // Mixed results - survives ONLY if there are no Clear Winners
-                // We'll filter these out in a second pass if winnerIds.length > 0
                 survivorIds.push(p.id);
             }
         } else if (allDraws) {
-            // True Draw with everyone (No wins, no losses)
             isDraw = true;
             survivorIds.push(p.id);
         } else if (hasLoses) {
-            // You have NO wins, and you reached an outcome (even if some matches were Draws)
             if (p.bid === 'electricity') {
                 survivorIds.push(p.id);
             } else {
@@ -163,30 +157,35 @@ export function resolveConflictLogic(
     });
 
     // --- SECOND PASS: Clear Winner Hierarchy ---
-    // If someone wins against everyone they matched with, they trump "Mixed" survivors.
     if (winnerIds.length > 0) {
         survivorIds = survivorIds.filter(id => {
-            // Only Clear Winners or Electricity saves persist
             const isClearWinner = winnerIds.includes(id);
             const player = participants.find(p => p.id === id);
             const isElectricitySave = player?.bid === 'electricity';
-            
             if (isClearWinner || isElectricitySave) return true;
-            
-            // If we remove them, they become losers
             if (!loserIds.includes(id)) loserIds.push(id);
             return false;
         });
     }
 
+    // Determine Ties (those who reached the highest tier in this iteration)
+    if (isDraw) {
+        tieIds = [...survivorIds];
+    } else if (survivorIds.length > 1) {
+        // If no winnerIds but mixed results led to survivors, they tied
+        tieIds = [...survivorIds];
+    }
+
     // Handle Draws (Mixed or True)
     if (survivorIds.length > 1) {
-        const survivorsDraw = survivorIds.every(s1 => 
+        const trueDraw = survivorIds.every(s1 => 
             survivorIds.every(s2 => matchResults[s1][s2] === 'draw')
         );
-        if (survivorsDraw) isDraw = true;
+        // Stalemate: No one is a clear winner (e.g. RPS circle where everyone has wins and losses)
+        const stalemate = winnerIds.length === 0;
+
+        if (trueDraw || stalemate) isDraw = true;
     } else if (survivorIds.length === 0 && participants.length > 0) {
-        // Everyone was eliminated (e.g. all clear losers - should have been saved by isDraw logic but being safe)
         isDraw = true;
     }
 
@@ -205,6 +204,7 @@ export function resolveConflictLogic(
                 logs.push(`Recycling Bid: ${b.name}'s ${b.actorType.toUpperCase()} wins the Draw!`);
                 finalWinnerId = b.id;
                 isDraw = false;
+                tieIds = [];
                 survivorIds = [b.id];
                 loserIds = participants.filter(p => p.id !== b.id).map(p => p.id);
             } else if (recyclingBidders.length > 1) {
@@ -213,28 +213,23 @@ export function resolveConflictLogic(
             recyclingBidders.forEach(b => successfulBids.push({ actorId: b.id, bid: 'recycling' }));
         }
 
-        // 2. Electricity (Lose) Bids - Saves the player from elimination
+        // 2. Electricity (Lose) Bids
         const electricityBidders = participants.filter(p => p.bid === 'electricity');
         if (electricityBidders.length > 0) {
             let triggeredRestart = false;
             electricityBidders.forEach(b => {
-                // If they lost against at least one survivor, they survive and trigger restart
                 const resultsAgainstSurvivors = Object.entries(matchResults[b.id])
                     .filter(([otherId]) => otherId !== b.id && survivorIds.includes(otherId));
-                
                 const lostAgainstSurvivor = resultsAgainstSurvivors.some(([_, res]) => res === 'lose');
                 const isClearLoser = loserIds.includes(b.id);
-
                 if (lostAgainstSurvivor || isClearLoser) {
                     logs.push(`Electricity Bid: ${b.name}'s ${b.actorType.toUpperCase()} averted defeat! Restarting...`);
                     successfulBids.push({ actorId: b.id, bid: 'electricity' });
-                    
                     if (!survivorIds.includes(b.id)) survivorIds.push(b.id);
                     loserIds = loserIds.filter(id => id !== b.id);
                     triggeredRestart = true;
                 }
             });
-
             if (triggeredRestart) finalRestart = true;
         }
 
@@ -242,7 +237,6 @@ export function resolveConflictLogic(
         if (!isDraw) {
             participants.forEach(p => {
                 if (p.bid === 'product') {
-                    // Did they win at least one pair?
                     const hasMatchWin = Object.values(matchResults[p.id]).includes('win');
                     if (hasMatchWin) {
                         logs.push(`Product Bid: ${p.name} secures +1 resource bonus!`);
@@ -262,14 +256,15 @@ export function resolveConflictLogic(
         } else if (actorType === 'artist') {
             logs.push('Artists refuse to compromise: All exit.');
             finalEvictAll = true;
-            loserIds = participants.map(p => p.id);
+            // CRITICAL FIX: loserIds should NOT contain those who tied (tieIds)
+            // They are evicted but their status is DRAW
+            loserIds = participants.filter(p => !tieIds.includes(p.id)).map(p => p.id);
             survivorIds = [];
         } else if (actorType === 'scientist' || actorType === 'robot') {
             logs.push(`${actorType.toUpperCase()}s sharing location.`);
             finalShareRewards = true;
         }
     } else if (!isDraw && survivorIds.length > 1) {
-        // Multiple survivors in a non-draw means mixed results or tied winners
         logs.push(`Multi-Winner Tie: ${survivorIds.length} actors remain for re-roll.`);
         finalRestart = true;
     } else if (survivorIds.length === 1 && !isDraw) {
@@ -280,6 +275,7 @@ export function resolveConflictLogic(
         winnerId: finalWinnerId,
         loserIds,
         survivorIds,
+        tieIds,
         isDraw,
         restart: finalRestart,
         evictAll: finalEvictAll,

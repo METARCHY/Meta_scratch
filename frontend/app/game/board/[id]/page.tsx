@@ -501,16 +501,18 @@ export default function GameBoardPage() {
                 return next;
             });
 
-            // Consume Card from hand visual representation
-            const cardIndex = actionHand.findIndex(c => c.id.includes('relocation'));
-            if (cardIndex !== -1) {
-                const consumed = actionHand[cardIndex];
-                setActionDiscardPile(prev => [...prev, consumed]);
-                setActionHand(prev => {
-                    const newHand = [...prev];
-                    newHand.splice(cardIndex, 1);
-                    return newHand;
-                });
+            // Consume Card from hand
+            const cardToUse = actionHand.find(c => c.id.includes('relocation'));
+            let newHand = actionHand;
+            let newDiscard = actionDiscardPile;
+
+            if (cardToUse) {
+                newHand = actionHand.filter(c => c.instanceId !== cardToUse.instanceId);
+                newDiscard = [...actionDiscardPile, cardToUse];
+                
+                // Update local state for immediate feedback
+                setActionHand(newHand);
+                setActionDiscardPile(newDiscard);
             }
 
             addLog(`Relocation Submitted: ${extractedType} to ${selectedHex.toUpperCase()}`);
@@ -523,8 +525,8 @@ export default function GameBoardPage() {
             setSelectedHex(null);
 
             if (remainingCards <= 0) {
-                // PASS the final move directly to avoid race condition with state
-                resolveActionRelocations([newMove]);
+                // PASS the final move and NEW states directly to avoid race condition
+                resolveActionRelocations([newMove], newHand, newDiscard);
             }
             return;
         }
@@ -586,8 +588,14 @@ export default function GameBoardPage() {
             if (remainingCards <= 0) {
                 setExchangeDone(true);
                 setCurrentExchangeIndex(0); // Reset for next turn
+
+                // Calculate NEW states to pass down
+                const cardToDiscard = actionHand.find(c => c.id.includes('change_values'));
+                const newHand = cardToDiscard ? actionHand.filter(c => c.instanceId !== cardToDiscard.instanceId) : actionHand;
+                const newDiscard = cardToDiscard ? [...actionDiscardPile, cardToDiscard] : actionDiscardPile;
+
                 // Immediately resolve so users see the result
-                await resolveActionExchanges([newExchange]);
+                await resolveActionExchanges([newExchange], newHand, newDiscard);
             } else {
                 setCurrentExchangeIndex(prev => prev + 1);
                 setExchangeStep(1); // Repeat for next card
@@ -720,23 +728,21 @@ export default function GameBoardPage() {
             allStagedActors = [...allStagedActors, ...actors];
         });
 
-        if (allStagedActors.length > 0) {
-            // Only update if the total count or IDs changed to avoid jitter
-            setPlacedActors(prev => {
-                if (prev.length === allStagedActors.length) {
-                    // Quick check if IDs are different
-                    const prevIds = prev.map(a => a.actorId).sort().join(',');
-                    const nextIds = allStagedActors.map(a => a.actorId).sort().join(',');
-                    if (prevIds === nextIds) {
-                        // IDs match, check for locId changes (moves)
-                        const prevLocs = prev.map(a => `${a.actorId}:${a.locId}`).sort().join(',');
-                        const nextLocs = allStagedActors.map(a => `${a.actorId}:${a.locId}`).sort().join(',');
-                        if (prevLocs === nextLocs) return prev;
-                    }
+        // Only update if the total count or IDs changed to avoid jitter
+        setPlacedActors(prev => {
+            if (prev.length === allStagedActors.length) {
+                // Quick check if IDs are different
+                const prevIds = prev.map((a: any) => a.actorId).sort().join(',');
+                const nextIds = allStagedActors.map((a: any) => a.actorId).sort().join(',');
+                if (prevIds === nextIds) {
+                    // IDs match, check for locId changes (moves)
+                    const prevLocs = prev.map((a: any) => `${a.actorId}:${a.locId}`).sort().join(',');
+                    const nextLocs = allStagedActors.map((a: any) => `${a.actorId}:${a.locId}`).sort().join(',');
+                    if (prevLocs === nextLocs) return prev;
                 }
-                return allStagedActors;
-            });
-        }
+            }
+            return allStagedActors;
+        });
 
         // 3. Phase 3 Step 1 Ready Sync
         if (game.gameState.decisions) {
@@ -1084,7 +1090,7 @@ export default function GameBoardPage() {
         moves: { playerId: string, targetLocId: string, choice?: string }[];
     }
     const [playerConflictContext, setPlayerConflictContext] = useState<PlayerConflictContextType | null>(null);
-    const [relocResults, setRelocResults] = useState<{ actorId: string, fromLocId: string, toLocId: string, pName: string }[] | null>(null);
+    const [relocResults, setRelocResults] = useState<{ actorId: string, fromLocId: string, toLocId: string, pName: string, ownerName: string }[] | null>(null);
     const [exchangeResults, setExchangeResults] = useState<{ pName: string, sourceVal: string, targetName: string, targetVal: string }[] | null>(null);
     const [exchangeDone, setExchangeDone] = useState(false);
     const [p3Step1Ready, setP3Step1Ready] = useState(false);
@@ -1185,15 +1191,23 @@ export default function GameBoardPage() {
 
         // Also clear bets from the stickyConflicts snapshot so the ConflictResolutionView
         // does NOT display the bid icon after it has been burned (important on Draw restart).
-        setStickyConflicts(prev => prev.map(conflict => ({
-            ...conflict,
-            playerActor: involvedActorIds.includes(conflict.playerActor?.actorId)
-                ? { ...conflict.playerActor, bid: undefined }
-                : conflict.playerActor,
-            opponents: conflict.opponents.map((o: any) =>
-                involvedActorIds.includes(o.actorId) ? { ...o, bid: undefined } : o
-            )
-        })));
+        setStickyConflicts(prev => prev.map(conflict => {
+            if (conflict.locId !== activeConflictLocId) return conflict;
+            
+            // Filter out specific losers from this iteration so they don't appear in the re-roll
+            const filteredOpponents = conflict.opponents.filter((o: any) => !result.loserIds.includes(o.actorId));
+            const playerLost = result.loserIds.includes(conflict.playerActor?.actorId);
+            
+            return {
+                ...conflict,
+                playerActor: playerLost ? null : (involvedActorIds.includes(conflict.playerActor?.actorId)
+                    ? { ...conflict.playerActor, bid: undefined }
+                    : conflict.playerActor),
+                opponents: filteredOpponents.map((o: any) =>
+                    involvedActorIds.includes(o.actorId) ? { ...o, bid: undefined } : o
+                )
+            };
+        }));
 
         // Detailed conflict logs are passed from ConflictResolutionView
         result.logs.forEach(l => addLog(`${l}`));
@@ -1859,8 +1873,11 @@ export default function GameBoardPage() {
         setPendingPlacement(null);
     };
 
-    const resolveActionExchanges = async (extraMoves: typeof pendingExchanges = []) => {
+    const resolveActionExchanges = async (extraMoves: typeof pendingExchanges = [], updatedHand?: any[], updatedDiscard?: any[]) => {
         addLog("Resolving Exchanges...");
+        const currentHand = updatedHand || actionHand;
+        const currentDiscard = updatedDiscard || actionDiscardPile;
+
         const currentQueue = [...pendingExchanges, ...extraMoves];
         if (currentQueue.length === 0) {
             handleNextPhaseWrapper();
@@ -1928,7 +1945,7 @@ export default function GameBoardPage() {
         const mainPlayerId = player.citizenId || player.address || 'p1';
         
         // Return "Change of Values" if conditions met
-        let finalHand = [...actionHand];
+        let finalHand = [...currentHand];
         const hasSelfValue = (resources.power || 0) > 0 || (resources.knowledge || 0) > 0 || (resources.art || 0) > 0;
         const hasOppValue = Object.values(opponentsData).some(opp => {
             const res = opp.resources || {};
@@ -1956,7 +1973,7 @@ export default function GameBoardPage() {
                             ...(game?.gameState?.playerInventories || {}),
                             [mainPlayerId]: finalHand 
                         },
-                        discardPile: actionDiscardPile
+                        discardPile: currentDiscard
                     }
                 }
             })
@@ -2033,7 +2050,10 @@ export default function GameBoardPage() {
     };
 
 
-    const resolveActionRelocations = (extraMoves: typeof pendingRelocations = []) => {
+    const resolveActionRelocations = (extraMoves: typeof pendingRelocations = [], updatedHand?: any[], updatedDiscard?: any[]) => {
+        const currentHand = updatedHand || actionHand;
+        const currentDiscard = updatedDiscard || actionDiscardPile;
+
         const currentQueue = [...pendingRelocations, ...extraMoves];
         if (currentQueue.length === 0) {
             handleNextPhaseWrapper(); // Ensure we don't get stuck if called with nothing
@@ -2082,11 +2102,13 @@ export default function GameBoardPage() {
             validMoves.push(moves[0]);
             const pName = dynamicPlayers.find(p => p.id === moves[0].playerId)?.name || 'Player';
             const actor = placedActors.find(a => a.actorId === actorId);
+            const ownerId = actor?.playerId || localPlayerId;
+            const ownerName = ownerId === localPlayerId ? 'Your' : (dynamicPlayers.find(p => p.id === ownerId)?.name + "'s" || 'Opponent\'s');
             const actorName = actor?.actorType || 'Actor';
             const fromLoc = actor?.locId || 'Unknown';
             
-            summary.push({ actorId, fromLocId: fromLoc, toLocId: moves[0].targetLocId, pName });
-            addLog(`Relocation complete: ${pName} relocated a ${actorName} to ${moves[0].targetLocId.toUpperCase()}`);
+            summary.push({ actorId, fromLocId: fromLoc, toLocId: moves[0].targetLocId, pName, ownerName });
+            addLog(`Relocation complete: ${pName} relocated ${ownerName} ${actorName} to ${moves[0].targetLocId.toUpperCase()}`);
         });
 
         if (validMoves.length > 0) {
@@ -2127,9 +2149,9 @@ export default function GameBoardPage() {
                             stagedActors: actorsByPlayer,
                             playerInventories: { 
                                 ...(game?.gameState?.playerInventories || {}),
-                                [mainPlayerId]: nextHand 
+                                [mainPlayerId]: currentHand 
                             },
-                            discardPile: actionDiscardPile
+                            discardPile: currentDiscard
                         }
                     }
                 })
@@ -2419,9 +2441,9 @@ export default function GameBoardPage() {
                                     {relocResults.map((res, i) => (
                                         <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/10">
                                             <div className="flex flex-col">
-                                                <span className="text-[10px] text-[#d4af37] uppercase font-bold tracking-widest">{res.pName}</span>
+                                                <span className="text-[10px] text-[#d4af37] uppercase font-bold tracking-widest">{res.pName} moved</span>
                                                 <span className="text-white font-rajdhani text-xl font-bold">
-                                                    {placedActors.find(a => a.actorId === res.actorId)?.actorType.toUpperCase()}
+                                                    {res.ownerName} {placedActors.find(a => a.actorId === res.actorId)?.actorType.toUpperCase()}
                                                 </span>
                                             </div>
                                             <div className="flex items-center gap-4">

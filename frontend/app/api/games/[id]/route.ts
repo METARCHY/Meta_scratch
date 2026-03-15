@@ -66,6 +66,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
             if (readyCount > 0 && readyCount >= game.players.length) {
                 state.phaseTicker += 1;
                 state.playerReady = {};
+                // BUG FIX: Clear board state (stagedActors) when moving to next phase
+                state.stagedActors = {};
+                console.log(`[API] Phase ${state.phaseTicker} consensus reached. Board cleared.`);
             }
 
             game = gameService.update(params.id, { gameState: state }) || game;

@@ -9,12 +9,22 @@ A **Victory Point** is earned by collecting a full set of the three Value Tokens
 
 If players have an equal number of Victory Points at the end of the final Turn, an extra tie-breaker Turn is played between those tied players. Extra turns are added sequentially until only one player holds the highest number of Victory Points.
 
+## 🎭 Core Vision: Creation through Interaction
+Metarchy is a world where nothing happens in isolation. 
+- **Locations** are static; they just exist. 
+- **Actors** have potential but no purpose until deployed.
+- **Creation** only happens when an **Actor interacts with a Location**.
+
+### Values vs. Resources
+- **Humans create VALUES**: Politicians, Scientists, and Artists perform intellectual or social labor to create **Power, Knowledge, and Art**. They refuse hard labor; they seek to influence and inspire.
+- **Robots produce RESOURCES**: Utilizing utilitarian modules, Robots produce **Products, Electricity, and Recycling**. They do not create values; they sustain the material infrastructure.
+
 ## Gaming Terminology
 - **Conflict** - If two or more Actors of the same type meet in one Location, they will have a Conflict. If Actors have a Conflict, players need to start the process of Conflict Resolution.
-- **Conflict Resolution** - When two or more Actors of the same type meet in one Location, or when game rules conflict, players start Conflict Resolution: each player chooses Rock, Paper, or Scissors. Choices are hidden until all players have committed, then revealed simultaneously. The Outcome for each Actor/Player can be Win, Lose, or Draw. 
-- **Outcome** - result of the Conflict Resolution. It can be Win, Lose or Draw.
-- **Location** - part of the game field. Locations is doing nothing by itself. Players can send Actors to the Locations.
-- **Actor** - main charecters of each player. Players send Actors to the Locations. Actors produce Values or Resources in the Locations.
+- **Conflict Resolution** - When two or more Actors of the same type meet in one Location, or when game rules conflict, players start Conflict Resolution: each player chooses Rock, Paper, or Scissors. Choices are hidden until all players have committed, then revealed simultaneously. The Outcome for each Actor/Player can be WIN, LOSE, or DRAW. 
+- **Outcome** - result of the Conflict Resolution. It can be WIN, LOSE or DRAW.
+- **Location** - part of the game field. Locations do nothing by themselves. Players can send Actors to the Locations.
+- **Actor** - main characters of each player. Players send Actors to the Locations. Actors create Values or produce Resources in the Locations.
 - **Argument** - when sending an Actor to a Location, player MUST give an Argument to Actor. Each Actor must to have an Argument. Each Actor can get only one Argument. Actors of the same player must have different Arguments.
 - **Bet** - when sending an Actor to a Location, player MAY add a Bet on Outcome to Actor. To add a Bet on the Outcome of a Conflict, a player must use a Resource. If a player does not have the required Resource, player cannot add a Bet to Actor. Player can't add more than one Bet to one Actor. If Outcome of the Conflict is the same as a Bet, then Bet is successful. If Outcome of the Conflict is other than a Bet, then Bet is failed. Regardless of whether the Bet was successful or failed, the Bet Resource is discarded and is not returned to the player.
 
@@ -40,37 +50,35 @@ The board consists of 6 distinct Locations where Conflicts are happening:
 - 🗑️ **Dump** (You can send here Robot)
 
 ### 3. Actors (4 Types per Player)
-Actors are sent to Locations to create values.
-- 👔 **Politician** (Players can only send Politician to the Square and University locations.)
-  - A Politician in the Square or University location creates the Value - Power.
-  - If two or more Politicians are in the Square or University Location, a Conflict occurs between the Politicians.
-  - For each Politician, the Conflict Outcome can be Win, Lose or Draw.
-  - If Outcome is Win - Politician returns to Player-owner with Value Power.
-  - If Outcome is Lose - Politician returns to Player-owner without anything. 
-  - If Outcome is Draw, players need to Resolve the Conflict until Outcome of the Conflict Win-Lose. 
-- 🧑🔬 **Scientist** (Players can only send Scientist to the Theater and University Locations.)
-  - A Scientist in the Theater or University Location produces the Value - Knowledge.
-  - If two or more Scientists are in the Theater or University Location, a Conflict occurs between the Scientists.
-  - For each Scientist, the Conflict Outcome can be Win, Lose or Draw.
-  - If Outcome is Win - Scientist returns to Player-owner with Value Knowledge.
-  - If Outcome is Lose - Scientist returns to Player-owner without anything. 
-  - If the Conflict Outcome for a Scientist is Draw, players don't need to Resolve the Conflict. All Scientists with a Draw outcome return to Player-owners with Value Knowledge. ("Draw between Scientists" is the same as "All Scientists Win"). **Note**: If a third Actor wins the conflict (e.g., Paper vs. Rock, Rock), the Scientists with Rock get a "Lose" outcome and receive nothing.
-- 🧑🎨 **Artist** (Players can only send Artist to the Theater and Square Locations.)
-  - An Artist in the Theater or Square Location creates the Value - Art.
-  - If two or more Artists are in the Theater or Square Location, a Conflict occurs between the Artists.
-  - For each Artist, the Conflict Outcome can be Win, Lose or Draw.
-  - If Outcome is Win - Artist returns to Player-owner with Value Art.
-  - If Outcome is Lose - Artist returns to Player-owner without anything. 
-  - If Outcome is Draw, players don't need to Resolve the Conflict. All Artists return to Player-owners without anything. ("Draw between Artists" is the same as "All Artists Lose")
-- 🤖 **Robot** (Players can send an Actor-Robot to these Locations: Factory, Power Plant, or Dump.)
-  - A Robot in the Factory Location produces three units of Resources - Product.
-  - A Robot in the Power Plant Location produces three units of Resources - Electricity.
-  - A Robot in the Dump Location produces three units of Resources - Recycling.
-  - If two or more Actor-Robots are in the Factory, Power Plant, or Dump Location, a Conflict occurs between the Robots.
-  - For each Robot, the Conflict Outcome can be Win, Lose or Draw.
-  - If Outcome is Win - Robot returns to Player-owner with 3 Resources of Product/Electricity/Recycling (depending on the Location).
-  - If Outcome is Lose - Robot returns to Player-owner without anything. 
-  - If the Conflict Outcome for a Robot is Draw, it returns to the Player-owner with 1 Resource of the type that depends on the Location. **Note**: This only applies if the Robot has a Draw outcome; if another Actor wins the conflict, the losing Robot receives nothing. If a Robot with a "Draw" Bet results in a Draw, it wins and returns with 3 Resources; others in the draw without the bet return with only 1.
+Actors are sent to Locations to create values or produce resources.
+
+- 👔 **Politician** (Valid Locations: Square, University)
+  - **Vision**: On a Square, they organize manifestations. In the University, they organize student strikes. Both create **Power**. In the Theater, they are satirized; they cannot create Power there.
+  - If two or more Politicians meet, they argue until one wins. They never agree.
+  - **WIN**: Returns with Value **Power**.
+  - **LOSE**: Returns with nothing.
+  - **DRAW**: Must Resolve the Conflict again until there is a WIN/LOSE outcome.
+
+- 🧑🔬 **Scientist** (Valid Locations: University, Theater)
+  - **Vision**: In the University, they conduct research/experiments. In the Theater, they study humanitarian sciences. Both create **Knowledge**. On the Square, they have no purpose and create nothing.
+  - If two Scientists have equally good arguments (**DRAW**), they *both* create Knowledge.
+  - **WIN**: Returns with Value **Knowledge**.
+  - **LOSE**: Returns with nothing.
+  - **DRAW** (Individual outcome): Returns with Value **Knowledge**.
+
+- 🧑🎨 **Artist** (Valid Locations: Theater, Square)
+  - **Vision**: In the Theater or on the Square, they perform or play music. Both create **Art**. In the University, they are just students; they have no stage to create Art.
+  - Art is only recognized when one artist is visibly better than others. 
+  - **WIN**: Returns with Value **Art**.
+  - **LOSE**: Returns with nothing.
+  - **DRAW**: NO Art is created. Everyone returns with nothing.
+
+- 🤖 **Robot** (Valid Locations: Factory, Power Plant, Dump)
+  - **Vision**: Purely industrial. Robots produce material goods. 
+  - Factory output is limited. More robots doesn't mean more total production per robot.
+  - **WIN**: Returns with **3 Resources** (Product/Electricity/Recycling).
+  - **LOSE**: Returns with nothing.
+  - **DRAW**: Returns with **1 Resource**.
 
 ### 4. Arguments (4 Types)
 When Player send an Actor to Location, Player must give an Argument to Actor.

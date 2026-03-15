@@ -95,6 +95,7 @@ export interface ConflictResult {
     winnerId: string | null;      // If null and shareRewards=false, conflict continues or draw
     loserIds: string[];           // IDs of actors that must leave immediately
     survivorIds: string[];        // IDs of actors that stay for the next iteration
+    tieIds?: string[];            // IDs of actors who tied for the top (Used for UI DRAW status)
     isDraw: boolean;
     restart: boolean;             // If true, everyone in survivorIds must re-pick argument
     evictAll: boolean;

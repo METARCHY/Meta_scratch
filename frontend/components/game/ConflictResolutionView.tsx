@@ -38,7 +38,9 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
     // Calculated Result
     const [result, setResult] = useState<ConflictResult | null>(null);
     const [survivorIds, setSurvivorIds] = useState<string[]>([]);
-    const [isRoundTwo, setIsRoundTwo] = useState(false);
+    const [reRollCount, setReRollCount] = useState(0);
+
+    const isRoundTwo = history.length > 0 || reRollCount > 0;
     const [rewardAccumulator, setRewardAccumulator] = useState(0);
 
     const localPlayerId = player.citizenId || player.address || 'p1';
@@ -55,7 +57,6 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
         // Fresh initialization for a new location
         if (conflict.locId !== lastLocId) {
             setLastLocId(conflict.locId);
-            setIsRoundTwo(false);
             setRewardAccumulator(0);
             setSurvivorIds([localPlayerId, ...conflict.opponents.map(o => o.actorId)]);
             
@@ -184,12 +185,12 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
 
     // Handler: Trigger a Re-Roll (from Tied Winners, Draw, or Electricity Bid)
     const handleReRollRequest = () => {
+        setReRollCount(prev => prev + 1);
         if (!result) return;
 
         // Update survivors for next iteration
         const newSurvivors = result.survivorIds;
         setSurvivorIds(newSurvivors);
-        setIsRoundTwo(true);
 
         // Reset the player's choice ONLY if they are still in the conflict
         if (newSurvivors.includes(localPlayerId)) {
@@ -496,19 +497,19 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                         >
                             {/* Header */}
                             <div className="bg-[#1a1a20] p-6 border-b border-white/5 text-center">
-                                <h2 className={`font-rajdhani font-bold text-4xl tracking-widest uppercase ${result?.isDraw ? 'text-blue-400' : result?.winnerId === localPlayerId ? 'text-[#d4af37]' : 'text-red-500'}`}>
-                                    {result?.isDraw
-                                        ? (result.evictAll ? 'DISMISSED' : result.shareRewards ? 'TRUCE' : 'DRAW')
+                                <h2 className={`font-rajdhani font-bold text-4xl tracking-widest uppercase ${(result?.isDraw || result?.restart) ? 'text-blue-400' : result?.winnerId === localPlayerId ? 'text-[#d4af37]' : 'text-red-500'}`}>
+                                    {(result?.isDraw || result?.restart)
+                                        ? 'DRAW'
                                         : result?.winnerId === localPlayerId
-                                            ? (conflict.opponents.length === 0 ? 'SECURED' : 'VICTORY')
-                                            : 'DEFEAT'}
+                                            ? (conflict.opponents.length === 0 ? 'SECURED' : 'WIN')
+                                            : 'LOSE'}
                                 </h2>
                                 <p className="text-white/60 text-sm mt-2 italic font-mono">
                                     {result?.isDraw
                                         ? (result.evictAll
                                             ? "Refusing to compromise, all Artists leave the location."
                                             : result.shareRewards
-                                                ? "Finding common ground, all actors remain at the location."
+                                                ? "Mutual advancement: individual research leads to success."
                                                 : "The negotiation stalled. A new argument is required.")
                                         : result?.winnerId === localPlayerId
                                             ? (conflict.opponents.length === 0 ? "Mining operations secured without opposition." : "Your arguments prevailed over the opposition.")
@@ -523,7 +524,7 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                                 {/* RE-ROLL STATE: Caused by Draw (Politician) OR Energy Bid (Loss) */}
                                 {step === 'outcome_rsp' && result?.restart && (
                                     <div className="flex flex-col items-center gap-4 w-full">
-                                        <p className="text-white text-lg uppercase tracking-widest mb-2">
+                                        <p className="text-white text-lg uppercase tracking-widest mb-2 text-center">
                                             {result.isDraw ? "Resolve the Conflict. Confrontation restarted:" : "Energy Bid active: Confrontation restarted!"}
                                         </p>
                                         <div className="flex gap-6 mt-4">
@@ -537,74 +538,123 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                                     </div>
                                 )}
 
-                                {/* WIN/LOSE/SPECIAL-DRAW: Next/Close */}
+                                {/* WIN/DRAW: Reward Display (Local Player) */}
                                 {step === 'outcome_rsp' && !result?.restart && (
-                                    <div className="text-center">
-                                        {result?.winnerId === localPlayerId && (
-                                            <div className="flex flex-col items-center">
+                                    <div className="w-full">
+                                        {(result?.winnerId === localPlayerId || (result?.isDraw && result?.shareRewards && survivorIds.includes(localPlayerId))) && (
+                                            <div className="flex flex-col items-center mb-6">
                                                 <div className="w-24 h-24 mx-auto mb-4 relative flex items-center justify-center bg-white/5 rounded-full border border-white/10">
                                                     <div className="relative w-16 h-16">
                                                         <Image
                                                             src={(() => {
                                                                 const actorType = conflict.playerActor?.actorType?.toLowerCase();
-                                                                
-                                                                // Prioritize Actor Production Type (Rule 5 & 6)
                                                                 if (actorType === 'politician') return RESOURCE_ICONS['power'];
                                                                 if (actorType === 'scientist') return RESOURCE_ICONS['knowledge'];
                                                                 if (actorType === 'artist') return RESOURCE_ICONS['art'];
-                                                                
-                                                                // Fallback to Location/Conflict resource (for Robots and Events)
                                                                 if (conflict.resourceType) return RESOURCE_ICONS[conflict.resourceType] || RESOURCE_ICONS['fame'];
                                                                 return RESOURCE_ICONS['fame'];
                                                             })()}
-                                                            fill className="object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]" alt="Resource Won"
+                                                            fill className="object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]" alt="Outcome"
                                                         />
                                                     </div>
                                                     <div className="absolute -bottom-2 right-0 bg-[#d4af37] text-black font-black text-xl px-2 py-0.5 rounded-md border-2 border-black shadow-lg shadow-[#d4af37]/50">
                                                         +{(() => {
+                                                            if (result?.isDraw && result?.shareRewards) return 1;
                                                             const isRobot = conflict.playerActor?.actorType?.toLowerCase() === 'robot';
                                                             const baseReward = isRobot ? 3 : 1;
-                                                            // Include initial round product bet AND any accumulated from previous rounds
-                                                            const currentProductSuccess = result.successfulBids?.some(b => b.bid === 'product' && b.actorId === localPlayerId) ? 1 : 0;
+                                                            const currentProductSuccess = result?.successfulBids?.some(b => b.bid === 'product' && b.actorId === localPlayerId) ? 1 : 0;
                                                             return baseReward + rewardAccumulator + (isRoundTwo ? 0 : currentProductSuccess);
-                                                            // Note: if isRoundTwo is true, the currentProductSuccess is already in the accumulator from handleReveal
                                                         })()}
                                                     </div>
                                                 </div>
-                                                <p className="text-xl font-bold uppercase text-white mb-6">Resource Secured</p>
+                                                <p className="text-xl font-bold uppercase text-white">
+                                                    {conflict.playerActor?.actorType?.toLowerCase() === 'robot' ? 'Resource Produced' : 'Value Secured'}
+                                                </p>
                                             </div>
                                         )}
-                                        {/* Shared Rewards Logic (Scientist/Robot Draw) */}
-                                        {result?.isDraw && result?.shareRewards && (
-                                            <div className="flex flex-col items-center">
-                                                <div className="w-24 h-24 mx-auto mb-4 relative flex items-center justify-center bg-white/5 rounded-full border border-white/10">
-                                                    <div className="relative w-16 h-16">
-                                                        <Image
-                                                            src={(() => {
-                                                                const actorType = conflict.playerActor?.actorType?.toLowerCase();
-                                                                
-                                                                // Prioritize Actor Production Type
-                                                                if (actorType === 'politician') return RESOURCE_ICONS['power'];
-                                                                if (actorType === 'scientist') return RESOURCE_ICONS['knowledge'];
-                                                                if (actorType === 'artist') return RESOURCE_ICONS['art'];
-                                                                
-                                                                // Fallback
-                                                                return RESOURCE_ICONS[conflict.resourceType] || '/resources/resource_product.png';
-                                                            })()}
-                                                            fill className="object-contain drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]" alt="Resource Won"
-                                                        />
+
+                                        {/* PER-ACTOR SUMMARY LIST */}
+                                        <div className="w-full p-4 bg-white/5 rounded-xl border border-white/10 space-y-3">
+                                            {[
+                                                {
+                                                    id: localPlayerId,
+                                                    name: player.name || 'Player',
+                                                    actorType: conflict.playerActor?.actorType || 'actor',
+                                                    bid: conflict.playerActor?.bid
+                                                },
+                                                ...conflict.opponents
+                                            ].map(participant => {
+                                                const id = participant.actorId || participant.id;
+                                                const isWinner = result?.winnerId === id;
+                                                const isSharer = result?.isDraw && result?.shareRewards && result?.survivorIds.includes(id);
+                                                const isTie = result?.tieIds?.includes(id);
+                                                const isLoser = result?.loserIds.includes(id);
+                                                const isSurvivor = result?.survivorIds.includes(id);
+
+                                                let status = "DRAW";
+                                                let rewardText = "nothing";
+                                                let statusColor = "text-blue-400";
+
+                                                if (isWinner) {
+                                                    status = "WIN";
+                                                    statusColor = "text-[#d4af37]";
+                                                    const isRobot = participant.actorType?.toLowerCase() === 'robot';
+                                                    const base = isRobot ? 3 : 1;
+                                                    // Product Bids only apply on Round 1 and only if they succeeded
+                                                    const bonus = (!isRoundTwo && result?.successfulBids?.some(b => b.actorId === id && b.bid === 'product')) ? 1 : 0;
+                                                    const total = base + (id === localPlayerId ? rewardAccumulator : 0) + bonus;
+                                                    
+                                                    const actorType = participant.actorType?.toLowerCase();
+                                                    let resName = conflict.resourceType || '';
+                                                    if (actorType === 'politician') resName = 'power';
+                                                    else if (actorType === 'scientist') resName = 'knowledge';
+                                                    else if (actorType === 'artist') resName = 'art';
+                                                    
+                                                    const label = isRobot ? (total === 1 ? 'Resource' : 'Resources') : (total === 1 ? 'Value' : 'Values');
+                                                    const capitalizedResName = resName.charAt(0).toUpperCase() + resName.slice(1);
+                                                    rewardText = `${total} ${label}${capitalizedResName ? ` (${capitalizedResName})` : ''}`;
+                                                } else if (isSharer || isTie) {
+                                                    status = "DRAW";
+                                                    statusColor = "text-blue-400";
+                                                    
+                                                    if (isSharer) {
+                                                        const isRobot = participant.actorType?.toLowerCase() === 'robot';
+                                                        const actorType = participant.actorType?.toLowerCase();
+                                                        let resName = conflict.resourceType || '';
+                                                        if (actorType === 'politician') resName = 'power';
+                                                        else if (actorType === 'scientist') resName = 'knowledge';
+                                                        else if (actorType === 'artist') resName = 'art';
+                                                        
+                                                        const label = isRobot ? 'Resource' : 'Value';
+                                                        const capitalizedResName = resName.charAt(0).toUpperCase() + resName.slice(1);
+                                                        rewardText = `1 ${label}${capitalizedResName ? ` (${capitalizedResName})` : ''}`;
+                                                    }
+                                                } else if (isLoser) {
+                                                    status = "LOSE";
+                                                    statusColor = "text-red-500";
+                                                } else if (isSurvivor && result?.restart) {
+                                                    status = "DRAW";
+                                                    statusColor = "text-blue-400";
+                                                }
+
+                                                return (
+                                                    <div key={id} className="flex items-center justify-between text-sm py-1 border-b border-white/5 last:border-0 hover:bg-white/5 px-2 rounded-lg transition-colors">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-white font-bold">{participant.name}'s {participant.actorType.charAt(0).toUpperCase() + participant.actorType.slice(1)}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`font-black uppercase italic ${statusColor}`}>{status}</span>
+                                                            <span className="text-white/40">→</span>
+                                                            <span className="text-white font-medium">{participant.actorType?.toLowerCase() === 'robot' ? 'produces' : 'creates'} {rewardText}</span>
+                                                        </div>
                                                     </div>
-                                                    <div className="absolute -bottom-2 right-0 bg-[#d4af37] text-black font-black text-xl px-2 py-0.5 rounded-md border-2 border-black shadow-lg shadow-[#d4af37]/50">
-                                                        +1
-                                                    </div>
-                                                </div>
-                                                <p className="text-xl font-bold uppercase text-white mb-6">Shared Resource</p>
-                                            </div>
-                                        )}
-                                        {/* If not a winner and not sharing, display nothing but the button */}
+                                                );
+                                            })}
+                                        </div>
+
                                         <button
                                             onClick={handleNext}
-                                            className="px-10 py-3 bg-[#d4af37] text-black font-bold uppercase tracking-widest rounded hover:bg-[#ffe066] mt-4"
+                                            className="w-full px-10 py-3 bg-[#d4af37] text-black font-bold uppercase tracking-widest rounded hover:bg-[#ffe066] mt-4"
                                         >
                                             {hasNextConflict ? 'Next Step' : 'Next Phase'}
                                         </button>
@@ -627,7 +677,7 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                                         </div>
                                         <button
                                             onClick={handleNext}
-                                            className="px-10 py-3 border border-white/30 text-white font-bold uppercase tracking-widest rounded hover:bg-white/10"
+                                            className="w-full px-10 py-3 border border-white/30 text-white font-bold uppercase tracking-widest rounded hover:bg-white/10"
                                         >
                                             Close
                                         </button>
@@ -643,4 +693,3 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
         </div>
     );
 }
-
