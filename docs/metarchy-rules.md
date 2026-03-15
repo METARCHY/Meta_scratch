@@ -7,18 +7,11 @@ The ultimate objective is to accumulate the highest number of **Victory Points**
 A **Victory Point** is earned by collecting a full set of the three Value Tokens:
 `1 Victory Point = 1 Power + 1 Art + 1 Knowledge`
 
-If players have an equal number of Victory Points at the end of the final Turn, an extra tie-breaker Turn is played between those tied players.
+If players have an equal number of Victory Points at the end of the final Turn, an extra tie-breaker Turn is played between those tied players. Extra turns are added sequentially until only one player holds the highest number of Victory Points.
 
 ## Gaming Terminology
 - **Conflict** - If two or more Actors of the same type meet in one Location, they will have a Conflict. If Actors have a Conflict, players need to start the process of Conflict Resolution.
 - **Conflict Resolution** - When two or more Actors of the same type meet in one Location, or when game rules conflict, players start Conflict Resolution: each player chooses Rock, Paper, or Scissors. Choices are hidden until all players have committed, then revealed simultaneously. The Outcome for each Actor/Player can be Win, Lose, or Draw. 
-  - **In 2-Player Conflicts**: Outcome is determined by standard RPS rules.
-  - **In 3+ Player Conflicts**: 
-    - **Win**: An Actor wins if their argument beats at least one other argument and is not beaten by any.
-    - **Lose**: An Actor loses if their argument is beaten by at least one other argument. Losers immediately exit the conflict and return to their player-owner with nothing.
-    - **Draw**: If all players reveal the same argument, or if all three RPS types (Rock, Paper, Scissors) are present, it is a Draw.
-    - **Tied Winners**: If multiple players remain (e.g., two Paper vs one Rock), the losers exit, and the remaining tied players repeat Conflict Resolution until a single winner or a specific Actor-type Draw condition is met.
-  - Dummy is not used for Conflict Resolution. Bets are not used for Conflict Resolution.
 - **Outcome** - result of the Conflict Resolution. It can be Win, Lose or Draw.
 - **Location** - part of the game field. Locations is doing nothing by itself. Players can send Actors to the Locations.
 - **Actor** - main charecters of each player. Players send Actors to the Locations. Actors produce Values or Resources in the Locations.
@@ -61,7 +54,7 @@ Actors are sent to Locations to create values.
   - For each Scientist, the Conflict Outcome can be Win, Lose or Draw.
   - If Outcome is Win - Scientist returns to Player-owner with Value Knowledge.
   - If Outcome is Lose - Scientist returns to Player-owner without anything. 
-  - If Outcome is Draw, players don't need to Resolve the Conflict. All Scientists return to Player-owners with Value Knowledge. ("Draw between Scientists" is the same as "All Scientists Win")
+  - If the Conflict Outcome for a Scientist is Draw, players don't need to Resolve the Conflict. All Scientists with a Draw outcome return to Player-owners with Value Knowledge. ("Draw between Scientists" is the same as "All Scientists Win"). **Note**: If a third Actor wins the conflict (e.g., Paper vs. Rock, Rock), the Scientists with Rock get a "Lose" outcome and receive nothing.
 - 🧑🎨 **Artist** (Players can only send Artist to the Theater and Square Locations.)
   - An Artist in the Theater or Square Location creates the Value - Art.
   - If two or more Artists are in the Theater or Square Location, a Conflict occurs between the Artists.
@@ -77,7 +70,7 @@ Actors are sent to Locations to create values.
   - For each Robot, the Conflict Outcome can be Win, Lose or Draw.
   - If Outcome is Win - Robot returns to Player-owner with 3 Resources of Product/Electricity/Recycling (depending on the Location).
   - If Outcome is Lose - Robot returns to Player-owner without anything. 
-  - If Outcome is Draw - Robot returns to Player-owner with 1 Resource of Product/Electricity/Recycling (depending on the Location). Note: If a Robot with a "Draw" Bet results in a Draw, it wins and returns with 3 Resources; others in the draw without the bet return with nothing.
+  - If the Conflict Outcome for a Robot is Draw, it returns to the Player-owner with 1 Resource of the type that depends on the Location. **Note**: This only applies if the Robot has a Draw outcome; if another Actor wins the conflict, the losing Robot receives nothing. If a Robot with a "Draw" Bet results in a Draw, it wins and returns with 3 Resources; others in the draw without the bet return with only 1.
 
 ### 4. Arguments (4 Types)
 When Player send an Actor to Location, Player must give an Argument to Actor.
@@ -85,6 +78,24 @@ When Player send an Actor to Location, Player must give an Argument to Actor.
 - ✂️ **Scissors** *(Loses to Rock. Wins against Paper and Dummy. Draws against Scissors).*
 - 📄 **Paper** *(Loses to Scissors. Wins against Rock and Dummy. Draws against Paper).*
 - 🪆 **Dummy** *(Loses to Rock, Paper, and Scissors. Draws against another Dummy).*
+
+#### **Conflict Resolution with Arguments**
+- **In 2-Player Conflicts**: Outcome is determined by standard RPS rules.
+
+**Outcomes for Conflicts with 3 players (Actors without Bets):**
+- If all Actors have the same type of Arguments, then Outcome for every Actor is Draw -> Game starts Conflict Resolution with all three Actors.
+- If all Actors have different types of Arguments (Rock, Scissors, Paper, and not including Dummy), then Outcome for every Actor is Draw -> Game starts Conflict Resolution with all three Actors.
+- If all Actors have different types of Arguments (Rock, Scissors, Paper, and/or Dummy), then Actor with Dummy is a Clear Loser, as Dummy is a weak Argument to all other Arguments. Game needs to compare non-Dummy arguments, and this is the same as a conflict between 2 Actors, not 3 Actors.
+- If 2 of Actors have weak Arguments, and 1 Actor has strong Argument, then Outcome for a player with the strong Argument is Win -> No Conflict Resolution is needed.
+- If 2 of Actors have strong Arguments, and 1 Actor has weak Argument, then Outcome for a player with the weak Argument is Lose, and Outcomes for players with strong Arguments are Win -> Game needs to start the Conflict Resolution only for Actors with strong Arguments. Actor with a weak Argument returns to a player with nothing.
+
+**Examples:**
+- P1 with Rock, P2 with Scissors, P3 with Paper -> Outcome for every Actor is Draw -> Conflict Resolution is needed. All three Actors are involved in the new Conflict Resolution.
+- P1 with Rock, P2 with Rock, P3 with Rock -> Outcome for every Actor is Draw -> Conflict Resolution is needed. All three Actors are involved in the new Conflict Resolution.
+- P1 and P2 with Paper, P3 with Scissors (in the conflict between Paper and Scissors: Paper is a weak Argument, and Scissors is a strong Argument) -> P3 is a winner, no Conflict Resolution is needed.
+- P1 with Scissors, P2 with Dummy, P3 with Rock -> Dummy is a weak Argument as to Scissors, as to Rock. Actor with Dummy is a Clear Loser and leave the Conflict. Game checks the conflict only between P1 and P3. This is a common conflict between two Actors. Scissors is a weak Argument to Rock. P3 is a winner, no Conflict Resolution is needed.
+- P1 and P2 with Rock, and P3 with Scissors (in the conflict between Rock and Scissors: Scissors is a weak Argument, and Rock is a strong Argument) -> P3 is a clear loser, P1 and P2 are winners to P3. Game needs to understand who is the winner, so, Conflict Resolution is needed. Only P1 and P2 will participate in the new Conflict Resolution.
+- P1 with Dummy, P2 with Dummy, P3 with Dummy -> Outcome for every Actor is Draw -> Conflict Resolution is needed. All three Actors are involved in the new Conflict Resolution.
 
 ### 5. Values
 Required to form Victory Points. 1 Power + 1 Art + 1 Knowledge = 1 Victory Point
@@ -96,7 +107,42 @@ Required to form Victory Points. 1 Power + 1 Art + 1 Knowledge = 1 Victory Point
 Used to add bets on Conflict Outcome.
 - ⚙️ **Product** (Used to bet on "Win". If the Conflict Outcome for Actor is Win, this Actor will return to Player-owner with one more additional Value or Resource, depending on the Actor.)
 - 🔋 **Electricity** (Used to bet on "Lose". If the Conflict Outcome for Actor is Lose, then Resolve the Conflict one more time.)
-- ♻️ **Recycling** (Used to bet on "Draw". If the Conflict Outcome for Actor is Draw, then count Outcome as a Win for this Actor. For Robots, this results in 3 Resources instead of 1.)
+- ♻️ **Recycling** (Used to bet on "Draw". If the Conflict Outcome for Actor is Draw, then the Outcome is counted as a **Win** for this Actor instead. This ensures the Actor receives the full Win reward while simultaneously denying the "Draw" rewards to any opponents who resulted in a Draw without this bet).
+
+#### **Applying of Bets Rules**
+In the process of the Conflict, after the game sees the Conflict Outcome, the game needs to check Bets: 
+- If there is no Bet, then Bets Rules are not applied.
+- If a Bet is added to an Actor, compare the Outcome with the Bet.
+- If the Bet does not match the Outcome, the Bet is failed, and Bets Rules are not applied.
+- If the Bet matches the Outcome, the Bet is successful, and Bets Rules are applied.
+
+**One-Time Bet Rule**: Bets are only checked and processed during the very first round of a confrontation. Regardless of whether the bet was successful or failed, the bet resource is consumed and discarded after this first check. Any subsequent Conflict Resolutions in the same location (due to Electricity bets or tie-breakers) proceed without bets.
+
+**Examples for 2 players:**
+- P1-Artist with Rock and Bet on Win vs. P2-Artist with Paper and Bet on Lose. Outcome: P1 Win, P2 Lose. P1-Bet is successful. P2-Bet is successful. Apply Bets Rules. P1 gets 1 additional Value Art. P2 gets Conflict Resolution -> Game needs to start a new Conflict Resolution. If P1 is a Winner, and P2 is a Loser, then P1 gets 2 Values Art, and P2 gets nothing. If P1 is a Loser and P2 is a Winner, then P1 returns to a player with 1 Art, and P2 returns to a player with 1 Art. If there is a Draw between P1 and P2, then P1 returns to a player with 1 Art, and P2 returns to a player with nothing.
+
+- P1-Scientist with Rock and Bet on Win vs. P2-Scientist with Paper and Bet on Lose. Outcome: P1 Win, P2 Lose. P1-Bet is successful. P2-Bet is successful. Apply Bets Rules. P1 gets 1 additional Value Knowledge. P2 gets Conflict Resolution -> Game needs to start a new Conflict Resolution. If P1 is a Winner and P2 is a Loser, then P1 gets 2 Values Knowledge, and P2 gets nothing. If P1 is a Loser and P2 is a Winner, then P1 returns to a player with 1 Knowledge, and P2 returns to a player with 1 Knowledge. If there is a Draw between P1 and P2, then P1 returns to a player with 2 Values Knowledge, and P2 returns to a player with 1 Value Knowledge.
+
+- P1-Politician with Rock and Bet on Win vs. P2-Politician with Paper and Bet on Lose. Outcome: P1 Win, P2 Lose. P1-Bet is successful. P2-Bet is successful. Apply Bets Rules. P1 gets 1 additional Value Power. P2 gets Conflict Resolution -> Game needs to start a new Conflict Resolution. If P1 is a Winner and P2 is a Loser, then P1 gets 2 Values Power, and P2 gets nothing. If P1 is a Loser and P2 is a Winner, then P1 returns to a player with 1 Power, and P2 returns to a player with 1 Power. If there is a Draw between P1 and P2, then start a new Conflict Resolution, until one of Actors is a Winner.
+
+- P1-Robot with Dummy and Bet on Draw vs. P2-Robot with Dummy and Bet on Draw. Outcome: P1 Draw, P2 Draw. P1-Bet is successful. P2-Bet is successful. Apply Bets Rules. P1 is a Winner. P2 is a Winner. Game needs to understand who is the winner, so Conflict Resolution is needed, but already without Bets.
+
+- P1-Robot with Rock and without Bet vs. P2-Robot with Dummy and Bet on Lose. Outcome: P1 Win, P2 Lose. P1 has no Bet. P2-Bet is successful. Apply Bets Rules. Start a new Conflict Resolution, but already without Bets.
+
+**Examples for 3 players:**
+- P1 with Rock and no Bet, P2 with Scissors and no Bet, P3 with Dummy and Bet on Lose. 
+Outcome for P1: Win against P2, Win against P3.
+Outcome for P2: Lose against P1, Win against P3.
+Outcome for P3: Lose against P1, Lose against P2. Bet is successful. Apply Bets Rules -> Start a new Conflict Resolution.
+P1 is Winner against P2, then P2 returns to player with nothing. P1 will resolve the Conflict with P3, but already without bets.
+
+- P1 with Rock and no Bet, P2 with Dummy and Bet on Draw, P3 with Dummy and Bet on Draw. 
+Outcome for P1: Win against P2, Win against P3.
+Outcome for P2: Lose against P1, Bet is failed against P1. Draw against P3, Bet is successful against P3.
+Outcome for P3: Lose against P1, Bet is failed against P1. Draw against P2, Bet is successful against P2. -> No Conflict Resolution is needed. Even if P2 and P3 have applied Bets Rules, and they are winners against each other, both of them are losers against P1. P1 returns to a player with reward. P2 and P3 return to players with nothing.
+
+- **Electricity Bet in 3+ Players**: If one player has a successful Electricity bet (Lose) but other losers in the same conflict do not, the losers without the bet are eliminated and return home with nothing. The player with the successful Electricity bet then starts a new Conflict Resolution only with the remaining survivors (Winners/Tied Winners).
+    - **Example**: P1 (Paper, no bet), P2 (Rock, Bet on Lose), P3 (Rock, no bet). Outcome: P1 Wins, P2 and P3 Lose. P2's bet is successful. P3 is eliminated and returns home. A new Conflict Resolution begins between P1 and P2 only, without bets.
 
 ### 7. Action Cards
 Action cards are powerful, single-use items that can dramatically alter the game state. They are purchased during Market Phase using a combination of Resources.
@@ -107,7 +153,9 @@ Action cards are powerful, single-use items that can dramatically alter the game
 - **Sabotage** (1 card. Location Factory doesn't work this turn. No conflicts will happen there. Actors in this location will not produce any Values.)
 - **Cable Stolen** (1 card. Location Power Plant doesn't work this turn. No Conflicts will happen there. Actors in this location will not produce any Values.)
 - **Environmental Protests** (1 card. Location Dump doesn't work this turn. No Conflicts will happen there. Actors in this location will not produce any Values.)
-- **Relocation** (6 cards. Choose one Actor and move it to any valid location. Valid locations are determined by the Actor type: Politicians (Square/University), Scientists (Theater/University), Artists (Theater/Square), Robots (Factory/Power Plant/Dump). You can't relocate Humans to Robot Locations or Robots to Human Locations. You can play Relocation card after any player played a Block Location card.)
+- **Relocation** (6 cards. Choose one Actor and move it to any valid location. Valid locations are determined by the Actor type: Politicians (Square/University), Scientists (Theater/University), Artists (Theater/Square), Robots (Factory/Power Plant/Dump). You can't relocate Humans to Robot Locations or Robots to Human Locations. You can play Relocation card after any player played a Block Location card. 
+    - **Timing of Conflicts**: Conflicts between **Actors** (revealing arguments) happen *only* during the Conflict Phase (Phase 4). If Actors of the same type end up in the same Location during Relocation, their RPS conflict is triggered in Phase 4. 
+    - **Player Priority**: Conflicts between **Players** (e.g., two players trying to move the same Actor to different places) are resolved immediately in the Action Phase via a Player-to-Player Tie-Breaker.)
 - **Change Values** (3 cards. Exchange one of your Values with any other Value of another Player. Players can't exchange the Fame Value.)
 
 - An Action Card can be obtained randomly by playing an Event Card.
@@ -137,7 +185,7 @@ This document describes the exact flow of turns and phases currently implemented
 - 2 players (1 vs 1): ends after 5 turns
 - 3 players (1 vs 1 vs 1): ends after 5 turns
 - 4 players (2 vs. 2): ends after 6 turns
-- Test game with bots ends after 3 turns
+- Test game with bots ends after 5 turns
 
 - Turn 1: Skips Phase 1 (Event Phase) and starts directly at Phase 2 (Distribution Phase).
 - Turn 2+: Starts at Phase 1 (Event Phase).
@@ -204,17 +252,15 @@ After this, the game should show which Actors have moved to which Locations, and
 #### Step 3: Action: Change Values
 Only for players who selected to play Change Values Card in Step 0. All other players get notification: Waiting for Values Exchange
 
-- UI shows to a player a board with non-zero amount Values of a player and ask player to choose own Value for exchange
+- UI shows to a player a board with Values of a player and ask player to choose own Value for exchange
+- If a player have no Values, the game should show to a player a board with the information: "You have no Values for exchange. Change Values cards are returned to your hand.". Then the game goes to the next Step.
 
-Player Action: The player need to click on available value (Power, Knowledg of Art), and after click on button: "Choose a player"
+Player Action: The player need to click on available value (Power, Knowledg of Art), and after click on button: "Choose a Value"
 - Player can't click on a Value if amount of Value is 0
 - Player can't click on Value Fame
 
-- UI shows to a player a board with avatars of opponent players, and ask to choose an opponent for exchange
-
-Player Action: The player need to click on avatar of a player-opponent
-
-- UI shows to a player a board with non-zero amount Values of a player-opponent and ask player to choose Value for exchange
+- UI shows to a player a board with avatars of opponent players, and their Values (Power, Knowledg of Art) and ask a player to choose opponent's Value for exchange
+- If opponents don't have Values to exchange, the game should show to a player a board with the information: "Opponents have no Values for exchange. Change Values card is returned to your hand.". Then the game goes to the next Step.
 
 Player Action: The player need to click on available value (Power, Knowledg of Art), and after click on button: "Change Values"
 - Player can't click on a Value if amount of Value is 0
@@ -314,7 +360,7 @@ Player Action: Player with the lowest amount of Victory Points can click on the 
 ### Phase 5: Market Phase
 Note: Skip this Phase if it's the phase of the last turn, until two or more players with the same biggest amount of Victory Points in the previous phase.
 
-In the Market Phase, players can buy random Action Cards from Action Cards Deck for resources. Price for one Action Card is: 1 Product + 1 Recycling + 1 Electricity
+In the Market Phase, players can buy random Action Cards from the Action Cards Deck for resources. The price for one Action Card is: 1 Product + 1 Recycling + 1 Electricity. **Market Phase remains fully active during any extra turns**, allowing tied players to purchase and strategically use new cards to break the tie.
 
 - UI shows a Market board with the information about the price of an Action Card to a player
 - There are 2 buttons on a board: "Buy" and "Skip"

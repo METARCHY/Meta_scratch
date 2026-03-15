@@ -42,6 +42,8 @@ export interface Game {
         phaseTicker: number;
         playerReady: Record<string, boolean>;
         stagedActors: Record<string, any[]>;
+        playerResources?: Record<string, any>;
+        playerInventories?: Record<string, any[]>;
         decisions?: Record<string, any>;
         eventDeck?: string[];
         actionDeck?: string[];

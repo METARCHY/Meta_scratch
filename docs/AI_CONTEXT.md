@@ -46,6 +46,10 @@ Read these files to understand the project. They are the canonical references:
 
 6. **Blockchain is chain-agnostic** — designed to deploy on any EVM chain. Current target: Avalanche.
 
+7. **Game-First Priority** — The game must be fully playable and balanced *without* blockchain connectivity first. Blockchain integration is a secondary layer for verification.
+
+8. **Blockchain as Source of Proof** — The architecture must treat the blockchain as a ledger for verifying state transitions (via commit-reveal), not as the primary real-time game state store.
+
 ---
 
 ## Code Conventions

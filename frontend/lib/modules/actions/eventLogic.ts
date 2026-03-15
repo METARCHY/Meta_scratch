@@ -19,6 +19,8 @@ interface EventResult {
     message: string;
     reward?: { type: string; amount: number };
     resourceCost?: { type: string; amount: number };
+    isTie?: boolean;
+    tieParticipants?: string[];
 }
 
 /**
@@ -31,25 +33,36 @@ export function resolveCompareEvent(
     opponentStats: { name: string; amount: number }[]
 ): EventResult {
     const myStat = (playerResources as any)[event.targetResource!] || 0;
-    let won = false;
-
+    const allStats = [{ name: playerName, amount: myStat }, ...opponentStats];
+    
+    let targetStat: number;
     if (event.winCondition === 'min') {
-        const minOpp = Math.min(...opponentStats.map(o => o.amount), Infinity);
-        won = myStat < minOpp;
+        targetStat = Math.min(...allStats.map(s => s.amount));
     } else {
-        const maxOpp = Math.max(...opponentStats.map(o => o.amount), -1);
-        won = myStat > maxOpp;
+        targetStat = Math.max(...allStats.map(s => s.amount));
     }
 
-    const statsStr = `${playerName}: ${myStat}, ${opponentStats.map(o => `${o.name}: ${o.amount}`).join(', ')}`;
-    const message = won
-        ? `${playerName} WON Fame! (Stats: ${statsStr})`
-        : `${playerName} lost. (Stats: ${statsStr})`;
+    const winners = allStats.filter(s => s.amount === targetStat);
+    const isTie = winners.length > 1;
+    const amIWinner = winners.some(w => w.name === playerName);
+    
+    const statsStr = allStats.map(o => `${o.name}: ${o.amount}`).join(', ');
+    
+    let message = '';
+    if (isTie) {
+        message = `TIE DETECTED (${targetStat}). Conflict Resolution needed between: ${winners.map(w => w.name).join(', ')}. (Stats: ${statsStr})`;
+    } else {
+        message = amIWinner
+            ? `${playerName} WON Fame! (Stats: ${statsStr})`
+            : `${playerName} lost. (Stats: ${statsStr})`;
+    }
 
     return {
-        won,
+        won: amIWinner,
         message,
-        reward: won && event.reward === 'fame' ? { type: 'fame', amount: 1 } : undefined,
+        reward: amIWinner && !isTie && event.reward === 'fame' ? { type: 'fame', amount: 1 } : undefined,
+        isTie, // Flag for UI to show "Resolve Conflict" button
+        tieParticipants: winners.map(w => w.name)
     };
 }
 
@@ -62,17 +75,29 @@ export function resolveDiscardEvent(
     discardAmount: number,
     opponentDiscards: { name: string; amount: number }[]
 ): EventResult {
-    const maxOppDiscard = Math.max(...opponentDiscards.map(o => o.amount), 0);
-    const won = discardAmount > maxOppDiscard;
+    const allDiscards = [{ name: playerName, amount: discardAmount }, ...opponentDiscards];
+    const maxDiscard = Math.max(...allDiscards.map(o => o.amount), 0);
+    
+    const winners = allDiscards.filter(o => o.amount === maxDiscard && maxDiscard > 0);
+    const isTie = winners.length > 1;
+    const amIWinner = winners.some(w => w.name === playerName);
 
-    const oppStr = opponentDiscards.map(o => `${o.name} discarded ${o.amount}`).join(', ');
-    const message = won
-        ? `${playerName} discarded ${discardAmount} (Opponents: ${oppStr}). ${playerName} WON an Action Card!`
-        : `${playerName} discarded ${discardAmount} (Opponents: ${oppStr}). ${playerName} lost.`;
+    const oppStr = allDiscards.map(o => `${o.name} discarded ${o.amount}`).join(', ');
+    
+    let message = '';
+    if (isTie) {
+        message = `TIE DETECTED (${maxDiscard}). Conflict Resolution needed between: ${winners.map(w => w.name).join(', ')}. Discards: ${oppStr}`;
+    } else {
+        message = amIWinner
+            ? `${playerName} discarded ${discardAmount} (Total: ${oppStr}). ${playerName} WON an Action Card!`
+            : `${playerName} discarded ${discardAmount} (Total: ${oppStr}). ${playerName} lost.`;
+    }
 
     return {
-        won,
+        won: amIWinner,
         message,
         resourceCost: { type: event.targetResource!, amount: discardAmount },
+        isTie,
+        tieParticipants: winners.map(w => w.name)
     };
 }

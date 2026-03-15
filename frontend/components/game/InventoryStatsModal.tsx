@@ -14,6 +14,7 @@ interface InventoryStatsModalProps {
     resources: any;
     victoryPoints: number;
     opponentsData: Record<string, any>;
+    actionDiscardPile?: any[];
 }
 
 export default function InventoryStatsModal({
@@ -24,7 +25,8 @@ export default function InventoryStatsModal({
     localPlayerId,
     resources,
     victoryPoints,
-    opponentsData
+    opponentsData,
+    actionDiscardPile = []
 }: InventoryStatsModalProps) {
     const [activeTab, setActiveTab] = useState<'inventory' | 'stats'>('inventory');
 
@@ -67,7 +69,8 @@ export default function InventoryStatsModal({
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-10 custom-scrollbar">
                     {activeTab === 'inventory' ? (
-                        <div className="grid grid-cols-2 gap-6 animate-in slide-in-from-bottom-4 duration-500">
+                        <>
+                            <div className="grid grid-cols-2 gap-6 animate-in slide-in-from-bottom-4 duration-500">
                             {actionHand.length > 0 ? (
                                 actionHand.map((card, idx) => (
                                     <div 
@@ -98,7 +101,45 @@ export default function InventoryStatsModal({
                                 </div>
                             )}
                         </div>
-                    ) : (
+
+                        {/* Action Discard Pile Section */}
+                        <div className="mt-16 animate-in slide-in-from-bottom-4 duration-700">
+                            <div className="flex items-center gap-4 mb-8">
+                                <div className="h-px flex-1 bg-white/10" />
+                                <h2 className="font-rajdhani font-black uppercase tracking-[0.4em] text-white/40 text-sm">Action Discard Pile</h2>
+                                <div className="h-px flex-1 bg-white/10" />
+                            </div>
+
+                            {actionDiscardPile && actionDiscardPile.length > 0 ? (
+                                <div className="grid grid-cols-2 gap-6 opacity-60 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500">
+                                    {actionDiscardPile.map((card: any, idx: number) => (
+                                        <div 
+                                            key={`discard-${card.id}-${idx}`}
+                                            className="relative group p-4 rounded-xl bg-white/[0.01] border border-white/5"
+                                        >
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-12 h-16 relative rounded overflow-hidden border border-white/5 bg-black/40">
+                                                    <Image src={card.icon || '/cards/action_placeholder.png'} fill className="object-cover" alt={card.title} />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <h3 className="text-white/60 font-bold font-rajdhani uppercase tracking-wider text-xs">{card.title}</h3>
+                                                    <p className="text-white/30 text-[10px] leading-tight mt-1 truncate">{card.desc}</p>
+                                                    <span className="mt-2 inline-block px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 text-[8px] uppercase font-black tracking-widest text-red-500/60">
+                                                        PLAYED
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center py-10 opacity-10">
+                                    <p className="font-rajdhani font-bold uppercase tracking-[0.3em] text-sm text-center">No cards discarded yet</p>
+                                </div>
+                            )}
+                        </div>
+                    </>
+                ) : (
                         <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-500">
                             <div className="grid grid-cols-[2fr_1.5fr_1.5fr_1fr_1fr] px-6 py-4 rounded-xl bg-white/5 border border-white/10 text-[11px] font-black uppercase tracking-[0.2em] text-white/40">
                                 <div>Citizen</div>

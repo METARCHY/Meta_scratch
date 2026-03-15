@@ -208,6 +208,20 @@ modules/{domain}/
 | GET | `/api/admin/citizens` | Admin: list citizens |
 | POST | `/api/citizen` | Register/update citizen |
 
+## Blockchain Agnostic Design
+
+The game is designed to be **blockchain-agnostic**, meaning the core loop and mechanics are independent of the specific underlying chain.
+
+### Blockchain as "Source of Proof"
+The blockchain is NOT used for real-time state storage. Instead, it serves as a **verification layer**:
+1. **State Assertions**: At key checkpoints (e.g., end of Distribution phase), the "Game Server" (or authoritative layer) commits hashes of the state to the blockchain.
+2. **Cheat Prevention**: By using the Commit-Reveal pattern on-chain, hidden information (like RPS arguments) can be proven genuine without being exposed prematurely.
+3. **Decoupled Logic**: If the blockchain integration is removed or changed, the game remains fully functional in "Local Mode" or "Centralized Mode".
+
+### Implementation Priority
+1. **Functional Game Loop**: Complete all phases, action cards, and multiplayer sync using API routes and JSON persistence.
+2. **Blockchain Layer**: Once the game is stable, implement `wagmi/viem` connectors to the pre-existing smart contracts to "anchor" game sessions to the chain.
+
 ## Smart Contracts
 
 ### MetarchyTokens (ERC-1155)

@@ -155,7 +155,7 @@ export default function MapContainer({
                             {/* Circular Hover Zone (Radius 138px -> 276px diameter) */}
                             {/* Centered in the 718x598 container */}
                             <div
-                                className={`absolute z-10 rounded-full transition-all pointer-events-auto ${isHintVisible ? 'cursor-pointer' : 'cursor-default'}`}
+                                className={`absolute z-10 rounded-full transition-all pointer-events-auto ${isHintVisible && !loc.nonPlayable ? 'cursor-pointer' : 'cursor-default'}`}
                                 style={{
                                     left: '221px', // (718-276)/2
                                     top: '161px',  // (598-276)/2
@@ -163,23 +163,25 @@ export default function MapContainer({
                                     height: '276px',
                                 }}
                                 onMouseEnter={() => {
+                                    if (loc.nonPlayable) return;
                                     if (isHintVisible) setHoveredLocId(loc.id);
                                     showTooltip(loc.name);
                                 }}
                                 onMouseLeave={() => {
+                                    if (loc.nonPlayable) return;
                                     setHoveredLocId(null);
                                     hideTooltip();
                                 }}
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    if (isHintVisible) {
+                                    if (isHintVisible && !loc.nonPlayable) {
                                         onHexClick(loc.id);
                                     }
                                 }}
                             />
 
                             {/* Hint Overlay (Controlled by Actor Interaction) */}
-                            {loc.hint && (
+                            {loc.hint && !loc.nonPlayable && (
                                 <Image
                                     src={loc.hint}
                                     fill
@@ -190,7 +192,7 @@ export default function MapContainer({
                             )}
 
                             {/* Active Hint Layer (Visible on hover/click if valid) */}
-                            {loc.activeHint && (
+                            {loc.activeHint && !loc.nonPlayable && (
                                 <Image
                                     src={loc.activeHint}
                                     fill

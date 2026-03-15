@@ -39,43 +39,54 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
     const [result, setResult] = useState<ConflictResult | null>(null);
     const [survivorIds, setSurvivorIds] = useState<string[]>([]);
     const [isRoundTwo, setIsRoundTwo] = useState(false);
+    const [rewardAccumulator, setRewardAccumulator] = useState(0);
 
     const localPlayerId = player.citizenId || player.address || 'p1';
 
     // 1. Initialize Opponent Choices (Random for bots, Synced for humans)
+    const [lastLocId, setLastLocId] = useState<string | null>(null);
+
     useEffect(() => {
         if (isResolved) {
             setStep('outcome_rsp');
             return;
         }
 
-        const initialSurvivors = [localPlayerId, ...conflict.opponents.map(o => o.actorId)];
-        setSurvivorIds(initialSurvivors);
+        // Fresh initialization for a new location
+        if (conflict.locId !== lastLocId) {
+            setLastLocId(conflict.locId);
+            setIsRoundTwo(false);
+            setRewardAccumulator(0);
+            setSurvivorIds([localPlayerId, ...conflict.opponents.map(o => o.actorId)]);
+            
+            const choices: { [id: string]: string } = {};
+            conflict.opponents.forEach(opp => {
+                choices[opp.actorId] = opp.type || 'rock';
+            });
+            setOpponentChoices(choices);
 
-        const choices: { [id: string]: string } = {};
-        conflict.opponents.forEach(opp => {
-            choices[opp.actorId] = opp.type || 'rock';
-        });
-        setOpponentChoices(choices);
-        
-        // PERSISTENCE FIX: If peaceful, jump straight to outcome
-        if (conflict.opponents.length === 0) {
-            const res = resolveConflictLogic(
-                localPlayerId,
-                conflict.playerActor.type || 'rock',
-                true,
-                { ...conflict, opponents: [] },
-                {},
-                { id: localPlayerId, name: player.name || 'Player' }
-            );
-            setResult(res);
-            setStep('outcome_rsp');
-        } else {
-            setStep('intro');
-            setResult(null);
+            // Special case: peaceful location
+            if (conflict.opponents.length === 0) {
+                const res = resolveConflictLogic(
+                    localPlayerId,
+                    conflict.playerActor.type || 'rock',
+                    true,
+                    { ...conflict, opponents: [] },
+                    {},
+                    { id: localPlayerId, name: player.name || 'Player' }
+                );
+                setResult(res);
+                setStep('outcome_rsp');
+            } else {
+                setStep('intro');
+                setResult(null);
+            }
+            return;
         }
-        setIsRoundTwo(false);
-    }, [conflict.locId, isResolved, conflict.opponents, localPlayerId]);
+
+        // If we're already mid-conflict at the SAME location, don't re-initialize
+        // Human choices will still sync via the second useEffect
+    }, [conflict.locId, isResolved, conflict.opponents, lastLocId, localPlayerId]);
 
     // 2. Real-time Sync for PvP Choices
     useEffect(() => {
@@ -105,6 +116,10 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
         // Filter conflict for current survivors
         const currentConflictInput = {
             ...conflict,
+            playerActor: {
+                ...conflict.playerActor,
+                isParticipant: survivorIds.includes(localPlayerId)
+            },
             opponents: conflict.opponents.filter(o => survivorIds.includes(o.actorId))
         };
 
@@ -154,6 +169,14 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
 
         setResult(res);
         setStep('reveal');
+
+        // PRODUCT BET ACCUMULATION: If anyone (including bots) won a Product bet this round, add to accumulator
+        if (res.successfulBids) {
+            const myProductBid = res.successfulBids.find(b => b.bid === 'product' && b.actorId === localPlayerId);
+            if (myProductBid) {
+                setRewardAccumulator(prev => prev + 1);
+            }
+        }
 
         // Auto-advance to Outcome Modal after animation
         setTimeout(() => setStep('outcome_rsp'), 2000);
@@ -229,7 +252,19 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
 
         // If no bid effect pending or already showed it -> Confirm & Close
         // Send the usedBid back to page.tsx so it knows whether to double the reward, independent of the initial actor bid state!
-        onResolve(result);
+        // We pass the final result but augmented with the accumulated rewards
+        const finalResult: ConflictResult = {
+            ...result,
+            // If the local player is the winner, or part of a trucing group, we add the accumulator to the final count
+            // Note: page.tsx currently looks at result.winnerId and b.bid === 'product'.
+            // To be safe, we can add a custom 'bonusReward' field or modify the successfulBids.
+            successfulBids: [
+                ...(result.successfulBids || []),
+                // We inject virtual 'product' successes if we had them in previous rounds
+                ...Array(rewardAccumulator).fill({ actorId: localPlayerId, bid: 'product' })
+            ]
+        };
+        onResolve(finalResult);
     };
 
     const bgImage = LOCATION_IMAGES[conflict.locId] || LOCATION_IMAGES['square'];
@@ -261,69 +296,73 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
             {/* SCENE: Actors & Tokens */}
             <div className="relative z-10 w-full max-w-[1400px] h-full flex items-end justify-between px-10 pb-0">
 
-                {/* Left: Player */}
-                <div className={`relative w-[350px] h-[550px] flex items-end justify-center transition-all duration-1000 ${isActorLoser(localPlayerId) ? 'grayscale opacity-60' : ''}`}>
-                    {/* Stack Above Head (Bottom to Top: Avatar -> RSP -> Bid) */}
-                    <div className="absolute bottom-[100%] mb-4 flex flex-col-reverse items-center gap-3 z-30">
-                        {/* 1. Player Avatar */}
-                        <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-[#d4af37] shadow-[0_0_15px_rgba(212,175,55,0.4)] relative bg-[#1a1a1c]">
-                            <Image
-                                src={conflict.playerActor.playerAvatar || player?.avatar || '/avatars/golden_avatar.png'}
-                                fill
-                                className="object-cover"
-                                alt="Player"
-                            />
-                        </div>
-                        {/* 2. RSP Token */}
-                        <motion.div
-                            initial={{ scale: 0, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            className="w-24 h-24 relative"
-                        >
-                            {playerChoice ? (
-                                <Image src={RSP_ICONS[playerChoice] || RSP_ICONS['rock']} fill className="object-contain drop-shadow-[0_0_20px_rgba(255,255,0,0.5)]" alt="Player Choice" />
-                            ) : (
-                                <div className="w-full h-full rounded-full border-2 border-white/20 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-                                    <span className="text-4xl font-bold text-white/50">?</span>
+                {/* Left: Player - Only show if survivor */}
+                {survivorIds.includes(localPlayerId) ? (
+                    <div className={`relative w-[350px] h-[550px] flex items-end justify-center transition-all duration-1000 ${isActorLoser(localPlayerId) ? 'grayscale opacity-60' : ''}`}>
+                        {/* Stack Above Head (Bottom to Top: Avatar -> RSP -> Bid) */}
+                        <div className="absolute bottom-[100%] mb-4 flex flex-col-reverse items-center gap-3 z-30">
+                            {/* 1. Player Avatar */}
+                            <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-[#d4af37] shadow-[0_0_15px_rgba(212,175,55,0.4)] relative bg-[#1a1a1c]">
+                                <Image
+                                    src={conflict.playerActor.playerAvatar || player?.avatar || '/avatars/golden_avatar.png'}
+                                    fill
+                                    className="object-cover"
+                                    alt="Player"
+                                />
+                            </div>
+                            {/* 2. RSP Token */}
+                            <motion.div
+                                initial={{ scale: 0, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                className="w-24 h-24 relative"
+                            >
+                                {playerChoice ? (
+                                    <Image src={RSP_ICONS[playerChoice] || RSP_ICONS['rock']} fill className="object-contain drop-shadow-[0_0_20px_rgba(255,255,0,0.5)]" alt="Player Choice" />
+                                ) : (
+                                    <div className="w-full h-full rounded-full border-2 border-white/20 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                                        <span className="text-4xl font-bold text-white/50">?</span>
+                                    </div>
+                                )}
+                            </motion.div>
+                            {/* 3. Bid Token (Hide on re-roll - bets are burned) */}
+                            {conflict.playerActor.bid && !isRoundTwo && (
+                                <div className="w-12 h-12 relative animate-bounce">
+                                    <Image src={BID_ICONS[conflict.playerActor.bid]} fill className="object-contain drop-shadow-lg" alt="Bid" />
                                 </div>
                             )}
-                        </motion.div>
-                        {/* 3. Bid Token (Hide on re-roll - bets are burned) */}
-                        {conflict.playerActor.bid && !isRoundTwo && (
-                            <div className="w-12 h-12 relative animate-bounce">
-                                <Image src={BID_ICONS[conflict.playerActor.bid]} fill className="object-contain drop-shadow-lg" alt="Bid" />
-                            </div>
-                        )}
-                    </div>
+                        </div>
 
-                    {/* Actor Body */}
-                    <div className="relative w-full h-[120%]">
-                        {conflict.playerActor?.actorType === 'player' ? (
-                            <div className="absolute inset-0 flex items-center justify-center p-12">
-                                <div className="relative w-full h-full rounded-2xl overflow-hidden border-4 border-[#d4af37] shadow-[0_0_50px_rgba(212,175,55,0.3)]">
-                                    <Image
-                                        src={conflict.playerActor.avatar || player?.avatar || '/avatars/golden_avatar.png'}
-                                        fill
-                                        className="object-cover"
-                                        alt="Player Avatar"
-                                    />
+                        {/* Actor Body */}
+                        <div className="relative w-full h-[120%]">
+                            {conflict.playerActor?.actorType === 'player' ? (
+                                <div className="absolute inset-0 flex items-center justify-center p-12">
+                                    <div className="relative w-full h-full rounded-2xl overflow-hidden border-4 border-[#d4af37] shadow-[0_0_50px_rgba(212,175,55,0.3)]">
+                                        <Image
+                                            src={conflict.playerActor.avatar || player?.avatar || '/avatars/golden_avatar.png'}
+                                            fill
+                                            className="object-cover"
+                                            alt="Player Avatar"
+                                        />
+                                    </div>
                                 </div>
-                            </div>
-                        ) : (
-                            <Image
-                                src={ACTOR_IMAGES[conflict.playerActor?.actorType?.toLowerCase()] || ACTOR_IMAGES['politician']}
-                                fill
-                                className="object-contain object-bottom drop-shadow-[0_0_30px_rgba(0,0,0,0.8)]"
-                                alt="Player Actor"
-                            />
-                        )}
-                    </div>
+                            ) : (
+                                <Image
+                                    src={ACTOR_IMAGES[conflict.playerActor?.actorType?.toLowerCase()] || ACTOR_IMAGES['politician']}
+                                    fill
+                                    className="object-contain object-bottom drop-shadow-[0_0_30px_rgba(0,0,0,0.8)]"
+                                    alt="Player Actor"
+                                />
+                            )}
+                        </div>
 
-                    {/* Tag */}
-                    <div className="absolute bottom-8 bg-black/80 px-6 py-2 rounded-full border border-[#d4af37] text-[#d4af37] font-bold text-lg uppercase tracking-widest z-20">
-                        {survivorIds.includes(localPlayerId) ? 'YOU' : 'EXITED'}
+                        {/* Tag */}
+                        <div className="absolute bottom-8 bg-black/80 px-6 py-2 rounded-full border border-[#d4af37] text-[#d4af37] font-bold text-lg uppercase tracking-widest z-20">
+                            YOU
+                        </div>
                     </div>
-                </div>
+                ) : (
+                    <div className="w-[350px]" /> // Maintain spacing
+                )}
 
                 {/* Center: VS (Only Intro/Reveal) */}
                 {(step === 'intro' || step === 'reveal') && (
@@ -334,72 +373,74 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                     </div>
                 )}
 
-                {/* Right: Opponents */}
+                {/* Right: Opponents - Only show survivors */}
                 <div className="flex gap-10">
-                    {conflict.opponents.map((opp, idx) => (
-                        <div key={opp.actorId} className={`relative w-[350px] h-[550px] flex items-end justify-center transition-all duration-1000 ${isActorLoser(opp.actorId) ? 'grayscale opacity-60' : ''}`}>
+                    {conflict.opponents
+                        .filter(opp => survivorIds.includes(opp.actorId))
+                        .map((opp, idx) => (
+                            <div key={opp.actorId} className={`relative w-[350px] h-[550px] flex items-end justify-center transition-all duration-1000 ${isActorLoser(opp.actorId) ? 'grayscale opacity-60' : ''}`}>
 
-                            {/* Stack Above Head */}
-                            <div className="absolute bottom-[100%] mb-4 flex flex-col-reverse items-center gap-3 z-30">
-                                {/* 1. Opponent Player Avatar */}
-                                <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/40 relative bg-[#1a1a1c]">
-                                    {opp.playerAvatar ? (
-                                        <Image src={opp.playerAvatar} fill className="object-cover" alt={opp.name} />
-                                    ) : (
-                                        <div className="w-full h-full bg-gray-800" />
+                                {/* Stack Above Head */}
+                                <div className="absolute bottom-[100%] mb-4 flex flex-col-reverse items-center gap-3 z-30">
+                                    {/* 1. Opponent Player Avatar */}
+                                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/40 relative bg-[#1a1a1c]">
+                                        {opp.playerAvatar ? (
+                                            <Image src={opp.playerAvatar} fill className="object-cover" alt={opp.name} />
+                                        ) : (
+                                            <div className="w-full h-full bg-gray-800" />
+                                        )}
+                                    </div>
+                                    {/* 2. RSP Token */}
+                                    <motion.div
+                                        initial={{ scale: 0, opacity: 0 }}
+                                        animate={{ scale: step === 'intro' ? 0.9 : 1, opacity: 1 }}
+                                        className="w-24 h-24 relative"
+                                    >
+                                        {step === 'intro' ? (
+                                            <div className="w-full h-full bg-white/10 backdrop-blur-md rounded-full border border-white/20 animate-pulse flex items-center justify-center">
+                                                <span className="text-3xl font-bold text-white/50">?</span>
+                                            </div>
+                                        ) : (
+                                            <Image src={RSP_ICONS[opponentChoices[opp.actorId]] || RSP_ICONS['rock']} fill className="object-contain drop-shadow-2xl" alt="Opponent Choice" />
+                                        )}
+                                    </motion.div>
+                                    {/* 3. Bid Token */}
+                                    {opp.bid && !isRoundTwo && (
+                                        <div className="w-12 h-12 relative animate-bounce">
+                                            <Image src={BID_ICONS[opp.bid]} fill className="object-contain drop-shadow-lg" alt="Bid" />
+                                        </div>
                                     )}
                                 </div>
-                                {/* 2. RSP Token */}
-                                <motion.div
-                                    initial={{ scale: 0, opacity: 0 }}
-                                    animate={{ scale: step === 'intro' ? 0.9 : 1, opacity: 1 }}
-                                    className="w-24 h-24 relative"
-                                >
-                                    {step === 'intro' ? (
-                                        <div className="w-full h-full bg-white/10 backdrop-blur-md rounded-full border border-white/20 animate-pulse flex items-center justify-center">
-                                            <span className="text-3xl font-bold text-white/50">?</span>
+
+                                {/* Actor Body */}
+                                <div className="relative w-full h-[120%]">
+                                    {opp.actorType === 'player' ? (
+                                        <div className="absolute inset-0 flex items-center justify-center p-12">
+                                            <div className="relative w-full h-full rounded-2xl overflow-hidden border-4 border-white/40 shadow-2xl">
+                                                <Image
+                                                    src={opp.playerAvatar || '/avatars/viper.png'}
+                                                    fill
+                                                    className="object-cover"
+                                                    alt="Opponent Avatar"
+                                                />
+                                            </div>
                                         </div>
                                     ) : (
-                                        <Image src={RSP_ICONS[opponentChoices[opp.actorId]] || RSP_ICONS['rock']} fill className="object-contain drop-shadow-2xl" alt="Opponent Choice" />
+                                        <Image
+                                            src={ACTOR_IMAGES[opp.actorType?.toLowerCase()] || ACTOR_IMAGES['robot']}
+                                            fill
+                                            className={`object-contain object-bottom drop-shadow-[0_0_30px_rgba(0,0,0,0.8)] ${idx % 2 === 0 ? 'sepia-0' : 'sepia'}`}
+                                            alt="Opponent Actor"
+                                        />
                                     )}
-                                </motion.div>
-                                {/* 3. Bid Token */}
-                                {opp.bid && (
-                                    <div className="w-12 h-12 relative animate-bounce">
-                                        <Image src={BID_ICONS[opp.bid]} fill className="object-contain drop-shadow-lg" alt="Bid" />
-                                    </div>
-                                )}
-                            </div>
+                                </div>
 
-                            {/* Actor Body */}
-                            <div className="relative w-full h-[120%]">
-                                {opp.actorType === 'player' ? (
-                                    <div className="absolute inset-0 flex items-center justify-center p-12">
-                                        <div className="relative w-full h-full rounded-2xl overflow-hidden border-4 border-white/40 shadow-2xl">
-                                            <Image
-                                                src={opp.playerAvatar || '/avatars/viper.png'}
-                                                fill
-                                                className="object-cover"
-                                                alt="Opponent Avatar"
-                                            />
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <Image
-                                        src={ACTOR_IMAGES[opp.actorType?.toLowerCase()] || ACTOR_IMAGES['robot']}
-                                        fill
-                                        className={`object-contain object-bottom drop-shadow-[0_0_30px_rgba(0,0,0,0.8)] ${idx % 2 === 0 ? 'sepia-0' : 'sepia'}`}
-                                        alt="Opponent Actor"
-                                    />
-                                )}
+                                {/* Tag */}
+                                <div className="absolute bottom-8 bg-black/80 px-4 py-1 rounded-full border border-white/30 text-white font-bold tracking-wider z-20">
+                                    {opp.name}
+                                </div>
                             </div>
-
-                            {/* Tag */}
-                            <div className="absolute bottom-8 bg-black/80 px-4 py-1 rounded-full border border-white/30 text-white font-bold tracking-wider z-20">
-                                {survivorIds.includes(opp.actorId) ? opp.name : `${opp.name} (EXITED)`}
-                            </div>
-                        </div>
-                    ))}
+                        ))}
                 </div>
             </div>
 
@@ -523,7 +564,10 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                                                         +{(() => {
                                                             const isRobot = conflict.playerActor?.actorType?.toLowerCase() === 'robot';
                                                             const baseReward = isRobot ? 3 : 1;
-                                                            return conflict.playerActor?.bid === 'product' ? baseReward + 1 : baseReward;
+                                                            // Include initial round product bet AND any accumulated from previous rounds
+                                                            const currentProductSuccess = result.successfulBids?.some(b => b.bid === 'product' && b.actorId === localPlayerId) ? 1 : 0;
+                                                            return baseReward + rewardAccumulator + (isRoundTwo ? 0 : currentProductSuccess);
+                                                            // Note: if isRoundTwo is true, the currentProductSuccess is already in the accumulator from handleReveal
                                                         })()}
                                                     </div>
                                                 </div>

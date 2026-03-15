@@ -53,6 +53,7 @@ export interface LocationDefinition {
     activeHint: string | null;
     resource: string;
     type: LocationType;
+    nonPlayable?: boolean;
 }
 
 // ─── Bets ─────────────────────────────────────────────────────────
@@ -152,6 +153,8 @@ export interface OpponentData {
     id: string;
     resources: PlayerResources;
     cards: Record<string, number>;
+    inventory?: ActionCardInstance[];
+    discardPile?: ActionCardInstance[];
 }
 
 // ─── Game Phases ──────────────────────────────────────────────────
@@ -190,6 +193,13 @@ export interface Game {
         playerReady: Record<string, boolean>;
         stagedActors: Record<string, PlacedActor[]>;
         playerResources: Record<string, PlayerResources>;
+        playerInventories?: Record<string, ActionCardInstance[]>;
+        discardPile?: ActionCardInstance[];
+        disabledLocations?: string[];
+        eventDeck: string[];
+        actionDeck: string[];
+        eventDeckTurn?: number;
+        currentEventId?: string;
     };
 }
 

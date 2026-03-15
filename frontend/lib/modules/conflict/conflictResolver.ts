@@ -19,6 +19,7 @@ interface ConflictInput {
         actorId: string;
         actorType?: string;
         bid?: string;
+        isParticipant?: boolean;
     };
     locationName?: string;
 }
@@ -74,75 +75,119 @@ export function resolveConflictLogic(
     }
 
     // Build choices array
-    const participants = [
+    const allPotentialParticipants = [
         {
             id: localPlayerId,
             choice: playerChoice,
             bid: conflict.playerActor.bid,
             actorType: conflict.playerActor.actorType?.toLowerCase() || 'actor',
-            name: playerInfo.name || 'Player'
+            name: playerInfo.name || 'Player',
+            isParticipant: conflict.playerActor.isParticipant !== false
         },
         ...conflict.opponents.map(opp => ({
             id: opp.actorId,
             choice: opponentChoices[opp.actorId],
             bid: opp.bid,
             actorType: opp.actorType?.toLowerCase() || 'actor',
-            name: opp.name || 'Opponent'
+            name: opp.name || 'Opponent',
+            isParticipant: true // Opponents are already filtered by the caller (ConflictResolutionView)
         })),
     ];
 
-    const choicesValues = participants.filter(p => p.choice !== 'dummy').map(p => p.choice);
-    const hasRock = choicesValues.includes('rock');
-    const hasPaper = choicesValues.includes('paper');
-    const hasScissors = choicesValues.includes('scissors');
+    const participants = allPotentialParticipants.filter(p => p.isParticipant);
+
+    // Pairwise result tracker
+    const matchResults: Record<string, Record<string, 'win' | 'lose' | 'draw'>> = {};
+    participants.forEach(p1 => {
+        matchResults[p1.id] = {};
+        participants.forEach(p2 => {
+            if (p1.id === p2.id) {
+                matchResults[p1.id][p2.id] = 'draw';
+                return;
+            }
+
+            // Logic for a single match
+            const c1 = p1.choice;
+            const c2 = p2.choice;
+
+            if (c1 === c2) {
+                matchResults[p1.id][p2.id] = 'draw';
+            } else if (
+                (c1 === 'rock' && (c2 === 'scissors' || c2 === 'dummy')) ||
+                (c1 === 'paper' && (c2 === 'rock' || c2 === 'dummy')) ||
+                (c1 === 'scissors' && (c2 === 'paper' || c2 === 'dummy'))
+            ) {
+                matchResults[p1.id][p2.id] = 'win';
+            } else {
+                matchResults[p1.id][p2.id] = 'lose';
+            }
+        });
+    });
 
     let winnerIds: string[] = [];
     let loserIds: string[] = [];
-    let isDraw = false;
     let survivorIds: string[] = [];
+    let isDraw = false;
 
-    // --- Core RPS Distribution Logic for 3+ Players ---
-    // Note: Dummy always loses to Rock/Paper/Scissors, and draws only against another Dummy
-    const dummyIds = participants.filter(p => p.choice === 'dummy').map(p => p.id);
+    // Determine outcomes based on pairs
+    participants.forEach(p => {
+        const results = Object.entries(matchResults[p.id]).filter(([otherId]) => otherId !== p.id);
+        const hasWins = results.some(([_, res]) => res === 'win');
+        const hasLoses = results.some(([_, res]) => res === 'lose');
+        const allLoses = results.every(([_, res]) => res === 'lose');
+        const allDraws = results.every(([_, res]) => res === 'draw');
 
-    if (choicesValues.length === 0) {
-        // ALL players played Dummy - this is a true draw (Dummy vs Dummy)
-        isDraw = true;
-        survivorIds = participants.map(p => p.id); // Everyone stays for re-roll
-    } else if ((hasRock && hasPaper && hasScissors) || (!hasRock && !hasPaper && !hasScissors)) {
-        // Draw: Rock, Paper, and Scissors all present OR all same (e.g., all Rock)
-        isDraw = true;
-        survivorIds = participants.map(p => p.id);
-    } else if (hasRock && hasPaper && !hasScissors) {
-        winnerIds = participants.filter(p => p.choice === 'paper').map(p => p.id);
-        loserIds = participants.filter(p => p.choice === 'rock').map(p => p.id);
-        survivorIds = winnerIds;
-    } else if (hasPaper && hasScissors && !hasRock) {
-        winnerIds = participants.filter(p => p.choice === 'scissors').map(p => p.id);
-        loserIds = participants.filter(p => p.choice === 'paper').map(p => p.id);
-        survivorIds = winnerIds;
-    } else if (hasScissors && hasRock && !hasPaper) {
-        winnerIds = participants.filter(p => p.choice === 'rock').map(p => p.id);
-        loserIds = participants.filter(p => p.choice === 'scissors').map(p => p.id);
-        survivorIds = winnerIds;
-    } else {
-        // One type present (e.g. all Rock) - if Dummies exist, RPS players win. Otherwise true draw.
-        if (dummyIds.length > 0) {
-            winnerIds = participants.filter(p => choicesValues.includes(p.choice)).map(p => p.id);
-            loserIds = dummyIds;
-            survivorIds = winnerIds;
-            isDraw = false;
-        } else {
+        if (hasWins) {
+            // You beat at least one person!
+            if (!hasLoses) {
+                // Clear Winner (God Tier)
+                winnerIds.push(p.id);
+                survivorIds.push(p.id);
+            } else {
+                // Mixed results - survives ONLY if there are no Clear Winners
+                // We'll filter these out in a second pass if winnerIds.length > 0
+                survivorIds.push(p.id);
+            }
+        } else if (allDraws) {
+            // True Draw with everyone (No wins, no losses)
             isDraw = true;
-            survivorIds = participants.map(p => p.id);
+            survivorIds.push(p.id);
+        } else if (hasLoses) {
+            // You have NO wins, and you reached an outcome (even if some matches were Draws)
+            if (p.bid === 'electricity') {
+                survivorIds.push(p.id);
+            } else {
+                loserIds.push(p.id);
+            }
         }
+    });
+
+    // --- SECOND PASS: Clear Winner Hierarchy ---
+    // If someone wins against everyone they matched with, they trump "Mixed" survivors.
+    if (winnerIds.length > 0) {
+        survivorIds = survivorIds.filter(id => {
+            // Only Clear Winners or Electricity saves persist
+            const isClearWinner = winnerIds.includes(id);
+            const player = participants.find(p => p.id === id);
+            const isElectricitySave = player?.bid === 'electricity';
+            
+            if (isClearWinner || isElectricitySave) return true;
+            
+            // If we remove them, they become losers
+            if (!loserIds.includes(id)) loserIds.push(id);
+            return false;
+        });
     }
 
-    // CRITICAL: Dummy ALWAYS loses (unless ALL played Dummy, handled above)
-    // Actors playing RPS are always surviving winners over Dummies.
-    if (choicesValues.length > 0 && dummyIds.length > 0) {
-        loserIds = Array.from(new Set([...loserIds, ...dummyIds]));
-        survivorIds = survivorIds.filter(id => !dummyIds.includes(id));
+    // Handle Draws (Mixed or True)
+    if (survivorIds.length > 1) {
+        const survivorsDraw = survivorIds.every(s1 => 
+            survivorIds.every(s2 => matchResults[s1][s2] === 'draw')
+        );
+        if (survivorsDraw) isDraw = true;
+    } else if (survivorIds.length === 0 && participants.length > 0) {
+        // Everyone was eliminated (e.g. all clear losers - should have been saved by isDraw logic but being safe)
+        isDraw = true;
     }
 
     let finalWinnerId: string | null = null;
@@ -151,7 +196,6 @@ export function resolveConflictLogic(
     let finalShareRewards = false;
 
     // --- Bid Processing (Only on Round 1) ---
-    // Note: Caller must ensure applyBids is only true for the first iteration.
     if (applyBids) {
         // 1. Recycling (Draw) Bids
         if (isDraw) {
@@ -169,43 +213,48 @@ export function resolveConflictLogic(
             recyclingBidders.forEach(b => successfulBids.push({ actorId: b.id, bid: 'recycling' }));
         }
 
-        // 2. Electricity (Lose) Bids - Restarts Round 1 immediately
-        if (!isDraw && winnerIds.length > 0) {
-            const electricityLosers = participants.filter(p => loserIds.includes(p.id) && p.bid === 'electricity');
-            if (electricityLosers.length > 0) {
-                electricityLosers.forEach(b => {
+        // 2. Electricity (Lose) Bids - Saves the player from elimination
+        const electricityBidders = participants.filter(p => p.bid === 'electricity');
+        if (electricityBidders.length > 0) {
+            let triggeredRestart = false;
+            electricityBidders.forEach(b => {
+                // If they lost against at least one survivor, they survive and trigger restart
+                const resultsAgainstSurvivors = Object.entries(matchResults[b.id])
+                    .filter(([otherId]) => otherId !== b.id && survivorIds.includes(otherId));
+                
+                const lostAgainstSurvivor = resultsAgainstSurvivors.some(([_, res]) => res === 'lose');
+                const isClearLoser = loserIds.includes(b.id);
+
+                if (lostAgainstSurvivor || isClearLoser) {
                     logs.push(`Electricity Bid: ${b.name}'s ${b.actorType.toUpperCase()} averted defeat! Restarting...`);
                     successfulBids.push({ actorId: b.id, bid: 'electricity' });
-                });
-                // CRITICAL: isDraw must be FALSE - this is a restart, not a draw
-                // Setting isDraw=true causes Robot Draw logic (1 resource) to trigger incorrectly
-                return {
-                    winnerId: null,
-                    loserIds: [],
-                    survivorIds: participants.map(p => p.id),
-                    isDraw: false,  // FIXED: was true, which triggered wrong Robot Draw logic
-                    restart: true,
-                    evictAll: false,
-                    shareRewards: false,
-                    successfulBids,
-                    logs
-                };
-            }
+                    
+                    if (!survivorIds.includes(b.id)) survivorIds.push(b.id);
+                    loserIds = loserIds.filter(id => id !== b.id);
+                    triggeredRestart = true;
+                }
+            });
+
+            if (triggeredRestart) finalRestart = true;
         }
 
         // 3. Product (Win) Bids
-        if (!isDraw && winnerIds.length === 1) {
-            const wId = winnerIds[0];
-            const winnerObj = participants.find(p => p.id === wId);
-            if (winnerObj && winnerObj.bid === 'product') {
-                logs.push(`Product Bid: ${winnerObj.name} secures +1 resource bonus!`);
-                successfulBids.push({ actorId: wId, bid: 'product' });
-            }
+        if (!isDraw) {
+            participants.forEach(p => {
+                if (p.bid === 'product') {
+                    // Did they win at least one pair?
+                    const hasMatchWin = Object.values(matchResults[p.id]).includes('win');
+                    if (hasMatchWin) {
+                        logs.push(`Product Bid: ${p.name} secures +1 resource bonus!`);
+                        successfulBids.push({ actorId: p.id, bid: 'product' });
+                    }
+                }
+            });
         }
     }
 
     // --- Actor-Type Rules & Iteration ---
-    if (isDraw) {
+    if (isDraw && survivorIds.length > 1) {
         const actorType = participants[0].actorType;
         if (actorType === 'politician' || actorType === 'player') {
             logs.push('Conflict stall: Reroll required.');
@@ -219,13 +268,12 @@ export function resolveConflictLogic(
             logs.push(`${actorType.toUpperCase()}s sharing location.`);
             finalShareRewards = true;
         }
-    } else if (winnerIds.length > 1) {
-        // Tied Winners (e.g. 2 Paper vs 1 Rock): Losers exit, survivors re-roll!
-        // This applies to all actors initially. ONLY if they draw again do the specific rules apply.
-        logs.push(`Tied Winners (${winnerIds.length}): Losers exit, survivors re-roll!`);
+    } else if (!isDraw && survivorIds.length > 1) {
+        // Multiple survivors in a non-draw means mixed results or tied winners
+        logs.push(`Multi-Winner Tie: ${survivorIds.length} actors remain for re-roll.`);
         finalRestart = true;
-    } else if (winnerIds.length === 1) {
-        finalWinnerId = winnerIds[0];
+    } else if (survivorIds.length === 1 && !isDraw) {
+        finalWinnerId = survivorIds[0];
     }
 
     return {
@@ -236,7 +284,7 @@ export function resolveConflictLogic(
         restart: finalRestart,
         evictAll: finalEvictAll,
         shareRewards: finalShareRewards,
-        successfulBids,
+        successfulBids: successfulBids.length > 0 ? successfulBids : [],
         logs,
     };
 }

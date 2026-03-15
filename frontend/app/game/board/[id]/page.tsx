@@ -6,7 +6,7 @@ import { ChevronUp, ChevronDown, Check, X, Crown, Trophy } from "lucide-react";
 import { useGameState } from "@/context/GameStateContext";
 import { TooltipProvider } from "@/context/TooltipContext";
 import CursorTooltip from "@/components/ui/CursorTooltip";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 // Modular Components
 import NewPlayersPanel from "@/components/game/NewPlayersPanel";
@@ -20,7 +20,7 @@ import ExchangeModal from "@/components/game/ExchangeModal";
 import ConflictsSidebar from "@/components/game/ConflictsSidebar";
 import ConflictResolutionView from "@/components/game/ConflictResolutionView";
 import BidRadialMenu from "@/components/game/BidRadialMenu";
-import { ConflictResult, EventCardDefinition } from "@/lib/modules/core/types";
+import { ConflictResult, EventCardDefinition, ActionCardInstance } from "@/lib/modules/core/types";
 import MarketOfferModal, { MarketOffer } from '@/components/game/MarketOfferModal';
 import MarketRevealModal from '@/components/game/MarketRevealModal';
 import BuyActionCardModal from '@/components/game/BuyActionCardModal';
@@ -56,18 +56,6 @@ const PLAYERS = [
     { id: 'p4', name: 'Union', avatar: '/avatars/avatar_union.png', color: '#4444ff' },
 ];
 
-const AUTO_PLACEMENTS = [
-    // Viper (p2)
-    { actorId: "v1", playerId: "p2", locId: "square", type: "rock", isOpponent: true, name: "Politician", actorType: "politician", avatar: "/actors/Polotican.png", headAvatar: "/actors/Politican_head.png" },
-    { actorId: "v2", playerId: "p2", locId: "factory", type: "paper", isOpponent: true, name: "Robot", actorType: "robot", avatar: "/actors/Robot.png", headAvatar: "/actors/Robot_head.png" },
-    { actorId: "v3", playerId: "p2", locId: "university", type: "scissors", isOpponent: true, name: "Scientist", actorType: "scientist", avatar: "/actors/Scientist.png", headAvatar: "/actors/Scientist_head.png" },
-    { actorId: "v4", playerId: "p2", locId: "theatre", type: "rock", isOpponent: true, name: "Artist", actorType: "artist", avatar: "/actors/Artist.png", headAvatar: "/actors/Artist_head.png" },
-    // Ghost (p3)
-    { actorId: "g1", playerId: "p3", locId: "university", type: "scissors", isOpponent: true, name: "Politician", actorType: "politician", avatar: "/actors/Polotican.png", headAvatar: "/actors/Politican_head.png" },
-    { actorId: "g2", playerId: "p3", locId: "dump", type: "rock", isOpponent: true, name: "Robot", actorType: "robot", avatar: "/actors/Robot.png", headAvatar: "/actors/Robot_head.png" },
-    { actorId: "g3", playerId: "p3", locId: "theatre", type: "paper", isOpponent: true, name: "Scientist", actorType: "scientist", avatar: "/actors/Scientist.png", headAvatar: "/actors/Scientist_head.png" },
-    { actorId: "g4", playerId: "p3", locId: "square", type: "scissors", isOpponent: true, name: "Artist", actorType: "artist", avatar: "/actors/Artist.png", headAvatar: "/actors/Artist_head.png" },
-];
 
 interface OpponentData {
     id: string;
@@ -77,6 +65,7 @@ interface OpponentData {
 }
 export default function GameBoardPage() {
     const { id } = useParams();
+    const router = useRouter();
     // --- Helper: Draw Action Card ---
     const drawActionCard = () => {
         let deck = game?.gameState?.actionDeck || [];
@@ -111,6 +100,7 @@ export default function GameBoardPage() {
     const [turn, setTurn] = useState(1);
     const [placedActors, setPlacedActors] = useState<any[]>([]);
     const [disabledLocations, setDisabledLocations] = useState<string[]>([]);
+    const [actionDiscardPile, setActionDiscardPile] = useState<ActionCardInstance[]>([]);
     const [opponentsReady, setOpponentsReady] = useState(false);
     const [opponentsData, setOpponentsData] = useState<Record<string, OpponentData>>({});
     const [isGameOver, setIsGameOver] = useState(false);
@@ -127,6 +117,7 @@ export default function GameBoardPage() {
 
     // Refs
     const isDrawingRef = useRef(false);
+    const lastResetTurnRef = useRef(0);
 
 
 
@@ -393,8 +384,92 @@ export default function GameBoardPage() {
         const myId = player.citizenId || player.address || 'p1';
         if (!game || !myId) return;
 
+        if (phase === 3 && p3Step === 0) {
+            // Find selected Block Location cards
+            const blockCards = actionHand.filter(card =>
+                card.type === 'turn off location' && selectedActionCards[card.id] > 0
+            );
+
+            const newDisabled: string[] = [];
+            const newDiscarded: ActionCardInstance[] = [];
+            
+            if (blockCards.length > 0) {
+                for (const card of blockCards) {
+                    if (card.disables && !disabledLocations.includes(card.disables)) {
+                        newDisabled.push(card.disables);
+                        const locName = LOCATIONS.find(l => l.id === card.disables)?.name || card.disables;
+                        addLog(`${player.name || '080'} activated ${card.title} - ${locName} is now DISABLED`);
+                    }
+                    newDiscarded.push(card);
+                }
+            }
+
+            const updatedDisabled = [...disabledLocations, ...newDisabled];
+            const updatedDiscardPile = [...actionDiscardPile, ...newDiscarded];
+            const filteredHand = actionHand.filter(c => !blockCards.some(bc => bc.id === c.id));
+
+            // Apply locally first
+            setDisabledLocations(updatedDisabled);
+            setActionDiscardPile(updatedDiscardPile);
+            setActionHand(filteredHand);
+            setP3Step(1);
+
+            // Sync to server immediately
+            fetch(`/api/games/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'update',
+                    updates: {
+                        gameState: {
+                            ...game?.gameState,
+                            playerInventories: { 
+                                ...(game?.gameState?.playerInventories || {}),
+                                [myId]: filteredHand 
+                            },
+                            discardPile: [...(game?.gameState?.discardPile || []), ...newDiscarded],
+                            disabledLocations: updatedDisabled,
+                            // PERSISTENCE FIX: Advancing the step on server so other players see the Step 1 board
+                            p3Step: 1 
+                        }
+                    }
+                })
+            }).catch(e => console.error("Failed to sync Phase 3 Step 0 commit", e));
+            return;
+        }
+
         if (phase === 3 && p3Step === 1) {
-            setIsWaitingForPlayers(true);
+            setP3Step1Ready(true);
+            setIsWaitingForPlayers(true); // Ensure local feedback
+            
+            if (game.isTest) {
+                setOpponentsP3Step1Ready(prev => {
+                    const next = { ...prev };
+                    dynamicPlayers.forEach(p => { if (p.id !== localPlayerId) next[p.id] = true; });
+                    return next;
+                });
+            } else {
+                // Sync to server for PvP
+                fetch(`/api/games/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'update',
+                        updates: {
+                            gameState: {
+                                ...game?.gameState,
+                                decisions: {
+                                    ...(game?.gameState?.decisions || {}),
+                                    [myId]: { 
+                                        ...(game?.gameState?.decisions?.[myId] || {}),
+                                        p3Step1Ready: true 
+                                    }
+                                }
+                            }
+                        }
+                    })
+                }).catch(e => console.error("Failed to sync p3Step1Ready", e));
+            }
             return;
         }
 
@@ -429,6 +504,8 @@ export default function GameBoardPage() {
             // Consume Card from hand visual representation
             const cardIndex = actionHand.findIndex(c => c.id.includes('relocation'));
             if (cardIndex !== -1) {
+                const consumed = actionHand[cardIndex];
+                setActionDiscardPile(prev => [...prev, consumed]);
                 setActionHand(prev => {
                     const newHand = [...prev];
                     newHand.splice(cardIndex, 1);
@@ -483,6 +560,8 @@ export default function GameBoardPage() {
             // Consume Card from hand visual representation
             const cardIndex = actionHand.findIndex(c => c.id.includes('change_values'));
             if (cardIndex !== -1) {
+                const consumed = actionHand[cardIndex];
+                setActionDiscardPile(prev => [...prev, consumed]);
                 setActionHand(prev => {
                     const newHand = [...prev];
                     newHand.splice(cardIndex, 1);
@@ -495,18 +574,25 @@ export default function GameBoardPage() {
             // Check if we have more exchange cards to play
             const remainingCards = exchangeCardsCount - 1;
 
-            // Reset for next card OR end step
             setExchangeSourceValue(null);
             setExchangeTargetPlayer(null);
             setExchangeTargetValue(null);
 
+            // Sequential Logging for Multi-Card plays
+            const ordinal = ["FIRST", "SECOND", "THIRD"];
+            const currentOrdinal = ordinal[currentExchangeIndex] || `${currentExchangeIndex + 1}TH`;
+            addLog(`Finalizing the ${currentOrdinal} Change Values card...`);
+
             if (remainingCards <= 0) {
                 setExchangeDone(true);
+                setCurrentExchangeIndex(0); // Reset for next turn
                 // Immediately resolve so users see the result
                 await resolveActionExchanges([newExchange]);
-                // resolveActionExchanges will handle the 3s summary and handleNextPhaseWrapper()
             } else {
+                setCurrentExchangeIndex(prev => prev + 1);
                 setExchangeStep(1); // Repeat for next card
+                const nextOrdinal = ordinal[currentExchangeIndex + 1] || `${currentExchangeIndex + 2}TH`;
+                addLog(`Initializing the ${nextOrdinal} Change Values card...`);
             }
             return;
         }
@@ -563,7 +649,8 @@ export default function GameBoardPage() {
                     citizenId: mainPlayerId,
                     placedActors: myActors,
                     resources: resources, // PERSISTENCE FIX
-                    decisions: p3Steps ? { [mainPlayerId]: { phase3Steps: p3Steps } } : undefined
+                    decisions: p3Steps ? { [mainPlayerId]: { phase3Steps: p3Steps } } : undefined,
+                    playerInventories: { [mainPlayerId]: actionHand } // DISCARD PERSISTENCE FIX
                 })
             });
         } catch (e) {
@@ -582,15 +669,40 @@ export default function GameBoardPage() {
         // 0. Initialize Resources from Server if available (Persistence Fix)
         if (game.gameState.playerResources && game.gameState.playerResources[myId]) {
             const serverResources = game.gameState.playerResources[myId];
-            
-            // Only update if they differ to avoid loops.
             const keys = Object.keys(serverResources);
             const isDifferent = keys.some(k => (serverResources as any)[k] !== (resources as any)[k]);
-            
-            // CRITICAL: Only accept server state if we are NOT in a local phase advance (which would overwrite our just-updated state)
             if (isDifferent) {
                 console.log("[DEBUG] Initializing local resources from server state:", serverResources);
                 setResources(serverResources);
+            }
+        }
+
+        // 0.1 Initialize Inventory from Server (Persistence Fix)
+        if (game.gameState.playerInventories && game.gameState.playerInventories[myId]) {
+            const serverInventory = game.gameState.playerInventories[myId];
+            const isDifferent = serverInventory.length !== actionHand.length || 
+                                serverInventory.some((c: any, i: number) => c.instanceId !== actionHand[i]?.instanceId);
+            
+            if (isDifferent) {
+                console.log("[DEBUG] Initializing local inventory from server state:", serverInventory);
+                setActionHand(serverInventory);
+            }
+        }
+
+        // 0.2 Initialize Discard Pile and Disabled Locations from Server
+        if (game.gameState.discardPile) {
+            const serverDiscard = game.gameState.discardPile;
+            if (serverDiscard.length !== actionDiscardPile.length) {
+                console.log("[DEBUG] Initializing action discard pile from server:", serverDiscard);
+                setActionDiscardPile(serverDiscard);
+            }
+        }
+
+        if (game.gameState.disabledLocations) {
+            const serverDisabled: string[] = game.gameState.disabledLocations;
+            if (serverDisabled.length !== disabledLocations.length || serverDisabled.some((l: string) => !disabledLocations.includes(l))) {
+                console.log("[DEBUG] Initializing disabled locations from server:", serverDisabled);
+                setDisabledLocations(serverDisabled);
             }
         }
 
@@ -624,6 +736,30 @@ export default function GameBoardPage() {
                 }
                 return allStagedActors;
             });
+        }
+
+        // 3. Phase 3 Step 1 Ready Sync
+        if (game.gameState.decisions) {
+            const decisions = game.gameState.decisions;
+            setOpponentsP3Step1Ready(prev => {
+                const next = { ...prev };
+                let changed = false;
+                dynamicPlayers.forEach(p => {
+                    if (p.id !== myId && decisions[p.id]?.p3Step1Ready) {
+                        if (!next[p.id]) {
+                            next[p.id] = true;
+                            changed = true;
+                        }
+                    }
+                });
+                return changed ? next : prev;
+            });
+        }
+
+        // 4. Action Phase Step Persistence Fix
+        if (game.gameState.p3Step !== undefined && game.gameState.p3Step !== p3Step) {
+            console.log("[DEBUG] Syncing p3Step from server:", game.gameState.p3Step);
+            setP3Step(game.gameState.p3Step);
         }
     }, [game?.gameState]);
 
@@ -819,12 +955,13 @@ export default function GameBoardPage() {
             const { triggerOpponentPlacements } = await import('@/lib/game/BotAI');
             await triggerOpponentPlacements(
                 game,
-                AUTO_PLACEMENTS,
+                [], // AUTO_PLACEMENTS deprecated
                 PLAYERS,
                 setOpponentsReady,
                 setPlacedActors,
                 setOpponentsData,
-                addLog
+                addLog,
+                opponentsData
             );
         } finally {
             isPlacingRef.current = false;
@@ -955,6 +1092,7 @@ export default function GameBoardPage() {
 
     const [exchangeStep, setExchangeStep] = useState<0 | 1 | 2>(0); // 1: Choose own, 2: Choose target
     const [exchangeSourceValue, setExchangeSourceValue] = useState<string | null>(null);
+    const [currentExchangeIndex, setCurrentExchangeIndex] = useState<number>(0); 
     const [exchangeTargetPlayer, setExchangeTargetPlayer] = useState<string | null>(null);
     const [exchangeTargetValue, setExchangeTargetValue] = useState<string | null>(null);
     const [pendingExchanges, setPendingExchanges] = useState<any[]>([]);
@@ -1000,6 +1138,17 @@ export default function GameBoardPage() {
         });
         return count;
     }, [selectedActionCards, actionHand]);
+
+    const hasExchangeableValues = useMemo(() => {
+        return (resources.power || 0) > 0 || (resources.knowledge || 0) > 0 || (resources.art || 0) > 0;
+    }, [resources]);
+
+    const hasOpponentExchangeableValues = useMemo(() => {
+        return Object.values(opponentsData).some(opp => {
+            const res = opp.resources || {};
+            return (res.power || 0) > 0 || (res.knowledge || 0) > 0 || (res.art || 0) > 0;
+        });
+    }, [opponentsData]);
 
 
     // Derived: Current Active Conflict Object
@@ -1226,8 +1375,9 @@ export default function GameBoardPage() {
                 let serverDeck = game.gameState?.eventDeck || [];
                 
                 if (serverDeck.length === 0) {
-                    isDrawingRef.current = false;
-                    return; // Deck is empty, nothing to draw
+                    // RESHUFFLE PERSISTENCE FIX: If deck is empty, reshuffle from constants
+                    addLog("Event Deck empty - reshuffling from all events.");
+                    serverDeck = [...EVENTS].map(e => e.id).sort(() => Math.random() - 0.5);
                 }
                 
                 const randomIndex = Math.floor(Math.random() * serverDeck.length);
@@ -1268,7 +1418,37 @@ export default function GameBoardPage() {
             // Reset drawing ref when phase changes away from Event Phase
             isDrawingRef.current = false;
         }
-    }, [phase, turn, currentEvent, game?.isTest]);
+
+        // TURN TRANSITION FIX: Clear local event state if we just entered Phase 1 of a NEW turn
+        // This ensures the useEffect above triggers a fresh draw.
+        // We use lastResetTurnRef to ensure this only happens ONCE per turn transition.
+        const deckTurn = game?.gameState?.eventDeckTurn || 0;
+        if (phase === 1 && deckTurn < turn && lastResetTurnRef.current < turn && currentEvent && !isWaitingForPlayers && !eventResult) {
+            console.log(`[DEBUG] New turn ${turn} detected (Deck turn was ${deckTurn}). Resetting event state.`);
+            lastResetTurnRef.current = turn;
+            setCurrentEvent(null);
+            setDiscardAmount(0);
+            setEventResult(null);
+            setDisabledLocations([]); // NEW: Clear construction blocks at turn start
+            setResolvedConflicts([]);
+
+            // Sync reset to server
+            fetch(`/api/games/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'update',
+                    updates: {
+                        gameState: {
+                            ...game?.gameState,
+                            disabledLocations: [],
+                            resolvedConflicts: []
+                        }
+                    }
+                })
+            }).catch(e => console.error("Failed to sync turn reset state", e));
+        }
+    }, [phase, turn, currentEvent, game?.isTest, game?.gameState?.eventDeckTurn]);
 
 
     // --- Handlers ---
@@ -1290,7 +1470,8 @@ export default function GameBoardPage() {
             const oppDiscards = dynamicPlayers
                 .filter(p => p.id !== localPlayerId)
                 .map(p => {
-                    const amount = Math.floor(Math.random() * 4);
+                    const botRes = (opponentsData[p.id]?.resources as any)?.[currentEvent.targetResource!] || 0;
+                    const amount = Math.floor(Math.random() * (botRes + 1));
                     return { id: p.id, name: p.name, amount };
                 });
 
@@ -1305,17 +1486,16 @@ export default function GameBoardPage() {
             const winners = statValues.filter(s => s.amount === maxDiscard);
 
             // Deduct the resources that players decided to discard
-            updateResource(currentEvent.targetResource!, -discardAmount);
+            updateResource(currentEvent.targetResource! as any, -discardAmount);
 
-            // Apply opponent discards graphically
+            // Apply opponent discards graphically (LOGIC REVERTED: NO ACTUAL DEDUCTION)
             setOpponentsData((prev: any) => {
                 const next = { ...prev };
                 oppDiscards.forEach(opp => {
                     if (!next[opp.id]) next[opp.id] = { resources: { power: 0, art: 0, knowledge: 0, fame: 0 } };
+                    // We generate the object but DO NOT subtract resources from bot inventories
                     const oppRes = { ...next[opp.id].resources };
-                    const key = currentEvent.targetResource!;
-                    oppRes[key] = Math.max(0, (oppRes[key] || 0) - opp.amount);
-                    next[opp.id] = { ...next[opp.id], resources: oppRes };
+                    // next[opp.id] = { ...next[opp.id], resources: oppRes }; // No change
                 });
                 return next;
             });
@@ -1465,12 +1645,23 @@ export default function GameBoardPage() {
                 setActionHand(prev => [...prev, drawn]);
                 msg += ` Found action card: ${drawn.title}`;
             } else {
-                updateResource(rewardKey, 1);
+                updateResource(rewardKey as any, 1);
             }
         }
 
         setEventResult({ msg, win });
         addLog(`Event Result: ${msg}`);
+
+        // Final Server Sync (Added to restore persistence from previous version)
+        if (game && id && !game.isTest) {
+            const allPlayerResources: Record<string, any> = { [localPlayerId]: resources };
+            dynamicPlayers.forEach(p => { if (p.id !== localPlayerId) allPlayerResources[p.id] = opponentsData[p.id]?.resources; });
+            fetch(`/api/games/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'sync-turn', citizenId: localPlayerId, resources, playerResources: allPlayerResources })
+            }).catch(e => console.error("Event persistence sync failed:", e));
+        }
     };
 
     // Event Logic Complete
@@ -1488,50 +1679,6 @@ export default function GameBoardPage() {
         setPendingPlacement(null);
     };
 
-    // Phase 3 Step 1: Auto-Execute Block Locations, then smart-skip to the right next step
-    useEffect(() => {
-        if (phase === 3 && p3Step === 1) {
-            const newDisabled: string[] = [];
-
-            // Find selected Block Location cards
-            const blockCards = actionHand.filter(card =>
-                card.type === 'turn off location' && selectedActionCards[card.id] > 0
-            );
-
-            if (blockCards.length > 0) {
-                for (const card of blockCards) {
-                    if (card.disables && !disabledLocations.includes(card.disables) && !newDisabled.includes(card.disables)) {
-                        newDisabled.push(card.disables);
-                        addLog(`${player.name || '080'} activated ${card.title} - ${card.disables} is now DISABLED`);
-                    }
-                }
-
-                if (newDisabled.length > 0) {
-                    setDisabledLocations(prev => [...prev, ...newDisabled]);
-                }
-
-                // Consume the cards from hand
-                setActionHand(prev => {
-                    const newHand = [...prev];
-                    blockCards.forEach(card => {
-                        const countToConsume = selectedActionCards[card.id] || 0;
-                        for (let i = 0; i < countToConsume; i++) {
-                            const idx = newHand.findIndex(c => c.id === card.id);
-                            if (idx !== -1) newHand.splice(idx, 1);
-                        }
-                    });
-                    return newHand;
-                });
-            }
-
-            // Advance to Step 1 (STOP LOCATIONS)
-            const botIds = dynamicPlayers.filter(p => p.id.startsWith('bot') || p.id !== localPlayerId).map(p => p.id);
-            if (botIds.length === 0) {
-                 // No opponents? Just proceed to next sub-step immediately after delay if desired, 
-                 // but let's stick to the flow: Step 1 -> Click -> Step 2
-            }
-        }
-    }, [phase, p3Step]);
 
     // Handle Phase 3 Step 1 Progression
     useEffect(() => {
@@ -1566,18 +1713,23 @@ export default function GameBoardPage() {
                     addLog('No further actions — advancing to Conflicts.');
                     handleNextPhaseWrapper();
                 }
+                setP3Step1Ready(false);
+                setIsWaitingForPlayers(false);
             }
         }
     }, [phase, p3Step, p3Step1Ready, opponentsP3Step1Ready, game?.isTest, opponentsReady, relocationCardsCount, exchangeCardsCount, resources, dynamicPlayers, localPlayerId, handleNextPhaseWrapper, addLog]);
 
     // --- Phase 3 Step 3: Change Values Initialization ---
     useEffect(() => {
-        if (phase === 3 && p3Step === 3 && exchangeStep === 0 && (exchangeCardsCount > 0)) {
+        if (phase === 3 && p3Step === 3 && exchangeStep === 0 && exchangeCardsCount > 0 && !exchangeDone) {
             setExchangeStep(1);
-            addLog('STEP: CHANGE VALUES - Choose one of your values to exchange.');
-            console.log("[DEBUG] exchangeStep initialized to 1 for Change Values modal");
+            const ordinal = ["FIRST", "SECOND", "THIRD"];
+            const currentOrdinal = ordinal[currentExchangeIndex] || `${currentExchangeIndex + 1}TH`;
+            addLog(`STEP: CHANGE VALUES - Initializing the ${currentOrdinal} card.`);
+            addLog('Choose one of your values to exchange.');
+            console.log(`[DEBUG] exchangeStep initialized for ${currentOrdinal} card`);
         }
-    }, [phase, p3Step, exchangeStep, exchangeCardsCount, addLog]);
+    }, [phase, p3Step, exchangeStep, exchangeCardsCount, exchangeDone, currentExchangeIndex, addLog]);
 
     // --- Phase 3 Step 2: Auto-Consensus for Idle Players ---
     useEffect(() => {
@@ -1772,10 +1924,51 @@ export default function GameBoardPage() {
 
         setExchangeResults(summary);
         
-        // Final sync and exit
+        // DISCARD PERSISTENCE FIX: Final sync and exit
+        const mainPlayerId = player.citizenId || player.address || 'p1';
+        
+        // Return "Change of Values" if conditions met
+        let finalHand = [...actionHand];
+        const hasSelfValue = (resources.power || 0) > 0 || (resources.knowledge || 0) > 0 || (resources.art || 0) > 0;
+        const hasOppValue = Object.values(opponentsData).some(opp => {
+            const res = opp.resources || {};
+            return (res.power || 0) > 0 || (res.knowledge || 0) > 0 || (res.art || 0) > 0;
+        });
+
+        if (!hasSelfValue || !hasOppValue) {
+            const exchangeCard = ACTION_CARDS.find(c => c.id.includes('change_values') || c.id.includes('exchange'));
+            if (exchangeCard && !finalHand.find(c => c.id === exchangeCard.id)) {
+                 addLog("No values were available for exchange. Card returned to hand.");
+                 finalHand.push({ ...exchangeCard, instanceId: `returned_${Date.now()}` });
+                 setActionHand(finalHand);
+            }
+        }
+
+        fetch(`/api/games/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'update',
+                updates: {
+                    gameState: {
+                        ...game?.gameState,
+                        playerInventories: { 
+                            ...(game?.gameState?.playerInventories || {}),
+                            [mainPlayerId]: finalHand 
+                        },
+                        discardPile: actionDiscardPile
+                    }
+                }
+            })
+        }).catch(e => console.error("Failed to sync inventory after exchange", e));
+
         setTimeout(() => {
             setExchangeResults(null);
             setExchangeDone(false);
+            setExchangeStep(0); // RESET BUG FIX: Ensure next play starts at Step 1
+            setExchangeSourceValue(null);
+            setExchangeTargetPlayer(null);
+            setExchangeTargetValue(null);
             setPendingExchanges([]);
             handleNextPhaseWrapper();
         }, 3000);
@@ -1905,6 +2098,15 @@ export default function GameBoardPage() {
 
             setPlacedActors(nextActors);
 
+            // DISCARD PERSISTENCE FIX: Calculate next hand locally before sync
+            const nextHand = actionHand.filter(c => {
+                 // Remove one relocation card used for this batch of moves (simplification: assume 1 used per call if validMoves > 0)
+                 // Or more accurately: validMoves might contain multiple moves.
+                 // The UI already removes them from actionHand individually during commitTurn (Phase 3 Step 2 block).
+                 // So here actionHand should already be correct.
+                 return true; 
+            });
+
             // Sync to backend
             const mainPlayerId = player.citizenId || player.address || 'p1';
             const actorsByPlayer = nextActors.reduce((acc: any, actor) => {
@@ -1922,7 +2124,12 @@ export default function GameBoardPage() {
                     updates: {
                         gameState: {
                             ...game?.gameState,
-                            stagedActors: actorsByPlayer
+                            stagedActors: actorsByPlayer,
+                            playerInventories: { 
+                                ...(game?.gameState?.playerInventories || {}),
+                                [mainPlayerId]: nextHand 
+                            },
+                            discardPile: actionDiscardPile
                         }
                     }
                 })
@@ -2145,11 +2352,17 @@ export default function GameBoardPage() {
                                 
                                 {disabledLocations.length > 0 ? (
                                     <div className="flex flex-col items-center gap-2 mb-8">
-                                        {disabledLocations.map(locId => (
-                                            <p key={locId} className="text-white text-xl font-rajdhani uppercase tracking-wider">
-                                                <span className="text-red-500 font-bold">{LOCATIONS.find(l => l.id === locId)?.name || locId}</span> will not work this turn.
-                                            </p>
-                                        ))}
+                                        {disabledLocations.map(locId => {
+                                            const locName = LOCATIONS.find(l => l.id === locId)?.name || locId;
+                                            const disablingCard = actionDiscardPile.find(c => c.disables === locId);
+                                            const reason = disablingCard ? `${disablingCard.title}` : `${locName} is Under Construction`;
+                                            return (
+                                                <p key={locId} className="text-white text-xl font-rajdhani uppercase tracking-wider text-center">
+                                                    <span className="text-[#d4af37] font-bold">{locName}</span> will not work this turn, <br/>
+                                                    <span className="text-white/40 text-sm">because of the {reason}.</span>
+                                                </p>
+                                            );
+                                        })}
                                     </div>
                                 ) : (
                                     <p className="text-white/50 text-xl font-rajdhani mb-8">No locations blocked this turn.</p>
@@ -2268,7 +2481,7 @@ export default function GameBoardPage() {
                                                             'bg-white/5 border-white/10 hover:border-[#d4af37]/50'
                                                         }`}
                                                     >
-                                                        <Image src={`/resources/resource_${res}.png`} width={48} height={48} alt={res} />
+                                                        <Image src={res === 'knowledge' ? '/intangibles/resource_wisdom.png' : res === 'art' ? '/intangibles/resource_Art.png' : `/intangibles/resource_${res}.png`} width={48} height={48} alt={res} />
                                                         <span className={`mt-3 font-bold uppercase ${isSelected ? 'text-black' : 'text-white'}`}>{res}</span>
                                                         <span className={`text-xl font-black ${isSelected ? 'text-black' : 'text-[#d4af37]'}`}>{val}</span>
                                                     </button>
@@ -2306,7 +2519,7 @@ export default function GameBoardPage() {
                                                                             'bg-black/40 border-white/10 hover:border-[#d4af37]/30'
                                                                         }`}
                                                                     >
-                                                                        <Image src={`/resources/resource_${res}.png`} width={20} height={20} alt={res} />
+                                                                        <Image src={res === 'knowledge' ? '/intangibles/resource_wisdom.png' : res === 'art' ? '/intangibles/resource_Art.png' : `/intangibles/resource_${res}.png`} width={20} height={20} alt={res} />
                                                                         <span className={`text-sm font-bold ${isSelected ? 'text-black' : 'text-white'}`}>{val}</span>
                                                                     </button>
                                                                 );
@@ -2320,25 +2533,61 @@ export default function GameBoardPage() {
                                 </div>
 
                                 <div className="mt-10 flex gap-4">
-                                    {exchangeStep === 1 && (
-                                        <button
-                                            disabled={!exchangeSourceValue}
-                                            onClick={() => setExchangeStep(2)}
-                                            className="px-12 py-4 bg-gradient-to-r from-[#d4af37] to-[#f3bd48] text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 disabled:grayscale disabled:opacity-50 transition-all"
-                                        >
-                                            Choose Value
-                                        </button>
-                                    )}
-                                    {exchangeStep === 2 && (
-                                        <>
-                                            <button onClick={() => setExchangeStep(1)} className="px-8 py-4 border border-white/20 text-white font-bold uppercase rounded-xl hover:bg-white/5">Back</button>
+                                    {!hasExchangeableValues ? (
+                                        <div className="flex flex-col items-center gap-6 p-8 bg-red-500/10 border border-red-500/30 rounded-2xl w-full">
+                                            <p className="text-white text-xl font-bold text-center">
+                                                You have no Values for exchange.<br/>
+                                                <span className="text-red-400 text-sm font-normal uppercase tracking-widest font-bold">Change Values cards are returned to your hand.</span>
+                                            </p>
                                             <button
-                                                disabled={!exchangeTargetValue || !exchangeTargetPlayer}
-                                                onClick={commitTurn}
-                                                className="px-12 py-4 bg-gradient-to-r from-[#d4af37] to-[#f3bd48] text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 disabled:grayscale disabled:opacity-50 transition-all"
+                                                onClick={() => {
+                                                    addLog("No values to exchange. Change Values cards returned to hand.");
+                                                    handleNextPhaseWrapper();
+                                                }}
+                                                className="px-12 py-4 bg-white text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-all shadow-[0_0_30px_rgba(255,255,255,0.2)]"
                                             >
-                                                Change Values
+                                                Get It!
                                             </button>
+                                        </div>
+                                    ) : !hasOpponentExchangeableValues ? (
+                                        <div className="flex flex-col items-center gap-6 p-8 bg-red-500/10 border border-red-500/30 rounded-2xl w-full">
+                                            <p className="text-white text-xl font-bold text-center">
+                                                Opponents have no Values for exchange.<br/>
+                                                <span className="text-red-400 text-sm font-normal uppercase tracking-widest font-bold">Change Values card is returned to your hand.</span>
+                                            </p>
+                                            <button
+                                                onClick={() => {
+                                                    addLog("Opponents have no values to exchange. Change Values card returned to hand.");
+                                                    handleNextPhaseWrapper();
+                                                }}
+                                                className="px-12 py-4 bg-white text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-all shadow-[0_0_30px_rgba(255,255,255,0.2)]"
+                                            >
+                                                Get It!
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {exchangeStep === 1 && (
+                                                <button
+                                                    disabled={!exchangeSourceValue}
+                                                    onClick={() => setExchangeStep(2)}
+                                                    className="px-12 py-4 bg-gradient-to-r from-[#d4af37] to-[#f3bd48] text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 disabled:grayscale disabled:opacity-50 transition-all font-rajdhani"
+                                                >
+                                                    Choose Value
+                                                </button>
+                                            )}
+                                            {exchangeStep === 2 && (
+                                                <>
+                                                    <button onClick={() => setExchangeStep(1)} className="px-8 py-4 border border-white/20 text-white font-bold uppercase rounded-xl hover:bg-white/5 font-rajdhani">Back</button>
+                                                    <button
+                                                        disabled={!exchangeTargetValue || !exchangeTargetPlayer}
+                                                        onClick={commitTurn}
+                                                        className="px-12 py-4 bg-gradient-to-r from-[#d4af37] to-[#f3bd48] text-black font-black uppercase tracking-widest rounded-xl hover:scale-105 disabled:grayscale disabled:opacity-50 transition-all font-rajdhani"
+                                                    >
+                                                        Change Values
+                                                    </button>
+                                                </>
+                                            )}
                                         </>
                                     )}
                                 </div>
@@ -2366,7 +2615,7 @@ export default function GameBoardPage() {
                                             </div>
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-3">
-                                                    <Image src={`/resources/resource_${res.sourceVal}.png`} width={32} height={32} alt={res.sourceVal} />
+                                                    <Image src={res.sourceVal === 'knowledge' ? '/intangibles/resource_wisdom.png' : res.sourceVal === 'art' ? '/intangibles/resource_Art.png' : `/intangibles/resource_${res.sourceVal}.png`} width={32} height={32} alt={res.sourceVal} />
                                                     <span className="text-white font-black text-xl">{res.sourceVal.toUpperCase()}</span>
                                                 </div>
                                                 <div className="flex flex-col items-center">
@@ -2378,7 +2627,7 @@ export default function GameBoardPage() {
                                                 </div>
                                                 <div className="flex items-center gap-3">
                                                     <span className="text-white font-black text-xl">{res.targetVal.toUpperCase()}</span>
-                                                    <Image src={`/resources/resource_${res.targetVal}.png`} width={32} height={32} alt={res.targetVal} />
+                                                    <Image src={res.targetVal === 'knowledge' ? '/intangibles/resource_wisdom.png' : res.targetVal === 'art' ? '/intangibles/resource_Art.png' : `/intangibles/resource_${res.targetVal}.png`} width={32} height={32} alt={res.targetVal} />
                                                 </div>
                                             </div>
                                             <div className="text-center text-white/20 text-[10px] uppercase tracking-widest font-bold">
@@ -2587,8 +2836,8 @@ export default function GameBoardPage() {
                                     </div>
 
                                     <button
-                                        onClick={() => window.location.href = '/'}
-                                        className="mt-12 px-16 py-5 bg-gradient-to-r from-[#d4af37] to-[#f3bd48] text-black font-black text-xl uppercase tracking-[0.4em] rounded-2xl hover:from-[#ffe066] hover:to-[#ffd700] shadow-[0_0_40px_rgba(212,175,55,0.5)] transition-all transform hover:scale-105 active:scale-95"
+                                        onClick={() => router.push('/')}
+                                        className="mt-12 px-16 py-5 bg-gradient-to-r from-[#d4af37] to-[#f3bd48] text-black font-black text-xl uppercase tracking-[0.4em] rounded-2xl hover:from-[#ffe066] hover:to-[#ffd700] shadow-[0_0_40px_rgba(212,175,55,0.5)] transition-all transform hover:scale-105 active:scale-95 pointer-events-auto"
                                     >
                                         Good Game!
                                     </button>
@@ -2829,6 +3078,7 @@ export default function GameBoardPage() {
                     resources={resources}
                     victoryPoints={victoryPoints}
                     opponentsData={opponentsData}
+                    actionDiscardPile={actionDiscardPile}
                 />
 
                 {/* Action Phase Summary Overlay */}

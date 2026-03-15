@@ -62,7 +62,11 @@ export const gameService = {
         if (updates.gameState && games[index].gameState) {
             updatedGame.gameState = {
                 ...games[index].gameState,
-                ...updates.gameState
+                ...updates.gameState,
+                playerInventories: {
+                    ...(games[index].gameState.playerInventories || {}),
+                    ...(updates.gameState.playerInventories || {})
+                }
             };
         }
         

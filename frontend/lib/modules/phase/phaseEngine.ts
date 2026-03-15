@@ -13,6 +13,7 @@ interface PhaseAdvanceInput {
     p3Step: Phase3Step;
     playerCount: number;
     isTest?: boolean;
+    hasTie?: boolean; // New flag for tie-breaker check
 }
 
 interface PhaseAdvanceResult {
@@ -63,7 +64,10 @@ export function advancePhase(input: PhaseAdvanceInput): PhaseAdvanceResult {
     };
 
     // Check for game over
-    if (turn >= maxTurns && phase === 5) {
+    // Rule: "The game is finished after Phase 4 (Conflicts Resolution) of the last turn,
+    // unless two or more players have the same biggest amount of Victory Points."
+    // Note: Phase 5 (Market) is skipped on the last turn unless there's a tie.
+    if (turn >= maxTurns && phase === 5 && !input.hasTie) {
         return { ...result, isGameOver: true, logs: ['--- GAME FINISHED ---'] };
     }
 

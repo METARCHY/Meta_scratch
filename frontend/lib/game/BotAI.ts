@@ -170,61 +170,121 @@ export const resolveBotOnlyConflicts = async (
  */
 export const triggerOpponentPlacements = async (
     game: any,
-    AUTO_PLACEMENTS: any[],
+    _deprecated_AUTO_PLACEMENTS: any[], // Keeping signature for compatibility but ignoring
     PLAYERS: any[],
     setOpponentsReady: (ready: boolean) => void,
     setPlacedActors: (cb: (prev: any[]) => any[]) => void,
     setOpponentsData: (cb: (prev: any) => any) => void,
-    addLog: (msg: string) => Promise<void>
+    addLog: (msg: string) => Promise<void>,
+    opponentsData: any
 ) => {
-    if (!game || !game.isTest) return; // Only run bot placements in a dedicated test game
+    if (!game || !game.isTest) return; 
 
-    setOpponentsReady(false); // Reset before starting
-
+    setOpponentsReady(false); 
     await new Promise(r => setTimeout(r, 1500));
 
-    // Map hardcoded bot IDs to actual joined bot IDs if in test mode
-    const botMap: Record<string, string> = {};
-    if (game.isTest) {
-        botMap['p2'] = 'bot-1';
-        botMap['p3'] = 'bot-2';
-        botMap['p4'] = 'bot-3'; // Just in case
-    }
+    const botIdentities = [
+        { id: 'bot-1', name: 'Viper' },
+        { id: 'bot-2', name: 'Ghost' },
+        { id: 'bot-3', name: 'Union' }
+    ];
 
-    const opponentActions = AUTO_PLACEMENTS.map(action => ({
-        ...action,
-        playerId: botMap[action.playerId] || action.playerId
-    }));
+    const actorDefinitions = [
+        { type: "politician", name: "Politician", avatar: "/actors/Polotican.png", headAvatar: "/actors/Politican_head.png" },
+        { type: "robot", name: "Robot", avatar: "/actors/Robot.png", headAvatar: "/actors/Robot_head.png" },
+        { type: "scientist", name: "Scientist", avatar: "/actors/Scientist.png", headAvatar: "/actors/Scientist_head.png" },
+        { type: "artist", name: "Artist", avatar: "/actors/Artist.png", headAvatar: "/actors/Artist_head.png" }
+    ];
 
-    for (const action of opponentActions) {
-        setPlacedActors(prev => {
-            if (prev.some(p => p.actorId === action.actorId)) return prev;
-            return [...prev, action];
-        });
+    const rspTokens = ['rock', 'paper', 'scissors'];
+    const bidTypes = ['product', 'electricity', 'recycling'];
 
-        // Update opponent resources if bid is placed
-        if (action.bid) {
-            setOpponentsData(prev => {
-                const next = { ...prev };
-                if (!next[action.playerId]) return prev;
-                const oppRes = { ...next[action.playerId].resources };
-                oppRes[action.bid] = Math.max(0, (oppRes[action.bid] || 0) - 1);
-                next[action.playerId] = { ...next[action.playerId], resources: oppRes };
-                return next;
-            });
+    // Get bots actually in the game
+    const botsInGame = game.players.filter((p: any) => (p.citizenId || '').startsWith('bot-'));
+    
+    // If no bots in game players (test mode fallback), use botIdentities
+    const activeBots = botsInGame.length > 0 ? botsInGame : botIdentities;
+
+    for (const bot of activeBots) {
+        const botId = bot.citizenId || bot.id;
+        const botName = bot.name;
+
+        // Shuffle arguments so they are assigned randomly to actors
+        const availableArgs = [...rspTokens, 'dummy'].sort(() => Math.random() - 0.5);
+        
+        // Get actual bot resources from opponentsData
+        const botResources = opponentsData[botId]?.resources || {};
+
+        for (let i = 0; i < actorDefinitions.length; i++) {
+            const def = actorDefinitions[i];
+            
+            // Respect ALLOWED_MOVES for each actor type
+            const allowedIds = ALLOWED_MOVES[def.type as keyof typeof ALLOWED_MOVES] || [];
+            const validLocs = LOCATIONS.filter(l => allowedIds.includes(l.id));
+            const loc = validLocs[Math.floor(Math.random() * validLocs.length)] || LOCATIONS[0];
+            
+            const token = availableArgs.pop()!; // Take one unique argument (R, P, S, or Dummy)
+            
+            // Smart Bidding Logic:
+            // 1. Specialized Dummy Rules:
+            //    - Robot Dummy -> DRAW (recycling)
+            //    - Other Dummy -> LOSE (electricity)
+            // 2. Probabilistic choice (50% chance to skip even if resources exist)
+            // 3. Must have resources
+            let bid = null;
+            const skipBidProb = Math.random() < 0.5;
+
+            if (!skipBidProb) {
+                if (token === 'dummy') {
+                    // Specialized Dummy Logic
+                    const targetBid = def.type === 'robot' ? 'recycling' : 'electricity';
+                    if ((botResources[targetBid] || 0) > 0) {
+                        bid = targetBid;
+                    }
+                } else {
+                    // Non-Dummy: Random valid bid
+                    const possibleBids = bidTypes.filter(bt => (botResources[bt] || 0) > 0);
+                    if (possibleBids.length > 0) {
+                        bid = possibleBids[Math.floor(Math.random() * possibleBids.length)];
+                    }
+                }
+            }
+            
+            const action = {
+                actorId: `${botId}_a${i}_${Date.now()}`,
+                playerId: botId,
+                locId: loc.id,
+                type: token,
+                isOpponent: true,
+                name: def.name,
+                actorType: def.type,
+                avatar: def.avatar,
+                headAvatar: def.headAvatar,
+                bid: bid
+            };
+
+            setPlacedActors(prev => [...prev, action]);
+
+            // Deduction logic for bidding
+            if (bid) {
+                setOpponentsData(prev => {
+                    const next = { ...prev };
+                    if (!next[botId]) return prev;
+                    const oppRes = { ...next[botId].resources };
+                    oppRes[bid] = Math.max(0, (oppRes[bid] || 0) - 1);
+                    next[botId] = { ...next[botId], resources: oppRes };
+                    return next;
+                });
+            }
+
+            const betText = bid ? ` (Bet on ${bid === 'product' ? 'WIN' : bid === 'electricity' ? 'LOSE' : 'DRAW'})` : "";
+            const tokenIcon = token === 'dummy' ? '🎭 DUMMY' : token.toUpperCase();
+            await addLog(`${botName} placed ${def.name} with ${tokenIcon} to ${loc.id.toUpperCase()}${betText}`);
+
+            await new Promise(r => setTimeout(r, 600)); 
         }
-        // Resolve name from game players if possible
-        const playerInfo = game.players.find((p: any) => (p.citizenId || p.address) === action.playerId);
-        const playerName = playerInfo?.name || PLAYERS.find(p => p.id === action.playerId)?.name || action.playerId;
-        const betText = action.bid ? ` (Bet on ${action.bid === 'product' ? 'WIN' : action.bid === 'electricity' ? 'LOSE' : 'DRAW'})` : "";
-        await addLog(`${playerName} placed ${action.name} with ${action.type.toUpperCase()} to ${action.locId.toUpperCase()}${betText}`);
-
-        await new Promise(r => setTimeout(r, 600)); // Increased delay for stability
     }
 
     await new Promise(r => setTimeout(r, 600));
-    await new Promise(r => setTimeout(r, 600));
-
-    // Signal readiness ONLY at the end
     setOpponentsReady(true);
 };

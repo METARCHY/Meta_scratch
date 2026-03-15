@@ -13,9 +13,10 @@
 | Phase 2 | Project Governance & Telemetry | ✅ Завершена |
 | Phase 3 | Conflict & Resolution Architecture | ✅ Завершена |
 | Phase 4 | Tactical Supremacy | ✅ Завершена |
-| Phase 5 | MVP — Blockchain Integration & Real Multiplayer | 🔲 Не начата |
-| Phase 6 | Full Game — Events, Market, Action Cards Online | 🔲 Не начата |
-| Phase 7 | Production & Launch | 🔲 Не начата |
+| Phase 5 | Polished Game Loop & Multiplayer Sync | 🔲 Не начата |
+| Phase 6 | Blockchain Integration (Source of Proof) | 🔲 Не начата |
+| Phase 7 | Full Game — Events, Market, Action Cards Online | 🔲 Не начата |
+| Phase 8 | Production & Launch | 🔲 Не начата |
 
 ---
 

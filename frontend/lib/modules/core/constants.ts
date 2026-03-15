@@ -29,7 +29,7 @@ export const DEFAULT_ACTORS: ActorDefinition[] = [
 
 // ─── Locations ────────────────────────────────────────────────────
 export const LOCATIONS: LocationDefinition[] = [
-    { id: 'city', name: 'City', x: 581, y: 178, width: 718, height: 598, image: '/locations/city.png', hint: null, activeHint: null, resource: 'fame', type: 'intangible' },
+    { id: 'city', name: 'City', x: 581, y: 178, width: 718, height: 598, image: '/locations/city.png', hint: null, activeHint: null, resource: 'fame', type: 'intangible', nonPlayable: true },
     { id: 'square', name: 'The Square', x: 156, y: 215, width: 718, height: 598, image: '/locations/square.png', hint: '/locations/square_hint0.png', activeHint: '/locations/square_active0.png', resource: 'power', type: 'intangible' },
     { id: 'theatre', name: 'The Theatre', x: 355, y: 491, width: 718, height: 598, image: '/locations/theatre.png', hint: '/locations/Theatre_hint0.png', activeHint: '/locations/Theatre_active0.png', resource: 'art', type: 'intangible' },
     { id: 'university', name: 'University', x: 384, y: -17, width: 718, height: 598, image: '/locations/university.png', hint: '/locations/uni_hint0.png', activeHint: '/locations/uni_active0.png', resource: 'knowledge', type: 'intangible' },
@@ -100,11 +100,11 @@ export const TEST_RESOURCES: Record<string, number> = {
 export const MAX_TURNS: Record<number, number> = {
     2: 5,
     3: 5,
-    4: 8,    // 2v2 long game
+    4: 6,    // 2v2 game
     5: 6,
 };
 
-export const TEST_MAX_TURNS = 3;
+export const TEST_MAX_TURNS = 5;
 
 // ─── RPS Win Matrix ───────────────────────────────────────────────
 /** Returns 'win' if a beats b, 'lose' if b beats a, 'draw' if equal */
