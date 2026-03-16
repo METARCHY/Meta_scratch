@@ -35,11 +35,11 @@ export const handleNextPhase = (
     // Phase 3 Sub-step Logic
     if (phase === 3) {
         const stepNames = ["SELECTION", "BLOCKING LOCATIONS", "RELOCATION", "CHANGE VALUES", "SUMMARY"];
-        const getNextValidStep = (current: number): number => {
-            if (!allActionCommits) return current + 1;
+        const getNextValidStep = (current: number): 0 | 1 | 2 | 3 | 4 => {
+            if (!allActionCommits) return (current + 1) as 0 | 1 | 2 | 3 | 4;
             for (let s = current + 1; s <= 3; s++) {
                 const anyCommit = Object.values(allActionCommits).some(steps => Array.isArray(steps) && steps.includes(s));
-                if (anyCommit) return s;
+                if (anyCommit) return s as 0 | 1 | 2 | 3 | 4;
                 addLog(`SKIPPING ${stepNames[s]}: No cards played.`);
             }
             return 4;
