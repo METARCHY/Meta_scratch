@@ -2,8 +2,8 @@
 
 import React from 'react';
 import Image from 'next/image';
-import { Swords } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Swords, GripVertical } from 'lucide-react';
+import { motion, useDragControls } from 'framer-motion';
 import OtherPlayerActorMarker from './OtherPlayerActorMarker';
 
 interface Conflict {
@@ -49,20 +49,31 @@ function PlayerCircle({ avatar, size = 32 }: { avatar: string; size?: number }) 
 }
 
 export default function ConflictsSidebar({ conflicts, resolvedIds, activeConflictLocId, onSelectConflict }: ConflictsSidebarProps) {
+    const dragControls = useDragControls();
     if (conflicts.length === 0) return null;
 
     return (
         <motion.div
+            drag
+            dragControls={dragControls}
+            dragListener={false}
+            dragMomentum={false}
             initial={{ x: 100, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            className="absolute right-0 top-1/2 -translate-y-1/2 z-[100] bg-[#0d0d12]/95 backdrop-blur-md border-l border-t border-b border-[#d4af37]/30 rounded-l-2xl p-4 flex flex-col gap-4 shadow-[0_0_30px_rgba(0,0,0,0.8)] min-w-[320px] max-h-[85vh] overflow-y-auto pointer-events-auto custom-scrollbar"
+            className="fixed right-12 top-1/2 -translate-y-1/2 z-[100] bg-[#0d0d12]/95 backdrop-blur-xl border border-[#d4af37]/30 rounded-2xl p-5 flex flex-col gap-4 shadow-[0_0_50px_rgba(0,0,0,0.9)] min-w-[340px] max-h-[80vh] pointer-events-auto border-t-[#d4af37]/60"
         >
-            <div className="flex items-center gap-2 border-b border-white/10 pb-2 mb-2">
-                <Swords className="w-5 h-5 text-[#d4af37] animate-pulse" />
-                <h3 className="font-rajdhani font-bold text-[#d4af37] tracking-widest text-sm uppercase">Active Conflicts</h3>
+            <div 
+                className="flex items-center justify-between border-b border-white/10 pb-3 mb-1 cursor-grab active:cursor-grabbing group select-none"
+                onPointerDown={(e) => dragControls.start(e)}
+            >
+                <div className="flex items-center gap-2">
+                    <Swords className="w-5 h-5 text-[#d4af37] animate-pulse" />
+                    <h3 className="font-rajdhani font-bold text-[#d4af37] tracking-widest text-sm uppercase">Active Conflicts</h3>
+                </div>
+                <GripVertical className="w-5 h-5 text-white/20 group-hover:text-[#d4af37] transition-colors" />
             </div>
 
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 overflow-y-auto pr-2 custom-scrollbar">
                 {conflicts.map((conflict) => {
                     const isActive = activeConflictLocId === conflict.locId;
                     const isResolved = resolvedIds.includes(conflict.locId);
