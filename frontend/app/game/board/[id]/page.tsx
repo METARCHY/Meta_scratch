@@ -109,7 +109,7 @@ export default function GameBoardPage() {
     const [isWaitingForTieBreaker, setIsWaitingForTieBreaker] = useState(false);
     const [activeConflictLocId, setActiveConflictLocId] = useState<string | null>(null);
     const [resolvedConflicts, setResolvedConflicts] = useState<string[]>([]);
-    const localPlayerId = player.citizenId || player.address || 'p1';
+    const localPlayerId = (player.citizenId && player.citizenId !== '0000') ? player.citizenId : (player.address || 'p1');
 
     // Initial value is a placeholder; actual event is set by useEffect when phase === 1
     const [currentEvent, setCurrentEvent] = useState<EventCardDefinition | null>(null);
@@ -208,7 +208,7 @@ export default function GameBoardPage() {
     // Construct dynamic player list
     const dynamicPlayers = useMemo(() => {
         const mainPlayer = {
-            id: player.citizenId || player.address || 'p1',
+            id: localPlayerId,
             name: player.name || '080',
             avatar: player.avatar || '/avatars/golden_avatar.png',
             address: player.address
@@ -219,10 +219,11 @@ export default function GameBoardPage() {
         // Filter out current player from joined players to find opponents
         const otherPlayers = game.players
             .filter((p: any) => {
-                if (player.citizenId && p.citizenId === player.citizenId) return false;
-                if (player.address && p.address === player.address) return false;
-                if (p.name && p.name === (player.name || '080')) return false;
-                if (!player.citizenId && !player.address && p === game.players[0]) return false;
+                const pId = p.citizenId || p.address || p.id;
+                if (pId === localPlayerId) return false;
+                if (p.name && player.name && p.name === player.name) return false;
+                // If local player is a guest (0000) and this is the first player in the list, assume it's them
+                if (localPlayerId === 'p1' && p === game.players[0]) return false;
                 return true;
             })
             .map((p: any, index: number) => ({
@@ -841,7 +842,7 @@ export default function GameBoardPage() {
     };
 
     const handleNextPhaseWrapper = async (skipResolution = false) => {
-        const localPlayerId = player.citizenId || player.address || 'p1';
+        const localPlayerId = (player.citizenId && player.citizenId !== '0000') ? player.citizenId : (player.address || 'p1');
 
         // --- End of Phase 4 Rewards ---
         if (phase === 4) {
@@ -1634,7 +1635,8 @@ export default function GameBoardPage() {
                                 actorId: localPlayerId,
                                 type: '', // Trigger selection menu
                                 playerId: localPlayerId,
-                                avatar: player.avatar
+                                avatar: player.avatar,
+                                name: player.name || '080'
                             },
                             opponents: winners.filter(w => w.id !== localPlayerId).map((w, idx) => ({
                                 actorId: w.id,
@@ -1704,7 +1706,8 @@ export default function GameBoardPage() {
                                 actorId: localPlayerId,
                                 type: '', // Trigger selection menu
                                 playerId: localPlayerId,
-                                avatar: player.avatar
+                                avatar: player.avatar,
+                                name: player.name || '080'
                             },
                             opponents: winners.filter(w => w.id !== localPlayerId).map((w, idx) => ({
                                 actorId: w.id,

@@ -43,17 +43,20 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
     const isRoundTwo = reRollCount > 0;
     const [rewardAccumulator, setRewardAccumulator] = useState(0);
 
-    const localPlayerId = player.citizenId || player.address || 'p1';
+    const localPlayerId = (player.citizenId && player.citizenId !== '0000') ? player.citizenId : (player.address || 'p1');
 
     const renderSummaryList = (isRestartMode: boolean) => {
+        // Deduplicate: Ensure the local player is not accidentally included in the opponents
+        const filteredOpponents = conflict.opponents.filter(o => (o.actorId || o.playerId || o.id) !== localPlayerId);
+        
         const participants = [
             {
                 id: localPlayerId,
-                name: player.name || 'Player',
+                name: conflict.playerActor?.name || player.name || '080',
                 actorType: conflict.playerActor?.actorType || 'actor',
                 bid: conflict.playerActor?.bid
             },
-            ...conflict.opponents
+            ...filteredOpponents
         ];
 
         return (
@@ -136,7 +139,9 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                     return (
                         <div key={id} className="flex items-center justify-between text-sm py-1 border-b border-white/5 last:border-0 hover:bg-white/5 px-2 rounded-lg transition-colors">
                             <div className="flex items-center gap-2">
-                                <span className="text-white font-bold">{participant.name}'s {participant.actorType.charAt(0).toUpperCase() + participant.actorType.slice(1)}</span>
+                                <span className="text-white font-bold">
+                                    {id === localPlayerId ? 'YOU' : (participant.name || 'Citizen')}'s {participant.actorType.charAt(0).toUpperCase() + participant.actorType.slice(1)}
+                                </span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <span className={`font-black uppercase italic ${statusColor}`}>{status}</span>
@@ -163,7 +168,8 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
         if (conflict.locId !== lastLocId) {
             setLastLocId(conflict.locId);
             setRewardAccumulator(0);
-            setSurvivorIds([localPlayerId, ...conflict.opponents.map(o => o.actorId)]);
+            const filteredOppRefs = conflict.opponents.filter(o => (o.actorId || o.playerId || o.id) !== localPlayerId);
+            setSurvivorIds([localPlayerId, ...filteredOppRefs.map(o => o.actorId)]);
             
             const choices: { [id: string]: string } = {};
             conflict.opponents.forEach(opp => {
@@ -179,7 +185,7 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                     true,
                     { ...conflict, opponents: [] },
                     {},
-                    { id: localPlayerId, name: player.name || 'Player' }
+                    { id: localPlayerId, name: conflict.playerActor?.name || player.name || '080' }
                 );
                 setResult(res);
                 setStep('outcome_rsp');
@@ -479,10 +485,10 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                     </div>
                 )}
 
-                {/* Right: Opponents - Only show survivors */}
+                {/* Right: Opponents - Only show survivors and ignore duplicate local player */}
                 <div className="flex gap-10">
                     {conflict.opponents
-                        .filter(opp => survivorIds.includes(opp.actorId))
+                        .filter(opp => survivorIds.includes(opp.actorId) && opp.actorId !== localPlayerId)
                         .map((opp, idx) => (
                             <div key={opp.actorId} className={`relative w-[350px] h-[550px] flex items-end justify-center transition-all duration-1000 ${isActorLoser(opp.actorId) ? 'grayscale opacity-60' : ''}`}>
 
