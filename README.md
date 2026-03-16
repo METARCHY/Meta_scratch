@@ -94,4 +94,4 @@ For instructions on how to deploy Metarchy to your own server at `play.metarchy.
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the [MIT License](https://opensource.org/license/MIT).
