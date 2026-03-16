@@ -878,8 +878,9 @@ export default function GameBoardPage() {
             return; 
         }
 
-        if (phase === 3 && p3Step === 3 && pendingExchanges.length > 0) {
+        if (!skipResolution && phase === 3 && p3Step === 3 && pendingExchanges.length > 0) {
             await resolveActionExchanges();
+            return;
         }
 
         const { handleNextPhase } = await import('@/lib/game/PhaseEngine');
@@ -1988,8 +1989,11 @@ export default function GameBoardPage() {
         const currentDiscard = updatedDiscard || actionDiscardPile;
 
         const currentQueue = [...pendingExchanges, ...extraMoves];
+        setPendingExchanges([]); // Clear immediately to prevent infinite loop triggers
+        setIsWaitingForPlayers(false); 
+
         if (currentQueue.length === 0) {
-            handleNextPhaseWrapper();
+            handleNextPhaseWrapper(true);
             return;
         }
 
@@ -2095,7 +2099,7 @@ export default function GameBoardPage() {
             setExchangeSourceValue(null);
             setExchangeTargetPlayer(null);
             setExchangeTargetValue(null);
-            setPendingExchanges([]);
+            setPendingExchanges([]); // Double safety
             setIsWaitingForPlayers(false); // RESUME POLLING
             handleNextPhaseWrapper(true); // skipResolution=true to break infinite loop
         }, 3000);
