@@ -42,7 +42,10 @@ docker-compose up --build
 
 The application will be available at [http://localhost:3000](http://localhost:3000).
 
-### Manual Setup
+### Cloud & Remote Deployment
+For instructions on how to deploy Metarchy to your own server at `play.metarchy.space` or on Vercel, please see our [Deployment Guide](docs/DEPLOYMENT.md).
+
+### Quick Local Setup
 
 1. **Install Dependencies**:
    ```bash
