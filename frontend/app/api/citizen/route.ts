@@ -1,48 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-
-// Define the path to the JSON database
-const DATA_DIR = path.join(process.cwd(), 'data');
-const DB_PATH = path.join(DATA_DIR, 'citizens.json');
-
-// Interface for a Citizen record
-interface Citizen {
-    address: string;
-    name: string;
-    citizenId: string;
-    joinedAt: string;
-    avatar?: string;
-    isOnline: boolean;
-    lastActive: string;
-}
-
-// Helper to ensure DB exists
-function ensureDB() {
-    if (!fs.existsSync(DATA_DIR)) {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-    }
-    if (!fs.existsSync(DB_PATH)) {
-        fs.writeFileSync(DB_PATH, JSON.stringify([], null, 2));
-    }
-}
-
-// Helper to read DB
-function readDB(): Citizen[] {
-    ensureDB();
-    const data = fs.readFileSync(DB_PATH, 'utf-8');
-    try {
-        return JSON.parse(data);
-    } catch (e) {
-        return [];
-    }
-}
-
-// Helper to write DB
-function writeDB(data: Citizen[]) {
-    ensureDB();
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
-}
+import { citizenService } from '@/lib/services';
 
 // GET: Check if address is registered
 export async function GET(request: NextRequest) {
@@ -53,7 +10,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Address required' }, { status: 400 });
     }
 
-    const citizens = readDB();
+    const citizens = await citizenService.getAll();
     const citizen = citizens.find(c => c.address.toLowerCase() === address.toLowerCase());
 
     if (citizen) {
@@ -73,7 +30,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Address and Name required' }, { status: 400 });
         }
 
-        const citizens = readDB();
+        const citizens = await citizenService.getAll();
 
         // Check if already exists
         if (citizens.find(c => c.address.toLowerCase() === address.toLowerCase())) {
@@ -82,12 +39,12 @@ export async function POST(request: NextRequest) {
 
         // Generate ID (6 digit random)
         let newId = Math.floor(100000 + Math.random() * 900000).toString();
-        // Simple collision check (optional for small scale)
+        // Simple collision check
         while (citizens.find(c => c.citizenId === newId)) {
             newId = Math.floor(100000 + Math.random() * 900000).toString();
         }
 
-        const newCitizen: Citizen = {
+        const newCitizen = {
             address,
             name,
             citizenId: newId,
@@ -97,8 +54,7 @@ export async function POST(request: NextRequest) {
             lastActive: new Date().toISOString()
         };
 
-        citizens.push(newCitizen);
-        writeDB(citizens);
+        await citizenService.update(newId, newCitizen);
 
         return NextResponse.json(newCitizen);
     } catch (e) {
@@ -116,19 +72,19 @@ export async function PUT(request: NextRequest) {
             return NextResponse.json({ error: 'Address required' }, { status: 400 });
         }
 
-        const citizens = readDB();
-        const index = citizens.findIndex(c => c.address.toLowerCase() === address.toLowerCase());
+        const citizens = await citizenService.getAll();
+        const citizen = citizens.find(c => c.address.toLowerCase() === address.toLowerCase());
 
-        if (index === -1) {
+        if (!citizen) {
             return NextResponse.json({ error: 'Citizen not found' }, { status: 404 });
         }
 
-        citizens[index].isOnline = status === 'online';
-        citizens[index].lastActive = new Date().toISOString();
+        const updatedCitizen = await citizenService.update(citizen.citizenId, {
+            isOnline: status === 'online',
+            lastActive: new Date().toISOString()
+        });
 
-        writeDB(citizens);
-
-        return NextResponse.json(citizens[index]);
+        return NextResponse.json(updatedCitizen);
     } catch (e) {
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }

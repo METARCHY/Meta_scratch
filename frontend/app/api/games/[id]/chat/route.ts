@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { gameService } from '@/lib/gameService';
+import { gameService } from '@/lib/services';
 import { ChatMessage } from '@/lib/types';
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
@@ -11,7 +11,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
         }
 
-        const game = gameService.getById(params.id);
+        const game = await gameService.getById(params.id);
         if (!game) {
             return NextResponse.json({ error: 'Game not found' }, { status: 404 });
         }
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         if (!game.messages) game.messages = [];
         game.messages.push(newMessage);
 
-        gameService.update(params.id, { messages: game.messages });
+        await gameService.update(params.id, { messages: game.messages });
 
         return NextResponse.json(newMessage);
     } catch (error) {

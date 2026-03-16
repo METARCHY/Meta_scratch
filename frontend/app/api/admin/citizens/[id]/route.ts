@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { citizenService } from '@/lib/citizenService';
+import { citizenService } from '@/lib/services';
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
     try {
         const id = params.id;
         const body = await request.json();
 
-        const updatedCitizen = citizenService.update(id, body);
+        const updatedCitizen = await citizenService.update(id, body);
         if (!updatedCitizen) {
             return NextResponse.json({ error: 'Citizen not found' }, { status: 404 });
         }
@@ -20,7 +20,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
     try {
         const id = params.id;
-        const success = citizenService.delete(id);
+        const success = await citizenService.delete(id);
 
         if (!success) {
             return NextResponse.json({ error: 'Citizen not found' }, { status: 404 });

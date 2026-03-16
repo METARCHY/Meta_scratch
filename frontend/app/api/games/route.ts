@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { gameService } from '@/lib/gameService';
+import { gameService } from '@/lib/services';
 import { Game } from '@/lib/types';
 import { v4 as uuidv4 } from 'uuid';
 import { formatLog } from '@/lib/logUtils';
@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
     try {
         const { searchParams } = new URL(request.url);
         const all = searchParams.get('all') === 'true';
-        const games = gameService.getAll();
+        const games = await gameService.getAll();
         return NextResponse.json(all ? games : games.filter(g => g.status !== 'deleted'));
     } catch (error) {
         return NextResponse.json({ error: 'Failed to fetch games' }, { status: 500 });
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
-        const allGames = gameService.getAll();
+        const allGames = await gameService.getAll();
         const displayId = (allGames.length + 1).toString().padStart(3, '0');
 
         const gameId = id || uuidv4();
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
             }
         };
 
-        const createdGame = gameService.create(newGame);
+        const createdGame = await gameService.create(newGame);
         return NextResponse.json(createdGame, { status: 201 });
     } catch (error) {
         console.error("Error creating game:", error);

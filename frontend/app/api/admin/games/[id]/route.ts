@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { gameService } from '@/lib/gameService';
+import { gameService } from '@/lib/services';
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
     try {
         const id = params.id;
         const body = await request.json();
 
-        const updatedGame = gameService.update(id, body);
+        const updatedGame = await gameService.update(id, body);
         if (!updatedGame) {
             return NextResponse.json({ error: 'Game not found' }, { status: 404 });
         }
@@ -21,13 +21,13 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
     try {
         const id = params.id;
-        const game = gameService.getById(id);
+        const game = await gameService.getById(id);
 
         let success: boolean;
         if (game?.status === 'deleted') {
-            success = gameService.hardDelete(id);
+            success = await gameService.hardDelete(id);
         } else {
-            success = gameService.delete(id);
+            success = await gameService.delete(id);
         }
 
         if (!success) {
@@ -44,7 +44,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
     try {
         const id = params.id;
-        const success = gameService.restore(id);
+        const success = await gameService.restore?.(id);
 
         if (!success) {
             return NextResponse.json({ error: 'Game not found' }, { status: 404 });

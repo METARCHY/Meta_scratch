@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { gameService } from '@/lib/gameService';
+import { gameService } from '@/lib/services';
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
     try {
@@ -10,7 +10,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             return NextResponse.json({ error: 'Player ID required' }, { status: 400 });
         }
 
-        const game = gameService.getById(params.id);
+        const game = await gameService.getById(params.id);
         if (!game) {
             return NextResponse.json({ error: 'Game not found' }, { status: 404 });
         }
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             updates.startTime = Date.now();
         }
 
-        const updatedGame = gameService.update(params.id, updates);
+        const updatedGame = await gameService.update(params.id, updates);
         return NextResponse.json(updatedGame);
 
     } catch (error) {

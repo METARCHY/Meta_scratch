@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { gameService } from '@/lib/gameService';
+import { gameService } from '@/lib/services';
 import { formatLog } from '@/lib/logUtils';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
     try {
-        const game = gameService.getById(params.id);
+        const game = await gameService.getById(params.id);
         if (!game) {
             return NextResponse.json({ error: 'Game not found' }, { status: 404 });
         }
@@ -19,7 +19,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         const body = await request.json();
         const { action, player, updates } = body;
 
-        let game = gameService.getById(params.id);
+        let game = await gameService.getById(params.id);
         if (!game) {
             return NextResponse.json({ error: 'Game not found' }, { status: 404 });
         }
@@ -30,16 +30,19 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
             }
             try {
                 const logs = [...(game.logs || []), formatLog(game.displayId || game.id, `${player.name} joined`)];
-                game = gameService.addPlayer(params.id, { ...player, joinedAt: Date.now() }) || game;
-                game = gameService.update(params.id, { logs }) || game;
+                const result = await gameService.addPlayer(params.id, { ...player, joinedAt: Date.now() });
+                game = result || game;
+                const updateResult = await gameService.update(params.id, { logs });
+                game = updateResult || game;
             } catch (e: any) {
                 return NextResponse.json({ error: e.message }, { status: 400 });
             }
         } else if (action === 'add-log' && body.message) {
             const formattedMsg = formatLog(game.displayId || game.id, body.message);
-            game = gameService.update(params.id, {
+            const updateResult = await gameService.update(params.id, {
                 logs: [...(game.logs || []), formattedMsg]
-            }) || game;
+            });
+            game = updateResult || game;
         } else if (action === 'sync-turn' && body.citizenId) {
             const state: any = game.gameState || {
                 phaseTicker: 0,
@@ -71,7 +74,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
                 console.log(`[API] Phase ${state.phaseTicker} consensus reached. Board cleared.`);
             }
 
-            game = gameService.update(params.id, { gameState: state }) || game;
+            const updateResult = await gameService.update(params.id, { gameState: state });
+            game = updateResult || game;
         } else if (action === 'sync-decision' && body.citizenId && body.decisions) {
             const state: any = game.gameState || {
                 phaseTicker: 0,
@@ -85,9 +89,11 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
             if (!state.decisions[body.citizenId]) state.decisions[body.citizenId] = {};
             Object.assign(state.decisions[body.citizenId], body.decisions);
 
-            game = gameService.update(params.id, { gameState: state }) || game;
+            const updateResultFinal = await gameService.update(params.id, { gameState: state });
+            game = updateResultFinal || game;
         } else if (action === 'update' && updates) {
-            game = gameService.update(params.id, updates) || game;
+            const updateResult = await gameService.update(params.id, updates);
+            game = updateResult || game;
         }
 
         return NextResponse.json(game);
