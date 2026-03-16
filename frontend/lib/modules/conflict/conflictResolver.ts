@@ -106,12 +106,26 @@ export function resolveConflictLogic(
                 return;
             }
 
-            // Logic for a single match
+            // Logic for a single match (Official Rulebook RPS + Dummy + Recycling Bid)
             const c1 = p1.choice;
             const c2 = p2.choice;
+            
+            // Recycling bid (Draw-to-Win) elevates a draw to a win, but only if the other party DOESN'T have it
+            const p1HasRecycling = applyBids && p1.bid === 'recycling';
+            const p2HasRecycling = applyBids && p2.bid === 'recycling';
 
             if (c1 === c2) {
-                matchResults[p1.id][p2.id] = 'draw';
+                if (p1HasRecycling && !p2HasRecycling) {
+                    matchResults[p1.id][p2.id] = 'win';
+                    if (!successfulBids.some(b => b.actorId === p1.id && b.bid === 'recycling')) {
+                        successfulBids.push({ actorId: p1.id, bid: 'recycling' });
+                        logs.push(`Recycling Bid: ${p1.name}'s ${p1.actorType.toUpperCase()} wins the draw comparison!`);
+                    }
+                } else if (!p1HasRecycling && p2HasRecycling) {
+                    matchResults[p1.id][p2.id] = 'lose';
+                } else {
+                    matchResults[p1.id][p2.id] = 'draw';
+                }
             } else if (
                 (c1 === 'rock' && (c2 === 'scissors' || c2 === 'dummy')) ||
                 (c1 === 'paper' && (c2 === 'rock' || c2 === 'dummy')) ||
@@ -198,24 +212,7 @@ export function resolveConflictLogic(
 
     // --- Bid Processing (Only on Round 1) ---
     if (applyBids) {
-        // 1. Recycling (Draw) Bids
-        if (isDraw) {
-            const recyclingBidders = participants.filter(p => p.bid === 'recycling');
-            if (recyclingBidders.length === 1) {
-                const b = recyclingBidders[0];
-                logs.push(`Recycling Bid: ${b.name}'s ${b.actorType.toUpperCase()} wins the Draw!`);
-                finalWinnerId = b.id;
-                isDraw = false;
-                tieIds = [];
-                survivorIds = [b.id];
-                loserIds = participants.filter(p => p.id !== b.id).map(p => p.id);
-            } else if (recyclingBidders.length > 1) {
-                logs.push('Multiple Recycling Bids: Conflict remains a Draw!');
-            }
-            recyclingBidders.forEach(b => successfulBids.push({ actorId: b.id, bid: 'recycling' }));
-        }
-
-        // 2. Electricity (Lose) Bids
+        // 1. Electricity (Lose) Bids
         const electricityBidders = participants.filter(p => p.bid === 'electricity');
         if (electricityBidders.length > 0) {
             let triggeredRestart = false;

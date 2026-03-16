@@ -486,6 +486,9 @@ export default function GameBoardPage() {
                 return;
             }
 
+            // PAUSE POLLING during submission to prevent race conditions
+            setIsWaitingForPlayers(true);
+
             // Actual execution on Submit
             const actor = placedActors.find(a => a.actorId === relocationSource);
             const extractedType = (actor?.actorType || (actor as any)?.type || 'Actor').toString().toLowerCase();
@@ -564,6 +567,9 @@ export default function GameBoardPage() {
                 addLog("Please finalize your exchange selection before submitting.");
                 return;
             }
+
+            // PAUSE POLLING during submission
+            setIsWaitingForPlayers(true);
 
             // Actual execution on Submit
             const newExchange = { 
@@ -732,7 +738,8 @@ export default function GameBoardPage() {
             const isDifferent = serverInventory.length !== actionHand.length || 
                                 serverInventory.some((c: any, i: number) => c.instanceId !== actionHand[i]?.instanceId);
             
-            if (isDifferent) {
+            // POLLING GUARD: Don't overwrite local hand if we are mid-submission
+            if (isDifferent && !isWaitingForPlayers) {
                 console.log("[DEBUG] Initializing local inventory from server state:", serverInventory);
                 setActionHand(serverInventory);
             }
@@ -741,7 +748,7 @@ export default function GameBoardPage() {
         // 0.2 Initialize Discard Pile and Disabled Locations from Server
         if (game.gameState.discardPile) {
             const serverDiscard = game.gameState.discardPile;
-            if (serverDiscard.length !== actionDiscardPile.length) {
+            if (serverDiscard.length !== actionDiscardPile.length && !isWaitingForPlayers) {
                 console.log("[DEBUG] Initializing action discard pile from server:", serverDiscard);
                 setActionDiscardPile(serverDiscard);
             }
@@ -1054,8 +1061,10 @@ export default function GameBoardPage() {
     };
 
     // --- Opponent Emulation ---
+    const botPlacementTriggered = useRef<boolean>(false);
     useEffect(() => {
-        if (phase === 2 && !opponentsReady && game) {
+        if (phase === 2 && !opponentsReady && game && !botPlacementTriggered.current) {
+            botPlacementTriggered.current = true;
             triggerOpponentPlacements(
                 game,
                 [], 
@@ -1066,6 +1075,8 @@ export default function GameBoardPage() {
                 addLog,
                 opponentsData
             );
+        } else if (phase !== 2) {
+            botPlacementTriggered.current = false;
         }
     }, [phase, game, opponentsReady]);
 
@@ -2082,7 +2093,8 @@ export default function GameBoardPage() {
             setExchangeTargetPlayer(null);
             setExchangeTargetValue(null);
             setPendingExchanges([]);
-            handleNextPhaseWrapper();
+            setIsWaitingForPlayers(false); // RESUME POLLING
+            handleNextPhaseWrapper(true); // skipResolution=true to break infinite loop
         }, 3000);
     };
 
@@ -2256,7 +2268,8 @@ export default function GameBoardPage() {
             setTimeout(() => {
                 setRelocResults(null);
                 setPendingRelocations([]);
-                handleNextPhaseWrapper();
+                setIsWaitingForPlayers(false); // RESUME POLLING
+                handleNextPhaseWrapper(true); // skipResolution=true to break infinite loop
             }, 3000);
         } else {
             handleNextPhaseWrapper();

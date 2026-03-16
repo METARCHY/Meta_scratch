@@ -250,8 +250,10 @@ export const triggerOpponentPlacements = async (
                 }
             }
             
+            const deterministicId = `${botId}_${def.type}`;
+            
             const action = {
-                actorId: `${botId}_a${i}_${Date.now()}`,
+                actorId: deterministicId,
                 playerId: botId,
                 locId: loc.id,
                 type: token,
@@ -263,7 +265,10 @@ export const triggerOpponentPlacements = async (
                 bid: bid
             };
 
-            setPlacedActors(prev => [...prev, action]);
+            setPlacedActors(prev => {
+                const filtered = prev.filter(a => a.actorId !== deterministicId);
+                return [...filtered, action];
+            });
 
             // Deduction logic for bidding
             if (bid) {

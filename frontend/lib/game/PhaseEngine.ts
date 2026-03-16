@@ -26,114 +26,56 @@ export const handleNextPhase = (
     allActionCommits?: Record<string, number[]>, // New: tracks which steps have cards for which player
     isTest?: boolean
 ): { newPhase: number, newTurn: number, isGameOver: boolean, winners: { id: string, name: string, vp: number }[] } => {
-    let newPhase = phase;
-    let newTurn = turn;
-    let isGameOver = false;
-    let winners: { id: string, name: string, vp: number }[] = [];
+    let nextPhase = phase;
+    let nextTurn = turn;
+    let nextP3Step = p3Step;
 
-    // Calculate max turns based on player count
-    const maxTurns = (() => {
-        if (isTest) {
-            addLog(`[DEBUG] Test mode detected - maxTurns = 5`);
-            return 5;
-        }
-        const playerCount = dynamicPlayers.length;
-        if (playerCount === 2 || playerCount === 3) return 5;
-        if (playerCount === 4) return 6;
-        return 5;
-    })();
+    // --- 1. Determine Next Physical State ---
 
-
-    // --- WIN CONDITIONS (Checked at end of Phase 4) ---
-    // CRITICAL: TRIGGER END GAME AT END OF TURN 5 PHASE 4
-    if (phase === 4 && turn >= maxTurns) {
-        addLog(`--- TURN ${turn} CONCLUDED: CALCULATING FINAL RESULTS ---`);
-        const playerVP = calculateVictoryPoints(player.resources || {});
-        const opponentVPs = dynamicPlayers.map(p => ({ 
-            id: p.id, 
-            name: p.name, 
-            vp: calculateVictoryPoints(p.resources || {}) 
-        }));
-        
-        const allResults = [{ id: player.citizenId || 'p1', name: player.name || '080', vp: playerVP }, ...opponentVPs];
-        const topVP = Math.max(...allResults.map(v => v.vp));
-        const potentialWinners = allResults.filter(v => v.vp === topVP);
-
-        if (potentialWinners.length === 1) {
-            addLog(`GAME FINISHED: ${potentialWinners[0].name.toUpperCase()} WINS WITH ${topVP} VP!`);
-            return { newPhase, newTurn, isGameOver: true, winners: potentialWinners };
-        } else {
-            addLog(`TIE DETECTED: ${potentialWinners.length} PLAYERS HAVE ${topVP} VP!`);
-            addLog(`COMMENCING TIE-BREAKER: Proceeding to Market Phase for tied players.`);
-            // DO NOT end game. Return isGameOver: false to proceed to Phase 5.
-            return { newPhase, newTurn, isGameOver: false, winners: potentialWinners };
-        }
-    }
-
-
-
-    // Phase 3 Sub-step Logic (Now with dynamic skipping)
+    // Phase 3 Sub-step Logic
     if (phase === 3) {
         const stepNames = ["SELECTION", "BLOCKING LOCATIONS", "RELOCATION", "CHANGE VALUES", "SUMMARY"];
-        
         const getNextValidStep = (current: number): number => {
             if (!allActionCommits) return current + 1;
-            
-            // Check steps 1, 2, 3
             for (let s = current + 1; s <= 3; s++) {
-                const anyCommit = Object.values(allActionCommits).some(steps => 
-                    Array.isArray(steps) && steps.includes(s)
-                );
+                const anyCommit = Object.values(allActionCommits).some(steps => Array.isArray(steps) && steps.includes(s));
                 if (anyCommit) return s;
-                
-                // Log that we are skipping this step
                 addLog(`SKIPPING ${stepNames[s]}: No cards played.`);
             }
-            return 4; // Go to Summary / Done
+            return 4;
         };
 
         if (p3Step < 4) {
-            const nextStep = getNextValidStep(p3Step) as 0 | 1 | 2 | 3 | 4;
-            setP3Step(nextStep);
+            nextP3Step = getNextValidStep(p3Step) as 0 | 1 | 2 | 3 | 4;
+            setP3Step(nextP3Step);
             
-            if (nextStep < 4) {
+            if (nextP3Step < 4) {
                 addLog("All players are ready");
-                addLog(`STEP: ${stepNames[nextStep]}`);
-                setOpponentsReady(false); // Reset readiness for the new step
-                triggerBotPhase3ActionsWrapper(nextStep);
+                addLog(`STEP: ${stepNames[nextP3Step]}`);
+                setOpponentsReady(false);
+                triggerBotPhase3ActionsWrapper(nextP3Step);
             } else {
                 addLog("ACTION PHASE CONCLUDED");
-                // Reset readiness for Phase 4 transition
                 setOpponentsReady(true);
             }
-            return { newPhase, newTurn, isGameOver, winners };
+            // If it's just a step change, we don't finish turn or phase 4 yet
+            return { newPhase: phase, newTurn: turn, isGameOver: false, winners: [] };
         }
     }
 
-
+    // Normal Phase/Turn Advancement
     if (phase < 5) {
-        newPhase = phase + 1;
-        setPhase(newPhase);
-        // Reset P3 step when leaving P3
-        if (newPhase !== 3) setP3Step(0);
+        nextPhase = phase + 1;
+        setPhase(nextPhase);
+        if (nextPhase !== 3) setP3Step(0);
+        if (nextPhase === 5) setP5Step(3); // Skip Player Exchange in Phase 5 for now
 
-        // MVP: Skip Player Exchange (Steps 1 & 2) and go straight to Buy Action Card (Step 3)
-        if (newPhase === 5) setP5Step(3);
-
-        if (newPhase === 5) {
-            // Remove all actors from the board at the end of Phase 4
+        if (nextPhase === 5) {
             setPlacedActors([]);
             setResolvedConflicts([]);
-            // Clear any locations disabled by action cards this turn
             setDisabledLocations([]);
-        }
-
-        if (newPhase === 3) {
-            addLog("STEP: BLOCKING LOCATIONS");
-            triggerBotPhase3ActionsWrapper(1);
-        } 
-        
-        if (newPhase === 4) {
+            setOpponentsReady(true);
+        } else if (nextPhase === 4) {
             // Log detailing conflicts
             const locIdsWithActors = Array.from(new Set(placedActors.map(a => a.locId))).filter(id => !disabledLocations.includes(id));
             locIdsWithActors.forEach(locId => {
@@ -152,30 +94,61 @@ export const handleNextPhase = (
                 });
             });
             setOpponentsReady(true);
-        } else if (newPhase === 5) {
-            setOpponentsReady(true);
-        } else if (newPhase === 3) {
-            // Reset readiness for sub-step actions
+        } else if (nextPhase === 3) {
+            addLog("STEP: BLOCKING LOCATIONS");
+            triggerBotPhase3ActionsWrapper(1);
             setOpponentsReady(false);
         }
-
-        addLog(`PHASE ${newPhase} BEGINS`);
+        addLog(`PHASE ${nextPhase} BEGINS`);
     } else {
-        newTurn = turn + 1;
-        setTurn(newTurn);
-
-        // Turn 1 skips Event Phase (1) straight to Distribution Phase (2).
-        newPhase = (newTurn === 1) ? 2 : 1;
-        setPhase(newPhase);
+        nextTurn = turn + 1;
+        setTurn(nextTurn);
+        nextPhase = (nextTurn === 1) ? 2 : 1;
+        setPhase(nextPhase);
         setP3Step(0);
-
         setPlacedActors([]);
         setDisabledLocations([]);
-
         setOpponentsReady(false);
-        addLog(`TURN ${newTurn} BEGINS`);
-        if (newPhase === 1) addLog(`PHASE 1 BEGINS`);
+        addLog(`TURN ${nextTurn} BEGINS`);
+        if (nextPhase === 1) addLog(`PHASE 1 BEGINS`);
     }
 
-    return { newPhase, newTurn, isGameOver, winners };
+    const maxTurns = (() => {
+        if (isTest) return 5;
+        const playerCount = dynamicPlayers.length;
+        if (playerCount === 2 || playerCount === 3) return 5;
+        if (playerCount === 4) return 6;
+        return 5;
+    })();
+
+    // --- 2. EVALUATE VICTORY (End of Phase 4 only) ---
+
+    if (phase === 4) {
+        // If it's the last turn (default 5 or maxTurns), or if an extra tie-breaker turn just ended
+        if (turn >= maxTurns) {
+            addLog(`--- TURN ${turn} CONCLUDED: EVALUATING FINAL RESULTS ---`);
+            const playerVP = calculateVictoryPoints(player.resources || {});
+            const opponentVPs = dynamicPlayers.map(p => ({ 
+                id: p.id, 
+                name: p.name, 
+                vp: calculateVictoryPoints(p.resources || {}) 
+            }));
+            
+            const allResults = [{ id: player.citizenId || 'p1', name: player.name || '080', vp: playerVP }, ...opponentVPs];
+            const topVP = Math.max(...allResults.map(v => v.vp));
+            const potentialWinners = allResults.filter(v => v.vp === topVP);
+
+            if (potentialWinners.length === 1) {
+                addLog(`GAME FINISHED: ${potentialWinners[0].name.toUpperCase()} WINS WITH ${topVP} VP!`);
+                return { newPhase: nextPhase, newTurn: nextTurn, isGameOver: true, winners: potentialWinners };
+            } else {
+                addLog(`TIE DETECTED: ${potentialWinners.length} PLAYERS HAVE ${topVP} VP!`);
+                addLog(`COMMENCING TIE-BREAKER: Turn ${turn + 1} will be the extra deciding turn.`);
+                // Game proceeds to Phase 5, then Turn X+1
+                return { newPhase: nextPhase, newTurn: nextTurn, isGameOver: false, winners: potentialWinners };
+            }
+        }
+    }
+
+    return { newPhase: nextPhase, newTurn: nextTurn, isGameOver: false, winners: [] };
 };

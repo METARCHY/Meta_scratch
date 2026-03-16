@@ -108,9 +108,9 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                             else if (actorType === 'scientist') resName = 'knowledge';
                             else if (actorType === 'artist') resName = 'art';
                             
-                            const label = isRobot ? (total === 1 ? 'Resource' : 'Resources') : (total === 1 ? 'Value' : 'Values');
-                            const capitalizedResName = resName.charAt(0).toUpperCase() + resName.slice(1);
-                            rewardText = `${total} ${label}${capitalizedResName ? ` (${capitalizedResName})` : ''}`;
+                            const label = isRobot ? (total === 1 ? 'Resource' : 'Resources') : (resName === 'action_card' ? 'Action Card' : (total === 1 ? 'Value' : 'Values'));
+                            const capitalizedResName = resName === 'action_card' ? '' : resName.charAt(0).toUpperCase() + resName.slice(1);
+                            rewardText = resName === 'action_card' ? `${total} Action Card` : `${total} ${label}${capitalizedResName ? ` (${capitalizedResName})` : ''}`;
                         } else if (isSharer || isTie) {
                             status = "DRAW";
                             statusColor = "text-blue-400";
@@ -123,9 +123,9 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                                 else if (actorType === 'scientist') resName = 'knowledge';
                                 else if (actorType === 'artist') resName = 'art';
                                 
-                                const label = isRobot ? 'Resource' : 'Value';
-                                const capitalizedResName = resName.charAt(0).toUpperCase() + resName.slice(1);
-                                rewardText = `1 ${label}${capitalizedResName ? ` (${capitalizedResName})` : ''}`;
+                                const label = isRobot ? 'Resource' : (resName === 'action_card' ? 'Action Card' : 'Value');
+                                const capitalizedResName = resName === 'action_card' ? '' : resName.charAt(0).toUpperCase() + resName.slice(1);
+                                rewardText = resName === 'action_card' ? `1 Action Card` : `1 ${label}${capitalizedResName ? ` (${capitalizedResName})` : ''}`;
                             }
                         } else if (isLoser || isExitedEarly) {
                             status = "LOSE";
@@ -614,7 +614,8 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                                     let subtext = "";
 
                                     if (isWinner) {
-                                        header = conflict.opponents.length === 0 ? "SECURED" : "WIN";
+                                        const isActionCard = conflict.resourceType === 'action_card';
+                                        header = isActionCard ? "ACTION CARD SECURED" : (conflict.opponents.length === 0 ? "SECURED" : "WIN");
                                         textColor = "text-[#d4af37]";
                                         subtext = conflict.opponents.length === 0 ? "Mining operations secured without opposition." : "Your arguments prevailed over the opposition.";
                                     } else if (isLoser) {
@@ -681,6 +682,7 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                                                                 if (actorType === 'politician') return RESOURCE_ICONS['power'];
                                                                 if (actorType === 'scientist') return RESOURCE_ICONS['knowledge'];
                                                                 if (actorType === 'artist') return RESOURCE_ICONS['art'];
+                                                                if (conflict.resourceType === 'action_card') return '/actions/Teleportation.png';
                                                                 if (conflict.resourceType) return RESOURCE_ICONS[conflict.resourceType] || RESOURCE_ICONS['fame'];
                                                                 return RESOURCE_ICONS['fame'];
                                                             })()}
@@ -698,7 +700,7 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                                                     </div>
                                                 </div>
                                                 <p className="text-xl font-bold uppercase text-white">
-                                                    {conflict.playerActor?.actorType?.toLowerCase() === 'robot' ? 'Resource Produced' : 'Value Secured'}
+                                                    {conflict.resourceType === 'action_card' ? 'Action Card Secured' : (conflict.playerActor?.actorType?.toLowerCase() === 'robot' ? 'Resource Produced' : 'Value Secured')}
                                                 </p>
                                             </div>
                                         )}
