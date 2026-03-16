@@ -201,6 +201,8 @@ export interface Game {
         actionDeck: string[];
         eventDeckTurn?: number;
         currentEventId?: string;
+        activePlayerIds?: string[]; // IDs of players in the tie-breaker
+        isTieBreaker?: boolean;
     };
 }
 

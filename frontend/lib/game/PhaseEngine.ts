@@ -1,5 +1,6 @@
 import { Dispatch, SetStateAction } from 'react';
 import { LOCATIONS } from '@/data/gameConstants';
+import { calculateVictoryPoints } from '@/lib/modules/resources/resourceManager';
 
 /**
  * Handles the advancement of game phases and sub-steps in Metarchy Game.
@@ -24,10 +25,11 @@ export const handleNextPhase = (
     setOpponentsReady: Dispatch<SetStateAction<boolean>>,
     allActionCommits?: Record<string, number[]>, // New: tracks which steps have cards for which player
     isTest?: boolean
-): { newPhase: number, newTurn: number, isGameOver: boolean } => {
+): { newPhase: number, newTurn: number, isGameOver: boolean, winners: { id: string, name: string, vp: number }[] } => {
     let newPhase = phase;
     let newTurn = turn;
     let isGameOver = false;
+    let winners: { id: string, name: string, vp: number }[] = [];
 
     // Calculate max turns based on player count
     const maxTurns = (() => {
@@ -41,42 +43,31 @@ export const handleNextPhase = (
         return 5;
     })();
 
-    // Helper to calculate VP for any player (consistent with fame distribution)
-    const calculateVP = (res: any) => {
-        const p = res.power, k = res.knowledge, a = res.art, f = res.fame;
-        let totalFame = f;
-        let pV = p, kV = k, aV = a;
-        while (totalFame > 0) {
-            if (pV <= kV && pV <= aV) pV++;
-            else if (kV <= pV && kV <= aV) kV++;
-            else aV++;
-            totalFame--;
-        }
-        return Math.min(pV, kV, aV);
-    };
 
     // --- WIN CONDITIONS (Checked at end of Phase 4) ---
     // CRITICAL: TRIGGER END GAME AT END OF TURN 5 PHASE 4
     if (phase === 4 && turn >= maxTurns) {
         addLog(`--- TURN ${turn} CONCLUDED: CALCULATING FINAL RESULTS ---`);
-        const playerVP = calculateVP(player.resources || {});
+        const playerVP = calculateVictoryPoints(player.resources || {});
         const opponentVPs = dynamicPlayers.map(p => ({ 
             id: p.id, 
             name: p.name, 
-            vp: calculateVP(p.resources || {}) 
+            vp: calculateVictoryPoints(p.resources || {}) 
         }));
         
         const allResults = [{ id: player.citizenId || 'p1', name: player.name || '080', vp: playerVP }, ...opponentVPs];
         const topVP = Math.max(...allResults.map(v => v.vp));
-        const winners = allResults.filter(v => v.vp === topVP);
+        const potentialWinners = allResults.filter(v => v.vp === topVP);
 
-        if (winners.length === 1) {
-            addLog(`GAME FINISHED: ${winners[0].name.toUpperCase()} WINS WITH ${topVP} VP!`);
+        if (potentialWinners.length === 1) {
+            addLog(`GAME FINISHED: ${potentialWinners[0].name.toUpperCase()} WINS WITH ${topVP} VP!`);
+            return { newPhase, newTurn, isGameOver: true, winners: potentialWinners };
         } else {
-            addLog(`GAME FINISHED: IT'S A DRAW WITH ${topVP} VP!`);
+            addLog(`TIE DETECTED: ${potentialWinners.length} PLAYERS HAVE ${topVP} VP!`);
+            addLog(`COMMENCING TIE-BREAKER: Proceeding to Market Phase for tied players.`);
+            // DO NOT end game. Return isGameOver: false to proceed to Phase 5.
+            return { newPhase, newTurn, isGameOver: false, winners: potentialWinners };
         }
-        
-        return { newPhase, newTurn, isGameOver: true };
     }
 
 
@@ -115,7 +106,7 @@ export const handleNextPhase = (
                 // Reset readiness for Phase 4 transition
                 setOpponentsReady(true);
             }
-            return { newPhase, newTurn, isGameOver };
+            return { newPhase, newTurn, isGameOver, winners };
         }
     }
 
@@ -186,5 +177,5 @@ export const handleNextPhase = (
         if (newPhase === 1) addLog(`PHASE 1 BEGINS`);
     }
 
-    return { newPhase, newTurn, isGameOver };
+    return { newPhase, newTurn, isGameOver, winners };
 };

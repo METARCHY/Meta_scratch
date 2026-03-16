@@ -29,11 +29,11 @@ import { Briefcase } from 'lucide-react';
 import { formatLog } from '@/lib/logUtils';
 import { triggerBotPhase3Actions, triggerOpponentPlacements } from '@/lib/game/BotAI';
 import { handleNextPhase } from '@/lib/game/PhaseEngine';
-import { getActorRewardType, calculateReward } from '@/lib/modules/resources/resourceManager';
+import { getActorRewardType, calculateReward, calculateVictoryPoints } from '@/lib/modules/resources/resourceManager';
 
 // Constants
 import { EVENTS, LOCATIONS, ACTION_CARDS, getConflicts, ALLOWED_MOVES } from '@/data/gameConstants';
-import { RSP_ICONS } from '@/data/assetManifest';
+import { RSP_ICONS, RESOURCE_ICONS } from '@/data/assetManifest';
 
 // --- MOCK DATA FOR ACTORS (Assuming these will come from State/Wallet later) ---
 const ACTOR_TYPES: { [key: string]: { name: string, avatar: string, headAvatar: string } } = {
@@ -104,6 +104,9 @@ export default function GameBoardPage() {
     const [opponentsReady, setOpponentsReady] = useState(false);
     const [opponentsData, setOpponentsData] = useState<Record<string, OpponentData>>({});
     const [isGameOver, setIsGameOver] = useState(false);
+    const [isTieBreakerScreen, setIsTieBreakerScreen] = useState(false);
+    const [tieWinners, setTieWinners] = useState<{ id: string, name: string, vp: number }[]>([]);
+    const [isWaitingForTieBreaker, setIsWaitingForTieBreaker] = useState(false);
     const [activeConflictLocId, setActiveConflictLocId] = useState<string | null>(null);
     const [resolvedConflicts, setResolvedConflicts] = useState<string[]>([]);
     const localPlayerId = player.citizenId || player.address || 'p1';
@@ -517,6 +520,27 @@ export default function GameBoardPage() {
 
             addLog(`Relocation Submitted: ${extractedType} to ${selectedHex.toUpperCase()}`);
             
+            // SYNC HAND AND DISCARD
+            if (game && game.id && !game.isTest) {
+                try {
+                    fetch(`/api/games/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'sync-turn',
+                            citizenId: myId,
+                            resources: {
+                                ...resources,
+                                actionHand: newHand,
+                                actionDiscardPile: newDiscard
+                            }
+                        })
+                    });
+                } catch (e) {
+                    console.error("Failed to sync hand/discard", e);
+                }
+            }
+
             // Check if we have more relocation cards to play
             const remainingCards = relocationCardsCount - 1;
 
@@ -599,11 +623,31 @@ export default function GameBoardPage() {
                 const nextOrdinal = ordinal[currentExchangeIndex + 1] || `${currentExchangeIndex + 2}TH`;
                 addLog(`Initializing the ${nextOrdinal} Change Values card...`);
             }
+            // Immediately set waiting state so UI button changes to "WAITING FOR OTHERS..."
+            setIsWaitingForPlayers(true);
+
+            // SYNC HAND AND DISCARD
+            if (game && game.id && !game.isTest) {
+                try {
+                    await fetch(`/api/games/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'sync-turn',
+                            citizenId: myId,
+                            resources: {
+                                ...resources,
+                                actionHand: newHand,
+                                actionDiscardPile: newDiscard
+                            }
+                        })
+                    });
+                } catch (e) {
+                    console.error("Failed to sync hand/discard", e);
+                }
+            }
             return;
         }
-
-        // Immediately set waiting state so UI button changes to "WAITING FOR OTHERS..."
-        setIsWaitingForPlayers(true);
 
         // If this is a Test Game against bots, we bypass the multiplayer lock entirely
         if (game.isTest) {
@@ -907,12 +951,21 @@ export default function GameBoardPage() {
             Object.assign(finalCommits, botActionCommitsRef.current);
         }
 
-        const { isGameOver: gameEnded } = handleNextPhase(
+        const { isGameOver: gameEnded, winners: finalWinners } = handleNextPhase(
             turn, phase, p3Step, player, dynamicPlayers, placedActors, disabledLocations, 
             addLog, triggerBotPhase3ActionsWrapper, setPhase, setP3Step, setP5Step, 
             setTurn, setPlacedActors, setResolvedConflicts, setDisabledLocations, 
             setOpponentsReady, finalCommits, game?.isTest
         );
+
+        // Calculate max turns based on player count
+        const maxTurns = (() => {
+            if (game?.isTest) return 5;
+            const playerCount = dynamicPlayers.length;
+            if (playerCount === 2 || playerCount === 3) return 5;
+            if (playerCount === 4) return 6;
+            return 5;
+        })();
 
         if (gameEnded) {
             setIsGameOver(true);
@@ -923,6 +976,35 @@ export default function GameBoardPage() {
                     body: JSON.stringify({ action: 'update', updates: { status: 'finished' } })
                 });
             } catch (e) { console.error("Failed to sync game over state", e); }
+            return;
+        }
+
+        // TIE-BREAKER DETECTION: If it was the end of Phase 4 of the last turn, and handleNextPhase didn't end the game
+        if (phase === 4 && turn >= maxTurns && finalWinners.length > 1) {
+            setTieWinners(finalWinners);
+            setIsTieBreakerScreen(true);
+            
+            // Sync tie-breaker status to server
+            if (game && game.id && !game.isTest) {
+                const tiedIds = finalWinners.map(w => w.id);
+                try {
+                    fetch(`/api/games/${id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            action: 'update', 
+                            updates: { 
+                                gameState: { 
+                                    ...game.gameState, 
+                                    isTieBreaker: true,
+                                    activePlayerIds: tiedIds
+                                } 
+                            } 
+                        })
+                    });
+                    addLog(`The game continues! Tie-breaker involves: ${finalWinners.map(w => w.name).join(', ')}`);
+                } catch (e) { console.error("Failed to sync tie-breaker state", e); }
+            }
             return;
         }
 
@@ -944,21 +1026,39 @@ export default function GameBoardPage() {
         }
     };
 
+    const handleContinueTieBreaker = async () => {
+        const myId = player.citizenId || player.address || 'p1';
+        const isTied = tieWinners.some(w => w.id === myId);
+        
+        if (isTied) {
+            setIsWaitingForTieBreaker(true);
+            // Sync readiness via sync-turn (consensus)
+            try {
+                await fetch(`/api/games/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'sync-turn',
+                        citizenId: myId,
+                    })
+                });
+                addLog(`${player.name || '080'} is ready for the tie-breaker!`);
+            } catch (e) {
+                console.error("Failed to sync tie-breaker readiness", e);
+                setIsWaitingForTieBreaker(false);
+            }
+        } else {
+            // Non-tied players go back to lobby
+            router.push('/');
+        }
+    };
+
     // --- Opponent Emulation ---
     useEffect(() => {
         if (phase === 2 && !opponentsReady && game) {
-            triggerOpponentPlacements();
-        }
-    }, [phase, game, opponentsReady]);
-
-    const triggerOpponentPlacements = async () => {
-        if (isPlacingRef.current) return;
-        isPlacingRef.current = true;
-        try {
-            const { triggerOpponentPlacements } = await import('@/lib/game/BotAI');
-            await triggerOpponentPlacements(
+            triggerOpponentPlacements(
                 game,
-                [], // AUTO_PLACEMENTS deprecated
+                [], 
                 PLAYERS,
                 setOpponentsReady,
                 setPlacedActors,
@@ -966,10 +1066,8 @@ export default function GameBoardPage() {
                 addLog,
                 opponentsData
             );
-        } finally {
-            isPlacingRef.current = false;
         }
-    };
+    }, [phase, game, opponentsReady]);
 
 
 
@@ -2785,31 +2883,23 @@ export default function GameBoardPage() {
                         )}
                     </div>
 
+                    {/* Game Over / Tie-Breaker Screen - Top Level Overlay */}
+                    {(isGameOver || isTieBreakerScreen) && (() => {
+                        const playersWithVP = isTieBreakerScreen ? 
+                            dynamicPlayers.map(p => ({
+                                ...p,
+                                finalVP: tieWinners.find(w => w.id === p.id)?.vp || calculateVictoryPoints( (p.id === localPlayerId ? resources : (opponentsData[p.id]?.resources || {})) as any),
+                                isMain: p.id === localPlayerId,
+                                isTied: tieWinners.some(w => w.id === p.id)
+                            })) :
+                            dynamicPlayers.map((p) => {
+                                const isMain = p.id === localPlayerId;
+                                const res = isMain ? resources : (opponentsData[p.id]?.resources || {});
+                                const finalVP = calculateVictoryPoints(res as any);
+                                return { ...p, finalVP, isMain, isTied: false };
+                            });
 
-
-                    {/* Game Over Screen - Top Level Overlay */}
-                    {isGameOver && (() => {
-                        // 1. Calculate final VPs for everyone
-                        const playersWithVP = dynamicPlayers.map((p) => {
-                            const isMain = p.id === localPlayerId;
-                            const res = isMain ? resources : (opponentsData[p.id]?.resources || {});
-                            const { power = 0, knowledge = 0, art = 0, fame = 0 } = res as any;
-
-                            let currP = power, currK = knowledge, currA = art, currF = fame;
-                            while (currF > 0) {
-                                if (currP <= currK && currP <= currA) currP++;
-                                else if (currK <= currP && currK <= currA) currK++;
-                                else currA++;
-                                currF--;
-                            }
-                            const finalVP = Math.min(currP, currK, currA);
-                            return { ...p, finalVP, isMain };
-                        });
-
-                        // 2. Find Max VP
-                        const maxVP = Math.max(...playersWithVP.map(p => p.finalVP));
-
-                        // 3. Check if local player won
+                        const maxVP = isTieBreakerScreen ? (tieWinners[0]?.vp || 0) : Math.max(...playersWithVP.map(p => p.finalVP));
                         const localPlayerResults = playersWithVP.find(p => p.isMain);
                         const playerWon = localPlayerResults && localPlayerResults.finalVP === maxVP;
 
@@ -2818,9 +2908,11 @@ export default function GameBoardPage() {
                                 <div className="flex flex-col items-center gap-10 p-16 border-[3px] border-[#d4af37]/50 bg-gradient-to-b from-[#1a1a24] to-[#0d0d12] rounded-[3rem] shadow-[0_0_150px_rgba(212,175,55,0.2)]">
                                     <div className="text-center relative">
                                         <h1 className={`text-8xl font-black uppercase tracking-[0.2em] animate-in slide-in-from-bottom-5 duration-700 ${playerWon ? 'text-[#d4af37] drop-shadow-[0_0_40px_rgba(212,175,55,0.8)]' : 'text-red-500 drop-shadow-[0_0_40px_rgba(255,0,0,0.8)]'}`}>
-                                            {playerWon ? 'VICTORY' : 'DEFEAT'}
+                                            {isTieBreakerScreen ? "POTENTIAL WINNER" : (playerWon ? 'VICTORY' : 'DEFEAT')}
                                         </h1>
-                                        <p className="text-white/50 text-xl font-rajdhani uppercase tracking-[0.4em] mt-4">Simulation Concluded</p>
+                                        <p className="text-white/50 text-xl font-rajdhani uppercase tracking-[0.4em] mt-4">
+                                            {isTieBreakerScreen ? "TIE DETECTED — SURVIVAL CONTINUES" : "Simulation Concluded"}
+                                        </p>
                                     </div>
 
                                     <div className="flex gap-16 mt-8">
@@ -2828,22 +2920,18 @@ export default function GameBoardPage() {
                                             const isWinner = p.finalVP === maxVP;
                                             return (
                                                 <div key={p.id} className={`relative flex flex-col items-center gap-6 p-8 rounded-3xl border-2 transition-all duration-700 animate-in zoom-in-95 delay-${idx * 200} ${isWinner ? 'border-[#d4af37] bg-[#d4af37]/10 shadow-[0_0_50px_rgba(212,175,55,0.5)] scale-110 z-10' : 'border-white/10 bg-black/40 opacity-70 scale-95'}`}>
-
                                                     {isWinner && (
                                                         <div className="absolute -top-10 text-[#d4af37] animate-bounce drop-shadow-[0_0_20px_rgba(212,175,55,1)]">
                                                             <Crown size={64} strokeWidth={2.5} />
                                                         </div>
                                                     )}
-
                                                     <div className={`relative w-28 h-28 rounded-full border-4 p-1 ${isWinner ? 'border-[#d4af37]' : 'border-white/20'}`}>
                                                         <Image src={p.avatar || '/avatars/golden_avatar.png'} fill className="object-cover rounded-full" alt={p.name} />
                                                     </div>
-
                                                     <div className="text-center">
                                                         <p className="font-bold font-rajdhani text-white/80 uppercase tracking-widest text-lg">{p.name}</p>
                                                         <p className={`text-5xl font-black mt-2 ${isWinner ? 'text-[#d4af37] drop-shadow-[0_0_15px_rgba(212,175,55,0.8)]' : 'text-white/60'}`}>{p.finalVP} <span className="text-2xl opacity-50">VP</span></p>
                                                     </div>
-
                                                     {p.isMain && (
                                                         <div className="absolute -bottom-4 bg-black px-4 py-1 rounded-full border border-white/20 text-xs text-white/60 tracking-widest uppercase">
                                                             You
@@ -2854,12 +2942,37 @@ export default function GameBoardPage() {
                                         })}
                                     </div>
 
-                                    <button
-                                        onClick={() => router.push('/')}
-                                        className="mt-12 px-16 py-5 bg-gradient-to-r from-[#d4af37] to-[#f3bd48] text-black font-black text-xl uppercase tracking-[0.4em] rounded-2xl hover:from-[#ffe066] hover:to-[#ffd700] shadow-[0_0_40px_rgba(212,175,55,0.5)] transition-all transform hover:scale-105 active:scale-95 pointer-events-auto"
-                                    >
-                                        Good Game!
-                                    </button>
+                                    <div className="flex gap-6 mt-10">
+                                        {!isTieBreakerScreen ? (
+                                            <button 
+                                                onClick={() => router.push('/')}
+                                                className="px-16 py-5 bg-[#d4af37] text-black text-2xl font-black rounded-2xl uppercase tracking-[0.2em] hover:bg-[#ffe066] transition-all transform hover:scale-105 active:scale-95 shadow-[0_20px_40px_rgba(212,175,55,0.3)]"
+                                            >
+                                                Good Game
+                                            </button>
+                                        ) : (
+                                            <>
+                                                {localPlayerResults?.isTied ? (
+                                                    <button 
+                                                        disabled={isWaitingForTieBreaker}
+                                                        onClick={handleContinueTieBreaker}
+                                                        className={`px-24 py-6 text-2xl font-black rounded-2xl uppercase tracking-[0.2em] transition-all transform hover:scale-105 active:scale-95 shadow-[0_20px_40px_rgba(212,175,55,0.3)] ${
+                                                            isWaitingForTieBreaker ? 'bg-white/10 text-white/40 cursor-wait' : 'bg-[#d4af37] text-black hover:bg-[#ffe066]'
+                                                        }`}
+                                                    >
+                                                        {isWaitingForTieBreaker ? 'Waiting for Others...' : 'Continue'}
+                                                    </button>
+                                                ) : (
+                                                    <button 
+                                                        onClick={() => router.push('/')}
+                                                        className="px-16 py-5 bg-red-500/20 text-red-500 border-2 border-red-500/50 text-2xl font-black rounded-2xl uppercase tracking-[0.2em] hover:bg-red-500 hover:text-white transition-all transform hover:scale-105 active:scale-95"
+                                                    >
+                                                        Good Game
+                                                    </button>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         );

@@ -45,6 +45,111 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
 
     const localPlayerId = player.citizenId || player.address || 'p1';
 
+    const renderSummaryList = (isRestartMode: boolean) => {
+        const participants = [
+            {
+                id: localPlayerId,
+                name: player.name || 'Player',
+                actorType: conflict.playerActor?.actorType || 'actor',
+                bid: conflict.playerActor?.bid
+            },
+            ...conflict.opponents
+        ];
+
+        return (
+            <div className="w-full p-4 bg-white/5 rounded-xl border border-white/10 space-y-3">
+                {participants.map(participant => {
+                    const id = participant.actorId || participant.id;
+                    const isWinner = result?.winnerId === id;
+                    const isSharer = result?.isDraw && result?.shareRewards && result?.survivorIds.includes(id);
+                    const isTie = result?.tieIds?.includes(id);
+                    const isLoser = result?.loserIds.includes(id);
+                    const isSurvivor = result?.survivorIds.includes(id);
+                    const wasSavedByBid = result?.successfulBids?.some(b => b.actorId === id && b.bid === 'electricity');
+                    
+                    // If they were a participant but didn't win and aren't survivors, they are losers
+                    const isExitedEarly = !isWinner && !isSurvivor;
+
+                    let status = "DRAW";
+                    let rewardText = "nothing";
+                    let statusColor = "text-blue-400";
+
+                    if (isRestartMode) {
+                        if (wasSavedByBid) {
+                            status = "SAVED";
+                            statusColor = "text-purple-400";
+                            rewardText = "Lose, saved by Bid, resolve again";
+                        } else if (isWinner) {
+                            status = "WIN";
+                            statusColor = "text-[#d4af37]";
+                            rewardText = "continues the conflict";
+                        } else if (isLoser || isExitedEarly) {
+                            status = "LOSE";
+                            statusColor = "text-red-500";
+                            rewardText = "leave the conflict";
+                        } else if (isSurvivor) {
+                            status = "DRAW";
+                            statusColor = "text-blue-400";
+                            rewardText = "continues the conflict";
+                        }
+                    } else {
+                        // Regular Outcome Mode
+                        if (isWinner) {
+                            status = "WIN";
+                            statusColor = "text-[#d4af37]";
+                            const isRobot = participant.actorType?.toLowerCase() === 'robot';
+                            const base = isRobot ? 3 : 1;
+                            const bonus = (!isRoundTwo && result?.successfulBids?.some(b => b.actorId === id && b.bid === 'product')) ? 1 : 0;
+                            const total = base + (id === localPlayerId ? rewardAccumulator : 0) + bonus;
+                            
+                            const actorType = participant.actorType?.toLowerCase();
+                            let resName = conflict.resourceType || '';
+                            if (actorType === 'politician') resName = 'power';
+                            else if (actorType === 'scientist') resName = 'knowledge';
+                            else if (actorType === 'artist') resName = 'art';
+                            
+                            const label = isRobot ? (total === 1 ? 'Resource' : 'Resources') : (total === 1 ? 'Value' : 'Values');
+                            const capitalizedResName = resName.charAt(0).toUpperCase() + resName.slice(1);
+                            rewardText = `${total} ${label}${capitalizedResName ? ` (${capitalizedResName})` : ''}`;
+                        } else if (isSharer || isTie) {
+                            status = "DRAW";
+                            statusColor = "text-blue-400";
+                            
+                            if (isSharer) {
+                                const isRobot = participant.actorType?.toLowerCase() === 'robot';
+                                const actorType = participant.actorType?.toLowerCase();
+                                let resName = conflict.resourceType || '';
+                                if (actorType === 'politician') resName = 'power';
+                                else if (actorType === 'scientist') resName = 'knowledge';
+                                else if (actorType === 'artist') resName = 'art';
+                                
+                                const label = isRobot ? 'Resource' : 'Value';
+                                const capitalizedResName = resName.charAt(0).toUpperCase() + resName.slice(1);
+                                rewardText = `1 ${label}${capitalizedResName ? ` (${capitalizedResName})` : ''}`;
+                            }
+                        } else if (isLoser || isExitedEarly) {
+                            status = "LOSE";
+                            statusColor = "text-red-500";
+                        }
+                    }
+
+                    return (
+                        <div key={id} className="flex items-center justify-between text-sm py-1 border-b border-white/5 last:border-0 hover:bg-white/5 px-2 rounded-lg transition-colors">
+                            <div className="flex items-center gap-2">
+                                <span className="text-white font-bold">{participant.name}'s {participant.actorType.charAt(0).toUpperCase() + participant.actorType.slice(1)}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className={`font-black uppercase italic ${statusColor}`}>{status}</span>
+                                <span className="text-white/40">→</span>
+                                <span className="text-white font-medium">{isRestartMode ? rewardText : `${participant.actorType?.toLowerCase() === 'robot' ? 'produces' : 'creates'} ${rewardText}`}</span>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    };
+
     // 1. Initialize Opponent Choices (Random for bots, Synced for humans)
     const [lastLocId, setLastLocId] = useState<string | null>(null);
 
@@ -548,6 +653,10 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                                         <p className="text-white text-lg uppercase tracking-widest mb-2 text-center">
                                             {result.isDraw ? "Resolve the Conflict. Confrontation restarted:" : "Energy Bid active: Confrontation restarted!"}
                                         </p>
+                                        
+                                        {/* PER-ACTOR SUMMARY LIST (Restart Mode) */}
+                                        {renderSummaryList(true)}
+
                                         <div className="flex gap-6 mt-4">
                                             <button
                                                 onClick={handleReRollRequest}
@@ -594,87 +703,8 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                                             </div>
                                         )}
 
-                                        {/* PER-ACTOR SUMMARY LIST */}
-                                        <div className="w-full p-4 bg-white/5 rounded-xl border border-white/10 space-y-3">
-                                            {[
-                                                {
-                                                    id: localPlayerId,
-                                                    name: player.name || 'Player',
-                                                    actorType: conflict.playerActor?.actorType || 'actor',
-                                                    bid: conflict.playerActor?.bid
-                                                },
-                                                ...conflict.opponents
-                                            ].map(participant => {
-                                                const id = participant.actorId || participant.id;
-                                                const isWinner = result?.winnerId === id;
-                                                const isSharer = result?.isDraw && result?.shareRewards && result?.survivorIds.includes(id);
-                                                const isTie = result?.tieIds?.includes(id);
-                                                const isLoser = result?.loserIds.includes(id);
-                                                const isSurvivor = result?.survivorIds.includes(id);
-                                                
-                                                // If they were a participant but didn't win and aren't survivors, they are losers
-                                                const isExitedEarly = !isWinner && !isSurvivor;
-
-                                                let status = "DRAW";
-                                                let rewardText = "nothing";
-                                                let statusColor = "text-blue-400";
-
-                                                if (isWinner) {
-                                                    status = "WIN";
-                                                    statusColor = "text-[#d4af37]";
-                                                    const isRobot = participant.actorType?.toLowerCase() === 'robot';
-                                                    const base = isRobot ? 3 : 1;
-                                                    // Product Bids only apply on Round 1 and only if they succeeded
-                                                    const bonus = (!isRoundTwo && result?.successfulBids?.some(b => b.actorId === id && b.bid === 'product')) ? 1 : 0;
-                                                    const total = base + (id === localPlayerId ? rewardAccumulator : 0) + bonus;
-                                                    
-                                                    const actorType = participant.actorType?.toLowerCase();
-                                                    let resName = conflict.resourceType || '';
-                                                    if (actorType === 'politician') resName = 'power';
-                                                    else if (actorType === 'scientist') resName = 'knowledge';
-                                                    else if (actorType === 'artist') resName = 'art';
-                                                    
-                                                    const label = isRobot ? (total === 1 ? 'Resource' : 'Resources') : (total === 1 ? 'Value' : 'Values');
-                                                    const capitalizedResName = resName.charAt(0).toUpperCase() + resName.slice(1);
-                                                    rewardText = `${total} ${label}${capitalizedResName ? ` (${capitalizedResName})` : ''}`;
-                                                } else if (isSharer || isTie) {
-                                                    status = "DRAW";
-                                                    statusColor = "text-blue-400";
-                                                    
-                                                    if (isSharer) {
-                                                        const isRobot = participant.actorType?.toLowerCase() === 'robot';
-                                                        const actorType = participant.actorType?.toLowerCase();
-                                                        let resName = conflict.resourceType || '';
-                                                        if (actorType === 'politician') resName = 'power';
-                                                        else if (actorType === 'scientist') resName = 'knowledge';
-                                                        else if (actorType === 'artist') resName = 'art';
-                                                        
-                                                        const label = isRobot ? 'Resource' : 'Value';
-                                                        const capitalizedResName = resName.charAt(0).toUpperCase() + resName.slice(1);
-                                                        rewardText = `1 ${label}${capitalizedResName ? ` (${capitalizedResName})` : ''}`;
-                                                    }
-                                                } else if (isLoser || isExitedEarly) {
-                                                    status = "LOSE";
-                                                    statusColor = "text-red-500";
-                                                } else if (isSurvivor && result?.restart) {
-                                                    status = "DRAW";
-                                                    statusColor = "text-blue-400";
-                                                }
-
-                                                return (
-                                                    <div key={id} className="flex items-center justify-between text-sm py-1 border-b border-white/5 last:border-0 hover:bg-white/5 px-2 rounded-lg transition-colors">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-white font-bold">{participant.name}'s {participant.actorType.charAt(0).toUpperCase() + participant.actorType.slice(1)}</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={`font-black uppercase italic ${statusColor}`}>{status}</span>
-                                                            <span className="text-white/40">→</span>
-                                                            <span className="text-white font-medium">{participant.actorType?.toLowerCase() === 'robot' ? 'produces' : 'creates'} {rewardText}</span>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
+                                        {/* PER-ACTOR SUMMARY LIST (Outcome Mode) */}
+                                        {renderSummaryList(false)}
 
                                         <button
                                             onClick={handleNext}
