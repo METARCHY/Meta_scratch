@@ -263,6 +263,7 @@ export default function MapContainer({
                                                     phase={phase}
                                                     p3Step={p3Step}
                                                     availableExchangeCards={availableExchangeCards}
+                                                    availableRelocationCards={availableRelocationCards}
                                                     hudScale={hudScale}
                                                     onClick={(e) => { e.stopPropagation(); onPlayerClick(a, e) }}
                                                 />

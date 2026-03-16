@@ -11,6 +11,7 @@ interface OtherPlayerActorMarkerProps {
     phase?: number;
     p3Step?: number;
     availableExchangeCards?: number;
+    availableRelocationCards?: number;
     hudScale?: number;
     isDisabled?: boolean;
     isRelocating?: boolean;
@@ -23,15 +24,16 @@ const Resource_Icons: { [key: string]: string } = {
     'recycle': '/resources/resource_Recycle.png'
 };
 
-export default function OtherPlayerActorMarker({ actor, playerAvatar, bid, hasSecretBid, phase, p3Step, availableExchangeCards, hudScale = 1, isDisabled = false, isRelocating = false, onClick }: OtherPlayerActorMarkerProps) {
+export default function OtherPlayerActorMarker({ actor, playerAvatar, bid, hasSecretBid, phase, p3Step, availableExchangeCards, availableRelocationCards, hudScale = 1, isDisabled = false, isRelocating = false, onClick }: OtherPlayerActorMarkerProps) {
     const { showTooltip, hideTooltip } = useTooltip();
     const phaseScaleAdjust = phase && phase >= 3 ? 1.44 : 1.0;
 
     const showExchange = phase === 3 && p3Step === 4 && availableExchangeCards && availableExchangeCards > 0;
+    const canRelocate = phase === 3 && p3Step === 2 && availableRelocationCards && availableRelocationCards > 0 && !isRelocating;
 
     return (
         <div
-            className={`relative w-[129px] h-[127px] cursor-pointer transition-all duration-700 hover:scale-110 group origin-center ${isRelocating ? 'scale-110' : ''}`}
+            className={`relative w-[129px] h-[127px] cursor-pointer transition-all duration-700 hover:scale-110 group origin-center ${isRelocating ? 'scale-110' : ''} ${canRelocate ? 'drop-shadow-[0_0_15px_white]' : ''}`}
             style={{
                 transform: `scale(${hudScale * phaseScaleAdjust})`
             }}

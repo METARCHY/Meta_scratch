@@ -76,19 +76,8 @@ export default function PlacedActorMarker({ actor, token, bid, isP1, isRelocatin
                         </button>
                     )}
 
-                    {/* Step 2: Relocation Interaction (Only if cards available) */}
-                    {p3Step === 2 && availableRelocationCards && availableRelocationCards > 0 && !isRelocating && (
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onClick?.(e); }}
-                            className="pointer-events-auto group/relocate w-16 h-16 rounded-full bg-[#d4af37] border-4 border-white/20 flex flex-col items-center justify-center hover:bg-[#ffe066] hover:scale-110 transition-all shadow-[0_0_30px_rgba(212,175,55,0.8)] z-50 animate-pulse"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M5 12h14" />
-                                <path d="m12 5 7 7-7 7" />
-                            </svg>
-                            <span className="text-[8px] font-black text-black leading-none mt-0.5 tracking-tighter">RELOCATE</span>
-                        </button>
-                    )}
+                    {/* Step 2: Relocation Interaction (Hint only, no button) */}
+                    {/* canRelocate is handled by the outer div shadow */}
                 </div>
             )}
 
