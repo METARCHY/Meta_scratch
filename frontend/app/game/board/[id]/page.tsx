@@ -2790,12 +2790,13 @@ export default function GameBoardPage() {
                     />
 
                     {/* Phase 4: Conflicts Sidebar */}
-                    {phase === 4 && !activeConflictLocId && (
+                    {phase === 4 && (
                         <ConflictsSidebar
                             conflicts={stickyConflicts.filter(c => c.hasPlayer)}
                             resolvedIds={resolvedConflicts}
                             activeConflictLocId={activeConflictLocId}
                             onSelectConflict={setActiveConflictLocId}
+                            isVisible={!activeConflictLocId}
                         />
                     )}
 

@@ -18,6 +18,7 @@ interface ConflictsSidebarProps {
     resolvedIds: string[];
     activeConflictLocId: string | null;
     onSelectConflict: (locId: string) => void;
+    isVisible?: boolean;
 }
 
 /** Small circular avatar using the FULL actor image (not head crop). */
@@ -48,7 +49,7 @@ function PlayerCircle({ avatar, size = 32 }: { avatar: string; size?: number }) 
     );
 }
 
-export default function ConflictsSidebar({ conflicts, resolvedIds, activeConflictLocId, onSelectConflict }: ConflictsSidebarProps) {
+export default function ConflictsSidebar({ conflicts, resolvedIds, activeConflictLocId, onSelectConflict, isVisible = true }: ConflictsSidebarProps) {
     const dragControls = useDragControls();
     if (conflicts.length === 0) return null;
 
@@ -59,8 +60,13 @@ export default function ConflictsSidebar({ conflicts, resolvedIds, activeConflic
             dragListener={false}
             dragMomentum={false}
             initial={{ x: 100, opacity: 0 }}
-            animate={{ x: 0, opacity: 1 }}
-            className="fixed right-12 top-1/2 -translate-y-1/2 z-[100] bg-[#0d0d12]/95 backdrop-blur-xl border border-[#d4af37]/30 rounded-2xl p-5 flex flex-col gap-4 shadow-[0_0_50px_rgba(0,0,0,0.9)] min-w-[340px] max-h-[80vh] pointer-events-auto border-t-[#d4af37]/60"
+            animate={{ 
+                x: isVisible ? 0 : 100, 
+                opacity: isVisible ? 1 : 0,
+                pointerEvents: isVisible ? 'auto' : 'none'
+            }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed right-12 top-1/2 -translate-y-1/2 z-[100] bg-[#0d0d12]/95 backdrop-blur-xl border border-[#d4af37]/30 rounded-2xl p-5 flex flex-col gap-4 shadow-[0_0_50px_rgba(0,0,0,0.9)] min-w-[340px] max-h-[80vh] border-t-[#d4af37]/60"
         >
             <div 
                 className="flex items-center justify-between border-b border-white/10 pb-3 mb-1 cursor-grab active:cursor-grabbing group select-none"
