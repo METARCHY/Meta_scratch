@@ -55,7 +55,7 @@ export default function ConflictsSidebar({ conflicts, resolvedIds, activeConflic
         <motion.div
             initial={{ x: 100, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            className="absolute right-[-40px] top-[calc(50%-300px)] -translate-y-1/2 z-[100] bg-[#0d0d12]/95 backdrop-blur-md border-l border-t border-b border-[#d4af37]/30 rounded-l-2xl p-4 flex flex-col gap-4 shadow-[0_0_30px_rgba(0,0,0,0.8)] overflow-hidden min-w-[320px] pointer-events-auto"
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-[100] bg-[#0d0d12]/95 backdrop-blur-md border-l border-t border-b border-[#d4af37]/30 rounded-l-2xl p-4 flex flex-col gap-4 shadow-[0_0_30px_rgba(0,0,0,0.8)] min-w-[320px] max-h-[85vh] overflow-y-auto pointer-events-auto custom-scrollbar"
         >
             <div className="flex items-center gap-2 border-b border-white/10 pb-2 mb-2">
                 <Swords className="w-5 h-5 text-[#d4af37] animate-pulse" />
