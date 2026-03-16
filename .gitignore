@@ -42,6 +42,6 @@ broadcast/
 !/data/games.json
 
 # Docker
-.dockerignore
-Dockerfile
-docker-compose.yml
+# .dockerignore
+# Dockerfile
+# docker-compose.yml
