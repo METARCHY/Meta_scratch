@@ -8,7 +8,7 @@ import { calculateVictoryPoints } from '@/lib/modules/resources/resourceManager'
 export const handleNextPhase = (
     turn: number,
     phase: number,
-    p3Step: number,
+    p3Step: 0 | 1 | 2 | 3 | 4,
     player: any,
     dynamicPlayers: any[],
     placedActors: any[],
@@ -28,7 +28,7 @@ export const handleNextPhase = (
 ): { newPhase: number, newTurn: number, isGameOver: boolean, winners: { id: string, name: string, vp: number }[] } => {
     let nextPhase = phase;
     let nextTurn = turn;
-    let nextP3Step = p3Step;
+    let nextP3Step: 0 | 1 | 2 | 3 | 4 = p3Step;
 
     // --- 1. Determine Next Physical State ---
 
