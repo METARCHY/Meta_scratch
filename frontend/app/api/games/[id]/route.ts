@@ -63,6 +63,13 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
                 if (!state.decisions) state.decisions = {};
                 Object.assign(state.decisions, body.decisions);
             }
+            if (body.playerInventories) {
+                if (!state.playerInventories) state.playerInventories = {};
+                Object.assign(state.playerInventories, body.playerInventories);
+            }
+            if (body.discardPile) {
+                state.discardPile = body.discardPile;
+            }
 
             // Check if all joined players are ready
             const readyCount = Object.keys(state.playerReady).length;

@@ -74,7 +74,12 @@ export default function GameBoardPage() {
             addLog("Action Deck empty - reshuffled.");
         }
         const cardId = deck.pop();
-        const card = ACTION_CARDS.find(c => c.id === cardId) || ACTION_CARDS[0];
+        const baseCard = ACTION_CARDS.find(c => c.id === cardId) || ACTION_CARDS[0];
+        const card = {
+            ...baseCard,
+            id: `${baseCard.id}_${Date.now()}_${Math.random()}`, // Unique identity
+            instanceId: `${baseCard.id}_${Date.now()}`
+        };
 
         if (game) {
              const nextGameState = { ...game.gameState, actionDeck: deck };
@@ -349,20 +354,20 @@ export default function GameBoardPage() {
 
     // Auto-proceed test games if player has committed but was waiting on opponents
     useEffect(() => {
-        if (game?.isTest && isWaitingForPlayers && opponentsReady) {
+        // Guard: Phase 4 has its own interactive logic; do NOT auto-advance here
+        if (game?.isTest && isWaitingForPlayers && opponentsReady && phase !== 4) {
             setIsWaitingForPlayers(false);
             handleNextPhaseWrapper();
             addLog("All players are ready");
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isWaitingForPlayers, opponentsReady, game?.isTest]);
+    }, [isWaitingForPlayers, opponentsReady, game?.isTest, phase]);
  
     // Phase 4: Auto-advance for peaceful/resolved players
     useEffect(() => {
-        if (phase === 4 && game?.isTest && opponentsReady) {
+        // Only auto-advance if we aren't currently waiting or resolving
+        if (phase === 4 && game?.isTest && opponentsReady && !isWaitingForPlayers && !activeConflictLocId) {
             const myConflicts = activeConflicts.filter(c => c.hasPlayer);
-            // PERSISTENCE FIX: We MUST require all conflicts (even peaceful ones) to be explicitly viewed/resolved by the player
-            // as per Rule 4 "Conflicts Reveal" which says players click on the Sidebar to open the board.
             const allResolved = myConflicts.every(c => resolvedConflicts.includes(c.locId));
             
             console.log(`[DEBUG] Phase 4 Auto-Advance Check:`, {
@@ -533,11 +538,9 @@ export default function GameBoardPage() {
                         body: JSON.stringify({
                             action: 'sync-turn',
                             citizenId: myId,
-                            resources: {
-                                ...resources,
-                                actionHand: newHand,
-                                actionDiscardPile: newDiscard
-                            }
+                            resources: resources,
+                            playerInventories: { [myId]: newHand },
+                            discardPile: newDiscard
                         })
                     });
                 } catch (e) {
@@ -642,11 +645,9 @@ export default function GameBoardPage() {
                         body: JSON.stringify({
                             action: 'sync-turn',
                             citizenId: myId,
-                            resources: {
-                                ...resources,
-                                actionHand: newHand,
-                                actionDiscardPile: newDiscard
-                            }
+                            resources: resources,
+                            playerInventories: { [myId]: newHand },
+                            discardPile: newDiscard
                         })
                     });
                 } catch (e) {
@@ -706,7 +707,8 @@ export default function GameBoardPage() {
                     placedActors: myActors,
                     resources: resources, // PERSISTENCE FIX
                     decisions: p3Steps ? { [mainPlayerId]: { phase3Steps: p3Steps } } : undefined,
-                    playerInventories: { [mainPlayerId]: actionHand } // DISCARD PERSISTENCE FIX
+                    playerInventories: { [mainPlayerId]: actionHand }, // DISCARD PERSISTENCE FIX
+                    discardPile: actionDiscardPile
                 })
             });
         } catch (e) {
@@ -722,16 +724,17 @@ export default function GameBoardPage() {
 
         const myId = player.citizenId || player.address || 'p1';
         
-        // 0. Initialize Resources from Server if available (Persistence Fix)
-        if (game.gameState.playerResources && game.gameState.playerResources[myId]) {
-            const serverResources = game.gameState.playerResources[myId];
-            const keys = Object.keys(serverResources);
-            const isDifferent = keys.some(k => (serverResources as any)[k] !== (resources as any)[k]);
-            if (isDifferent) {
-                console.log("[DEBUG] Initializing local resources from server state:", serverResources);
-                setResources(serverResources);
+            // 0. Initialize Resources from Server if available (Persistence Fix)
+            // POLLING GUARD: Don't overwrite local resources if we are mid-submission or mid-conflict
+            if (game.gameState.playerResources && game.gameState.playerResources[myId] && !isWaitingForPlayers) {
+                const serverResources = game.gameState.playerResources[myId];
+                const keys = Object.keys(serverResources);
+                const isDifferent = keys.some(k => (serverResources as any)[k] !== (resources as any)[k]);
+                if (isDifferent) {
+                    console.log("[RESOURCE SYNC] Overwriting local resources with server state:", serverResources);
+                    setResources(serverResources);
+                }
             }
-        }
 
         // 0.1 Initialize Inventory from Server (Persistence Fix)
         if (game.gameState.playerInventories && game.gameState.playerInventories[myId]) {
@@ -1279,9 +1282,10 @@ export default function GameBoardPage() {
     const handleConflictResolve = (result: ConflictResult) => {
         if (!activeConflictLocId) return;
 
+        // Local accumulator for persistence fix
+        let nextResources = { ...resources };
+
         // --- Burning Bets Rule ---
-        // Clear the 'bid' property of all actors involved in this specific conflict immediately.
-        // This applies even on restart (Draw) — bets are ONE-TIME only per the rules.
         const involvedActorIds = [
             currentConflict?.playerActor.actorId,
             ...(currentConflict?.opponents.map((o: any) => o.actorId) || [])
@@ -1297,15 +1301,10 @@ export default function GameBoardPage() {
             return actor;
         }));
 
-        // Also clear bets from the stickyConflicts snapshot so the ConflictResolutionView
-        // does NOT display the bid icon after it has been burned (important on Draw restart).
         setStickyConflicts(prev => prev.map(conflict => {
             if (conflict.locId !== activeConflictLocId) return conflict;
-            
-            // Filter out specific losers from this iteration so they don't appear in the re-roll
             const filteredOpponents = conflict.opponents.filter((o: any) => !result.loserIds.includes(o.actorId));
             const playerLost = result.loserIds.includes(conflict.playerActor?.actorId);
-            
             return {
                 ...conflict,
                 playerActor: playerLost ? null : (involvedActorIds.includes(conflict.playerActor?.actorId)
@@ -1317,22 +1316,21 @@ export default function GameBoardPage() {
             };
         }));
 
-        // Detailed conflict logs are passed from ConflictResolutionView
         result.logs.forEach(l => addLog(`${l}`));
 
-        // Process successful bids (grant immediate rewards for Product bets)
+        // Process successful bets (grant immediate rewards for Product bets)
         if (result.successfulBids && result.successfulBids.length > 0) {
             result.successfulBids.forEach(used => {
-                // If Product bet won, give +1 immediately
                 if (used.bid === 'product') {
                     const actor = placedActors.find(a => a.actorId === used.actorId);
                     if (actor) {
                         const actorType = actor.actorType?.toLowerCase();
                         const earnedResource = getActorRewardType(actorType, actor.locId);
-
                         if (earnedResource) {
                             if (actor.playerId === localPlayerId) {
-                                updateResource(earnedResource, 1); // delta +1
+                                updateResource(earnedResource, 1);
+                                // Store for sync
+                                nextResources[earnedResource as keyof typeof nextResources] = (nextResources[earnedResource as keyof typeof nextResources] || 0) + 1;
                                 addLog(`${player.name || '080'}'s ${actor.actorType?.toUpperCase()} secured +1 ${earnedResource.toUpperCase()} from early Product Bet!`);
                             } else {
                                 setOpponentsData((prev: any) => {
@@ -1340,13 +1338,7 @@ export default function GameBoardPage() {
                                     const oppData = prev[oppId] || { resources: { fame: 0, power: 0, knowledge: 0, art: 0, product: 0, electricity: 0, recycling: 0 } };
                                     return {
                                         ...prev,
-                                        [oppId]: {
-                                            ...oppData,
-                                            resources: {
-                                                ...oppData.resources,
-                                                [earnedResource]: (oppData.resources[earnedResource] || 0) + 1
-                                            }
-                                        }
+                                        [oppId]: { ...oppData, resources: { ...oppData.resources, [earnedResource]: (oppData.resources[earnedResource] || 0) + 1 } }
                                     };
                                 });
                                 addLog(`${actor.name}'s ${actor.actorType?.toUpperCase()} secured +1 ${earnedResource.toUpperCase()} from early Product Bet!`);
@@ -1358,24 +1350,18 @@ export default function GameBoardPage() {
         }
 
         if (result.restart) {
-            // Conflict restarts (Politician Draw). Bets are already burned above.
-            // Keep modal open for re-roll — do NOT close it.
             addLog("Conflict is restarting — bets discarded, select a new Argument.");
             return;
         }
 
-
         const realLocId = currentConflict?.realLocId;
         const locDef = LOCATIONS.find(l => l.id === realLocId);
-
-        // Handle Evictions based on Conflict Outcome
         const conflictActorType = currentConflict?.playerActor.actorType;
 
         if (result.evictAll) {
             addLog(`Draw: All ${conflictActorType}s evicted from location.`);
             setPlacedActors(prev => prev.filter(actor => !(actor.locId === realLocId && actor.actorType === conflictActorType)));
         } else if (result.loserIds && result.loserIds.length > 0) {
-            // Losers Exit: Remove specific actors that were beaten in this iteration
             setPlacedActors(prev => prev.filter(actor => !result.loserIds.includes(actor.actorId)));
             result.loserIds.forEach(lId => {
                 const lActor = [...placedActors, ...stickyConflicts.flatMap(c => [c.playerActor, ...c.opponents])].find(a => a?.actorId === lId);
@@ -1384,31 +1370,26 @@ export default function GameBoardPage() {
         }
 
         if (result.winnerId) {
-            // A final winner was found
-            // Evict all other actors of this type from the location (clean up survivors who weren't the winner)
             setPlacedActors(prev => prev.filter(actor => {
                 if (actor.locId !== realLocId || actor.actorType !== conflictActorType) return true;
                 return (result.winnerId === localPlayerId && actor.playerId === localPlayerId) || (actor.actorId === result.winnerId);
             }));
 
-            // --- AWARD RESOURCES TO THE CONFLICT WINNER immediately ---
             if (result.winnerId === localPlayerId) {
                 const winnerActor = currentConflict?.playerActor;
                 if (winnerActor) {
                     const winActorType = winnerActor.actorType?.toLowerCase();
                     const earnedResource = getActorRewardType(winActorType, realLocId || '');
-
                     if (earnedResource) {
                         const bids = result.successfulBids || [];
                         const finalReward = calculateReward(winActorType as any, true, false, bids, result.winnerId || '');
-
                         updateResource(earnedResource, finalReward);
+                        // Store for sync
+                        nextResources[earnedResource as keyof typeof nextResources] = (nextResources[earnedResource as keyof typeof nextResources] || 0) + finalReward;
                         addLog(`${player.name || '080'} WON ${finalReward} ${earnedResource.toUpperCase()} from ${winActorType?.toUpperCase()} conflict at ${locDef?.name}!`);
                     }
                 }
             } else if (result.winnerId) {
-                // Wait, it's a bot (since it's not localPlayerId)
-                // Find which bot won
                 const winnerActor = currentConflict?.opponents?.find((o: any) => o.actorId === result.winnerId);
                 if (winnerActor) {
                     const winActorType = winnerActor.actorType?.toLowerCase();
@@ -1417,7 +1398,6 @@ export default function GameBoardPage() {
                         const bids = result.successfulBids || [];
                         const finalReward = calculateReward(winActorType as any, true, false, bids, result.winnerId || '');
                         const winnerPid = winnerActor.playerId;
-
                         setOpponentsData((prev: any) => {
                             if (!prev[winnerPid]) return prev;
                             const next = { ...prev };
@@ -1432,24 +1412,69 @@ export default function GameBoardPage() {
                 }
             }
         } else if (result.shareRewards && result.isDraw) {
-            // Scientist/Robot TRUCE — both players get 1 resource
-            const trActor = currentConflict?.playerActor;
-            if (trActor) {
-                const trActorType = trActor.actorType?.toLowerCase();
-                const earnedResource = getActorRewardType(trActorType, realLocId || '');
-
-                if (earnedResource) {
-                    updateResource(earnedResource, 1);
-                    addLog(`${player.name || '080'} earned 1 ${earnedResource.toUpperCase()} from TRUCE at ${locDef?.name}!`);
+            const participants = [currentConflict?.playerActor, ...(currentConflict?.opponents || [])].filter(Boolean);
+            participants.forEach(actor => {
+                if (result.survivorIds.includes(actor.actorId || actor.id)) {
+                    const actorType = actor.actorType?.toLowerCase();
+                    const earnedResource = getActorRewardType(actorType, realLocId || '');
+                    if (earnedResource) {
+                        const bids = result.successfulBids || [];
+                        const finalReward = calculateReward(actorType as any, false, true, bids, actor.actorId || actor.id);
+                        const actorPid = actor.playerId;
+                        if (actorPid === localPlayerId) {
+                            updateResource(earnedResource, finalReward);
+                            // Store for sync
+                            nextResources[earnedResource as keyof typeof nextResources] = (nextResources[earnedResource as keyof typeof nextResources] || 0) + finalReward;
+                            addLog(`${player.name || '080'} earned ${finalReward} ${earnedResource.toUpperCase()} from TRUCE at ${locDef?.name}!`);
+                        } else {
+                            setOpponentsData((prev: any) => {
+                                if (!prev[actorPid]) return prev;
+                                const next = { ...prev };
+                                const newResources = { ...next[actorPid].resources };
+                                newResources[earnedResource] = (newResources[earnedResource] || 0) + finalReward;
+                                next[actorPid] = { ...next[actorPid], resources: newResources };
+                                return next;
+                            });
+                            const actorName = dynamicPlayers.find(p => p.id === actorPid)?.name || 'Opponent';
+                            addLog(`${actorName} earned ${finalReward} ${earnedResource.toUpperCase()} from TRUCE at ${locDef?.name}!`);
+                        }
+                    }
                 }
-            }
+            });
         }
 
-        // Mark as resolved
-        setResolvedConflicts(prev => {
-            const updated = [...prev, activeConflictLocId];
-            return updated;
-        });
+        setResolvedConflicts(prev => [...prev, activeConflictLocId]);
+
+        // PERSISTENCE FIX: Immediate sync after conflict resolution
+        if (game && id && !game.isTest) {
+            const myId = player.citizenId || player.address || 'p1';
+            setIsWaitingForPlayers(true); // KEEP POLLING BLOCKED
+            fetch(`/api/games/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'sync-turn', citizenId: myId, resources: nextResources })
+            })
+            .then(() => {
+                console.log("[RESOURCE SYNC] Conflict results persisted successfully.");
+                setIsWaitingForPlayers(false);
+            })
+            .catch(e => {
+                console.error("Failed to sync conflict results", e);
+                setIsWaitingForPlayers(false);
+            });
+        } else {
+            setIsWaitingForPlayers(false);
+        }
+        setActiveConflictLocId(null);
+    };
+
+    const handleSelectConflict = (locId: string) => {
+        setIsWaitingForPlayers(true);
+        setActiveConflictLocId(locId);
+    };
+
+    const handleCloseConflict = () => {
+        setIsWaitingForPlayers(false);
         setActiveConflictLocId(null);
     };
 
@@ -1783,7 +1808,14 @@ export default function GameBoardPage() {
             fetch(`/api/games/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'sync-turn', citizenId: localPlayerId, resources, playerResources: allPlayerResources })
+                body: JSON.stringify({ 
+                    action: 'sync-turn', 
+                    citizenId: localPlayerId, 
+                    resources, 
+                    playerResources: allPlayerResources,
+                    playerInventories: { [localPlayerId]: actionHand },
+                    discardPile: actionDiscardPile
+                })
             }).catch(e => console.error("Event persistence sync failed:", e));
         }
     };
@@ -2368,11 +2400,29 @@ export default function GameBoardPage() {
 
         const mappedCard = {
             ...card,
-            id: `card_${Date.now()}_${Math.random()}`, // Truly unique ID
+            id: `${card.id}_${Date.now()}_${Math.random()}`, // Preserve identity + unique suffix
             instanceId: `${card.id}_${Date.now()}`
         };
-        setActionHand(prev => [...prev, mappedCard]);
+        const newHand = [...actionHand, mappedCard];
+        setActionHand(newHand);
         addLog(`${player.name || '080'} purchased action card: ${card.title}`);
+        
+        // Sync to server (Phase 5 persistence fix)
+        if (game && id && !game.isTest) {
+            const myId = player.citizenId || player.address || 'p1';
+            fetch(`/api/games/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'sync-turn',
+                    citizenId: myId,
+                    resources,
+                    playerInventories: { [myId]: newHand },
+                    discardPile: actionDiscardPile
+                })
+            }).catch(e => console.error("Failed to sync card purchase", e));
+        }
+        
         addLog("All players are ready");
         // REMOVED immediate phase advancement to allow multiple purchases
     };
@@ -2802,7 +2852,7 @@ export default function GameBoardPage() {
                             conflicts={stickyConflicts.filter(c => c.hasPlayer)}
                             resolvedIds={resolvedConflicts}
                             activeConflictLocId={activeConflictLocId}
-                            onSelectConflict={setActiveConflictLocId}
+                            onSelectConflict={handleSelectConflict}
                             isVisible={!activeConflictLocId}
                         />
                     )}
@@ -2814,7 +2864,7 @@ export default function GameBoardPage() {
                                 game={game}
                                 conflict={currentConflict}
                                 onResolve={handleConflictResolve}
-                                onClose={() => setActiveConflictLocId(null)}
+                                onClose={handleCloseConflict}
                                 hasNextConflict={stickyConflicts.filter(c => c.hasPlayer && !resolvedConflicts.includes(c.locId)).length > 1}
                             />
                         </div>

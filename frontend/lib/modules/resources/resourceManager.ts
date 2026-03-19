@@ -66,7 +66,7 @@ export function calculateReward(
     }
 
     if (isTruce) {
-        return 1;
+        return hasProductBid ? 1 + 1 : 1;
     }
 
     return 0;

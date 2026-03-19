@@ -41,7 +41,7 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
     const [reRollCount, setReRollCount] = useState(0);
 
     const isRoundTwo = reRollCount > 0;
-    const [rewardAccumulator, setRewardAccumulator] = useState(0);
+    const [rewardAccumulator, setRewardAccumulator] = useState<Record<string, number>>({});
 
     const localPlayerId = (player.citizenId && player.citizenId !== '0000') ? player.citizenId : (player.address || 'p1');
 
@@ -102,8 +102,8 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                             statusColor = "text-[#d4af37]";
                             const isRobot = participant.actorType?.toLowerCase() === 'robot';
                             const base = isRobot ? 3 : 1;
-                            const bonus = (!isRoundTwo && result?.successfulBids?.some(b => b.actorId === id && b.bid === 'product')) ? 1 : 0;
-                            const total = base + (id === localPlayerId ? rewardAccumulator : 0) + bonus;
+                            const bonus = rewardAccumulator[id] || 0;
+                            const total = base + bonus;
                             
                             const actorType = participant.actorType?.toLowerCase();
                             let resName = conflict.resourceType || '';
@@ -126,9 +126,11 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                                 else if (actorType === 'scientist') resName = 'knowledge';
                                 else if (actorType === 'artist') resName = 'art';
                                 
-                                const label = isRobot ? 'Resource' : (resName === 'action_card' ? 'Action Card' : 'Value');
+                                const bonus = rewardAccumulator[id] || 0;
+                                const total = 1 + bonus;
+                                const label = isRobot ? (total === 1 ? 'Resource' : 'Resources') : (resName === 'action_card' ? 'Action Card' : (total === 1 ? 'Value' : 'Values'));
                                 const capitalizedResName = resName === 'action_card' ? '' : resName.charAt(0).toUpperCase() + resName.slice(1);
-                                rewardText = resName === 'action_card' ? `1 Action Card` : `1 ${label}${capitalizedResName ? ` (${capitalizedResName})` : ''}`;
+                                rewardText = resName === 'action_card' ? `${total} Action Card` : `${total} ${label}${capitalizedResName ? ` (${capitalizedResName})` : ''}`;
                             }
                         } else if (isLoser || isExitedEarly) {
                             status = "LOSE";
@@ -167,7 +169,7 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
         // Fresh initialization for a new location
         if (conflict.locId !== lastLocId) {
             setLastLocId(conflict.locId);
-            setRewardAccumulator(0);
+            setRewardAccumulator({});
             const filteredOppRefs = conflict.opponents.filter(o => (o.actorId || o.playerId || o.id) !== localPlayerId);
             setSurvivorIds([localPlayerId, ...filteredOppRefs.map(o => o.actorId)]);
             
@@ -284,10 +286,15 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
 
         // PRODUCT BET ACCUMULATION: If anyone (including bots) won a Product bet this round, add to accumulator
         if (res.successfulBids) {
-            const myProductBid = res.successfulBids.find(b => b.bid === 'product' && b.actorId === localPlayerId);
-            if (myProductBid) {
-                setRewardAccumulator(prev => prev + 1);
-            }
+            setRewardAccumulator(prev => {
+                const next = { ...prev };
+                res.successfulBids?.forEach(b => {
+                    if (b.bid === 'product') {
+                        next[b.actorId] = (next[b.actorId] || 0) + 1;
+                    }
+                });
+                return next;
+            });
         }
 
         // Auto-advance to Outcome Modal after animation
@@ -364,16 +371,20 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
 
         // If no bid effect pending or already showed it -> Confirm & Close
         // Send the usedBid back to page.tsx so it knows whether to double the reward, independent of the initial actor bid state!
-        // We pass the final result but augmented with the accumulated rewards
+        // We pass the final result but augmented with the accumulated reward
+        const additionalBids: { actorId: string; bid: string }[] = [];
+        Object.entries(rewardAccumulator).forEach(([aId, count]) => {
+            for (let i = 0; i < count; i++) {
+                additionalBids.push({ actorId: aId, bid: 'product' });
+            }
+        });
+
         const finalResult: ConflictResult = {
             ...result,
-            // If the local player is the winner, or part of a trucing group, we add the accumulator to the final count
-            // Note: page.tsx currently looks at result.winnerId and b.bid === 'product'.
-            // To be safe, we can add a custom 'bonusReward' field or modify the successfulBids.
+            // We pass the final result augmented with ALL accumulated rewards for ALL participants
             successfulBids: [
                 ...(result.successfulBids || []),
-                // We inject virtual 'product' successes if we had them in previous rounds
-                ...Array(rewardAccumulator).fill({ actorId: localPlayerId, bid: 'product' })
+                ...additionalBids
             ]
         };
         onResolve(finalResult);
@@ -700,8 +711,8 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                                                             if (result?.isDraw && result?.shareRewards) return 1;
                                                             const isRobot = conflict.playerActor?.actorType?.toLowerCase() === 'robot';
                                                             const baseReward = isRobot ? 3 : 1;
-                                                            const currentProductSuccess = result?.successfulBids?.some(b => b.bid === 'product' && b.actorId === localPlayerId) ? 1 : 0;
-                                                            return baseReward + rewardAccumulator + (isRoundTwo ? 0 : currentProductSuccess);
+                                                            const bonus = rewardAccumulator[localPlayerId] || 0;
+                                                            return baseReward + bonus;
                                                         })()}
                                                     </div>
                                                 </div>
