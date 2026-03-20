@@ -21,7 +21,9 @@ interface OtherPlayerActorMarkerProps {
 const Resource_Icons: { [key: string]: string } = {
     'product': '/resources/resource_product.png',
     'energy': '/resources/resource_energy.png',
-    'recycle': '/resources/resource_Recycle.png'
+    'electricity': '/resources/resource_energy.png',
+    'recycle': '/resources/resource_Recycle.png',
+    'recycling': '/resources/resource_Recycle.png'
 };
 
 export default function OtherPlayerActorMarker({ actor, playerAvatar, bid, hasSecretBid, phase, p3Step, availableExchangeCards, availableRelocationCards, hudScale = 1, isDisabled = false, isRelocating = false, onClick }: OtherPlayerActorMarkerProps) {

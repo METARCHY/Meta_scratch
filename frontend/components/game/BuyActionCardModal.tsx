@@ -32,18 +32,24 @@ export default function BuyActionCardModal({ isOpen, onClose, onBuy, canAfford, 
     const [rewardCard, setRewardCard] = useState<ActionCard | null>(null);
     const hasGeneratedRef = React.useRef(false);
 
-    // Pick a random card ahead of time so we know what to reveal
-    useEffect(() => {
-        if (isOpen && !hasGeneratedRef.current && availableCards.length > 0) {
+    const generateRandomCard = React.useCallback(() => {
+        if (availableCards.length > 0) {
             const random = availableCards[Math.floor(Math.random() * availableCards.length)];
             setRewardCard(random);
+        }
+    }, [availableCards]);
+
+    // Pick a random card ahead of time so we know what to reveal
+    useEffect(() => {
+        if (isOpen && !hasGeneratedRef.current) {
+            generateRandomCard();
             setPurchaseState('idle');
             hasGeneratedRef.current = true;
         }
         if (!isOpen) {
             hasGeneratedRef.current = false;
         }
-    }, [isOpen, availableCards]);
+    }, [isOpen, generateRandomCard]);
 
     if (!isOpen) return null;
 
@@ -60,7 +66,10 @@ export default function BuyActionCardModal({ isOpen, onClose, onBuy, canAfford, 
     const handleAccept = () => {
         if (rewardCard) {
             onBuy(rewardCard);
-            onClose();
+            // Reset state for another purchase
+            setPurchaseState('idle');
+            generateRandomCard();
+            hasGeneratedRef.current = true; // Keep it true so useEffect doesn't double-generate
         }
     };
 
@@ -245,13 +254,11 @@ export default function BuyActionCardModal({ isOpen, onClose, onBuy, canAfford, 
                 {/* Footer Buttons */}
                 <div className="absolute bottom-6 left-0 w-full flex justify-between px-16 z-30">
                     <button
-                        onClick={purchaseState === 'revealed' ? handleAccept : onClose}
+                        onClick={onClose}
                         disabled={purchaseState === 'animating'}
-                        className="w-[100px] h-[40px] flex items-center justify-center rounded-lg border-2 border-[#7a2525] bg-[#3a0a0a] hover:bg-[#5a1515] transition-colors disabled:opacity-50"
+                        className="w-[120px] h-[40px] flex items-center justify-center rounded-lg border-2 border-[#A08C5C]/30 bg-black/40 hover:bg-white/5 text-white/70 hover:text-white font-bold font-rajdhani uppercase tracking-widest transition-colors disabled:opacity-50"
                     >
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ff4444" strokeWidth="3" strokeLinecap="round">
-                            <path d="M18 6L6 18M6 6l12 12" />
-                        </svg>
+                        NEXT TURN
                     </button>
 
                     {purchaseState === 'idle' ? (
@@ -260,24 +267,26 @@ export default function BuyActionCardModal({ isOpen, onClose, onBuy, canAfford, 
                             disabled={!canAfford}
                             className={`w-[140px] h-[40px] flex items-center justify-center rounded-lg border-2 transition-colors
                                 ${canAfford
-                                    ? 'border-[#257a25] bg-[#0a3a0a] hover:bg-[#155a15] cursor-pointer'
+                                    ? 'border-[#257a25] bg-[#0a3a0a] hover:bg-[#155a15] cursor-pointer shadow-[0_0_15px_rgba(37,122,37,0.4)]'
                                     : 'border-white/10 bg-white/5 opacity-50 cursor-not-allowed'
                                 }
                             `}
                         >
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={canAfford ? "#44ff44" : "#ffffff"} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M20 6L9 17l-5-5" />
-                            </svg>
+                             <span className={`font-bold font-rajdhani uppercase tracking-widest ${canAfford ? 'text-[#44ff44]' : 'text-white/30'}`}>
+                                Buy
+                             </span>
                         </button>
                     ) : purchaseState === 'revealed' ? (
                         <button
                             onClick={handleAccept}
-                            className="w-[140px] h-[40px] flex items-center justify-center rounded-lg border-2 border-[#A08C5C] bg-[#d4af37]/20 hover:bg-[#d4af37]/40 text-[#A08C5C] font-bold font-rajdhani uppercase tracking-widest transition-colors"
+                            className="w-[140px] h-[40px] flex items-center justify-center rounded-lg border-2 border-[#A08C5C] bg-[#d4af37]/20 hover:bg-[#d4af37]/40 text-[#A08C5C] font-bold font-rajdhani uppercase tracking-widest transition-colors shadow-[0_0_20px_rgba(160,140,92,0.4)]"
                         >
                             TAKE
                         </button>
                     ) : (
-                        <div className="w-[140px] h-[40px]"></div>
+                        <div className="w-[140px] h-[40px] flex items-center justify-center">
+                            <div className="w-6 h-6 border-2 border-[#00f0ff]/20 border-t-[#00f0ff] rounded-full animate-spin" />
+                        </div>
                     )}
                 </div>
             </motion.div>

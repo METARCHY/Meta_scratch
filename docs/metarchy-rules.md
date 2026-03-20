@@ -3,11 +3,11 @@
 Welcome to the official rules for **Metarchy**, a turn-based strategy game of hidden information, psychological deduction, and resource management.
 
 ## 🎯 Goal of the Game
-The ultimate objective is to accumulate the highest number of **Victory Points** by the end of the game's final Turn. 
+The ultimate objective is to accumulate the highest number of **Victory Points** by the end of the game's final Turn (Turn 5). 
 A **Victory Point** is earned by collecting a full set of the three Value Tokens:
 `1 Victory Point = 1 Power + 1 Art + 1 Knowledge`
 
-If players have an equal number of Victory Points at the end of the final Turn, an extra tie-breaker Turn is played between those tied players. Extra turns are added sequentially until only one player holds the highest number of Victory Points.
+If players have an equal number of Victory Points at the end of the final Turn (Turn 5), an extra tie-breaker Turn is played between those tied players. Extra turns are added sequentially until only one player holds the highest number of Victory Points.
 
 ## 🎭 Core Vision: Creation through Interaction
 Metarchy is a world where nothing happens in isolation. 
@@ -355,15 +355,15 @@ Players Action: Player clicks on the button "Get It!".
 After a player has resolved all Conflicts and reviewed all their Actors that were not involved in the Conflicts, the player must click the "Next Phase" button. The button changes to "WAITING FOR OTHERS..."
 Once all players click the "Next Phase" button, the game goes the Market Phase.
 
-#### In case of Phase 4 on the last Turn
+#### In case of Phase 4 on the last Turn (Turn 5)
 - If it was the last Turn, the game is counting Victory Points of each player
 - UI shows a board with the amount of Victory Points of each player. The player with the biggest amount of Victory Point is shown as a Winner.
 Player Action: Player can click on the button "Good Game", and it will redirect player to the main menu of the game
 
-- If two or more players have the same amount of Victory Points, UI shows a board with the amount of Victory Points of each player. Players with the same biggest amount of Victory Point are shown as a Potential Winner
-Player Action: Player with the lowest amount of Victory Points can click on the button "Good Game", and it will redirect this player to the main munu of the game. Players with the same biggest amount of Victory Points can click on the button "Continue": the player's button Continue changes to "WAITING FOR OTHERS..." until all players with the same biggest amount of Victory Points click on the button "Continue": 
-- The game goes to the next Phase (Market Phase), but only players with the same biggest amount of Victory Points will play in the next Phase
-- After the next Market Phase will be one more additional Turn for players with the same biggest amount of Victory Points, and the next Turn will be considered as the last Turn.
+- If two or more players have the same amount of Victory Points, UI shows a board with the amount of Victory Points of each player. Players with the same biggest amount of Victory Point are shown as a Potential Winner.
+- **Player Elimination**: Players with the lowest amount of Victory Points will not go to the next phase. They get a notification that they have lost and can exit to the main menu.
+- **Let's Go!**: Only players with the same biggest amount of Victory Points can click on the button "**Let's Go!**". This button changes to "WAITING FOR OTHERS..." until all tied players are ready.
+- **Extra Turn**: The game goes to the next Phase (Market Phase), but only players with the same biggest amount of Victory Points participate. After the Market Phase, an additional Turn is played, which is now considered the new Last Turn. If a tie occurs again, these rules apply recursively until a single winner is determined.
 
 ### Phase 5: Market Phase
 Note: Skip this Phase if it's the phase of the last turn, until two or more players with the same biggest amount of Victory Points in the previous phase.

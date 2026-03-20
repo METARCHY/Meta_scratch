@@ -100,8 +100,8 @@ export const TEST_RESOURCES: Record<string, number> = {
 export const MAX_TURNS: Record<number, number> = {
     2: 5,
     3: 5,
-    4: 6,    // 2v2 game
-    5: 6,
+    4: 5,
+    5: 5,
 };
 
 export const TEST_MAX_TURNS = 5;

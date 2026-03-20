@@ -1,12 +1,15 @@
 import React from 'react';
+import Image from 'next/image';
 
 interface GameHeaderProps {
     turn: number;
     phase: number;
     phaseName: string;
+    eventDeckCount?: number;
+    actionDeckCount?: number;
 }
 
-export default function GameHeader({ turn, phase, phaseName }: GameHeaderProps) {
+export default function GameHeader({ turn, phase, phaseName, eventDeckCount = 0, actionDeckCount = 0 }: GameHeaderProps) {
     return (
         <div className="absolute top-0 left-0 w-full z-50 pointer-events-none">
             <div className="relative w-full h-[37px] flex items-center justify-center overflow-visible">
@@ -60,35 +63,45 @@ export default function GameHeader({ turn, phase, phaseName }: GameHeaderProps) 
                     </svg>
 
                     {/* Overlaid Dynamic Data - Aligned to 1928px Container */}
+                    {/* Shifted left for 1440px screens (Center 964 +/- 720 -> right edge at 244px from wrapper edge) */}
 
-                    {/* Phase Name (DISTRIBUTION) - Adjusted position relative to this container */}
-                    <div className="absolute top-[14px] flex items-center -translate-y-1/2" style={{ right: '350px' }}>
-                        <span className="text-gray-400 font-mono text-[10px] uppercase tracking-[0.2em] whitespace-nowrap">{phaseName}</span>
+                    {/* EVENT DECK COUNT */}
+                    <div className="absolute top-[14px] flex items-center gap-2 z-20 pointer-events-none -translate-y-1/2" style={{ right: '700px' }}>
+                        <div className="relative w-8 h-8 flex items-center justify-center">
+                            {/* Refined Clipping for Blue Event Card: polygon(22.0% 12.0%, 75.0% 18.0%, 53.0% 92.0%, 0.0% 64.0%) */}
+                            <div className="absolute inset-0 overflow-hidden" style={{ clipPath: 'polygon(22.0% 12.0%, 75.0% 18.0%, 53.0% 92.0%, 0.0% 64.0%)' }}>
+                                <Image src="/decks/event_deck_src.jpg" fill className="object-cover scale-125" alt="Event Deck" priority />
+                            </div>
+                        </div>
+                        <span className="text-[#a08c5c] font-bold text-sm font-mono drop-shadow-[0_0_8px_rgba(160,140,92,0.4)]">{eventDeckCount}</span>
                     </div>
 
-                    {/* 1. TURN LABEL */}
-                    <div className="absolute top-[14px] w-[50px] text-center z-20 pointer-events-none translate-x-1/2 -translate-y-1/2" style={{ right: '199.5px' }}>
+                    {/* ACTION DECK COUNT */}
+                    <div className="absolute top-[14px] flex items-center gap-2 z-20 pointer-events-none -translate-y-1/2" style={{ right: '630px' }}>
+                        <div className="relative w-8 h-8 flex items-center justify-center">
+                            {/* Refined Clipping for Purple Action Card: polygon(23.0% 16.0%, 76.0% 23.0%, 53.0% 93.0%, 0.0% 66.0%) */}
+                            <div className="absolute inset-0 overflow-hidden" style={{ clipPath: 'polygon(23.0% 16.0%, 76.0% 23.0%, 53.0% 93.0%, 0.0% 66.0%)' }}>
+                                <Image src="/decks/action_deck_src.jpg" fill className="object-cover scale-125" alt="Action Deck" priority />
+                            </div>
+                        </div>
+                        <span className="text-[#a08c5c] font-bold text-sm font-mono drop-shadow-[0_0_8px_rgba(160,140,92,0.4)]">{actionDeckCount}</span>
+                    </div>
+
+                    {/* TURN INFO */}
+                    <div className="absolute top-[14px] z-20 pointer-events-none -translate-y-1/2 flex items-baseline gap-1.5" style={{ right: '500px' }}>
                         <span className="text-gray-400/80 font-bold text-[10px] tracking-wider">TURN</span>
+                        <span className="text-white font-bold text-sm font-sans">{turn}</span>
                     </div>
 
-                    {/* 2. TURN COUNT */}
-                    <div className="absolute top-[14px] w-[30px] text-center z-20 pointer-events-none translate-x-1/2 -translate-y-1/2" style={{ right: '166.5px' }}>
-                        <span className="text-white font-bold text-sm font-sans leading-none">{turn}</span>
-                    </div>
-
-                    {/* 3. PHASE LABEL */}
-                    <div className="absolute top-[14px] w-[60px] text-center z-20 pointer-events-none translate-x-1/2 -translate-y-1/2" style={{ right: '111px' }}>
-                        <span className="text-gray-400/80 font-bold text-[10px] tracking-wider">PHASE</span>
-                    </div>
-
-                    {/* 4. PHASE COUNT */}
-                    <div className="absolute top-[14px] w-[30px] text-center z-20 pointer-events-none translate-x-1/2 -translate-y-1/2" style={{ right: '71.5px' }}>
-                        <span className="text-white font-bold text-sm font-sans leading-none">{phase}</span>
+                    {/* PHASE INFO - "Phase 1: Event" format */}
+                    <div className="absolute top-[14px] z-20 pointer-events-none -translate-y-1/2 flex items-baseline gap-1" style={{ right: '250px' }}>
+                        <span className="text-gray-400 font-bold text-[10px] tracking-wider">PHASE {phase}:</span>
+                        <span className="text-white font-mono text-[11px] uppercase tracking-[0.1em] whitespace-nowrap">{phaseName}</span>
                     </div>
 
                     {/* Menu Button Hitbox */}
                     <div
-                        className="absolute right-0 top-0 w-[50px] h-full z-50 cursor-pointer"
+                        className="absolute right-10 top-0 w-[50px] h-full z-50 cursor-pointer"
                         onClick={() => console.log('Menu Clicked')}
                     />
                 </div>

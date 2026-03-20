@@ -25,7 +25,7 @@ export const RESOURCE_ICONS: { [key: string]: string } = {
     'fame': '/intangibles/resource_Fame.png',
     'power': '/intangibles/resource_power.png',
     'art': '/intangibles/resource_Art.png',
-    'knowledge': '/intangibles/resource_wisdom.png',
+    'knowledge': '/intangibles/resource_knowledge.png',
     'product': '/resources/resource_product.png',
     'electricity': '/resources/resource_energy.png',
     'recycling': '/resources/resource_Recycle.png'

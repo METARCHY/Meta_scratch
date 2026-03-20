@@ -221,33 +221,36 @@ export default function GameBoardPage() {
 
         if (!game) return [mainPlayer, PLAYERS[0], PLAYERS[1]];
 
-        // Filter out current player from joined players to find opponents
-        const otherPlayers = game.players
-            .filter((p: any) => {
-                const pId = p.citizenId || p.address || p.id;
-                if (pId === localPlayerId) return false;
-                if (p.name && player.name && p.name === player.name) return false;
-                // If local player is a guest (0000) and this is the first player in the list, assume it's them
-                if (localPlayerId === 'p1' && p === game.players[0]) return false;
-                return true;
-            })
-            .map((p: any, index: number) => ({
-                ...p,
-                id: p.citizenId || p.address || p.id || `bot-${index + 1}`, // Ensure consistent 'id' field
-                name: p.name || PLAYERS[index]?.name || 'Citizen',
-                avatar: p.avatar || PLAYERS[index]?.avatar || '/avatars/ghost.png'
-            }));
+        // TIE-BREAKER FILTER: If activePlayerIds is present, only show those players
+        const activeIds = game.gameState?.activePlayerIds;
+        const isTieMode = game.gameState?.isTieBreaker;
 
-        const finalPlayers = [mainPlayer, ...otherPlayers];
+        const allJoined = game.players.map((p: any, index: number) => ({
+            ...p,
+            id: p.citizenId || p.address || p.id || `bot-${index + 1}`,
+            name: p.name || PLAYERS[index]?.name || 'Citizen',
+            avatar: p.avatar || PLAYERS[index]?.avatar || '/avatars/ghost.png'
+        }));
 
-        // Only enforce exact 3-player formatting if it's a test game
-        if (game?.isTest && finalPlayers.length < 3) {
+        // Filter: If we are in a targeted tie-breaker, exclude losers
+        const filteredJoined = (isTieMode && activeIds)
+            ? allJoined.filter((p: any) => activeIds.includes(p.id))
+            : allJoined;
+
+        const otherPlayers = filteredJoined.filter((p: any) => p.id !== localPlayerId);
+
+        const finalPlayers = filteredJoined.some((p: any) => p.id === localPlayerId)
+            ? [mainPlayer, ...otherPlayers]
+            : otherPlayers; // Handle case where local player is eliminated
+
+        // Only enforce exact 3-player formatting if it's a test game and not in tie-breaker
+        if (game?.isTest && finalPlayers.length < 3 && !isTieMode) {
             if (finalPlayers.length === 1) finalPlayers.push(PLAYERS[0], PLAYERS[1]);
             else if (finalPlayers.length === 2) finalPlayers.push(PLAYERS[1]);
         }
 
         return finalPlayers;
-    }, [player.citizenId, player.address, player.name, player.avatar, game?.players, game?.isTest]);
+    }, [player.citizenId, player.address, player.name, player.avatar, game?.players, game?.gameState?.activePlayerIds, game?.gameState?.isTieBreaker, game?.isTest]);
 
     useEffect(() => {
         if (phase === 4) {
@@ -670,6 +673,12 @@ export default function GameBoardPage() {
             addLog("All players are ready");
             return;
         }
+        // PvP Guard
+        if (phase === 4) {
+            handleNextPhaseWrapper();
+            return;
+        }
+
         try {
             const mainPlayerId = myId;
             const myActors = placedActors.filter(a => a.playerId === mainPlayerId);
@@ -770,7 +779,18 @@ export default function GameBoardPage() {
         if (game.gameState.phaseTicker > localPhaseTicker.current) {
             localPhaseTicker.current = game.gameState.phaseTicker;
             setIsWaitingForPlayers(false);
-            setTriggerGlobalPhaseAdvance(prev => prev + 1);
+
+            // NEW: Authoritative sync from server if provided
+            const serverPhase = game.gameState.currentPhase;
+            const serverTurn = game.gameState.turn;
+            if (serverPhase !== undefined && serverTurn !== undefined) {
+                setPhase(serverPhase);
+                setTurn(serverTurn);
+                console.log(`[SYNC] Authority update from ticker: Phase ${serverPhase}, Turn ${serverTurn}`);
+            } else {
+                // Fallback for transition compatibility
+                setTriggerGlobalPhaseAdvance(prev => prev + 1);
+            }
         }
 
         // 2. Real-time Actor Sync (Board state)
@@ -963,26 +983,20 @@ export default function GameBoardPage() {
             Object.assign(finalCommits, botActionCommitsRef.current);
         }
 
-        const { isGameOver: gameEnded, winners: finalWinners } = handleNextPhase(
+        const { isGameOver: gameEnded, winners: finalWinners, newPhase, newTurn } = handleNextPhase(
             turn, phase, p3Step, player, dynamicPlayers, placedActors, disabledLocations, 
             addLog, triggerBotPhase3ActionsWrapper, setPhase, setP3Step, setP5Step, 
             setTurn, setPlacedActors, setResolvedConflicts, setDisabledLocations, 
             setOpponentsReady, finalCommits, game?.isTest
         );
 
-        // Calculate max turns based on player count
-        const maxTurns = (() => {
-            if (game?.isTest) return 5;
-            const playerCount = dynamicPlayers.length;
-            if (playerCount === 2 || playerCount === 3) return 5;
-            if (playerCount === 4) return 6;
-            return 5;
-        })();
+        // Calculate max turns (Standardized to 5 turns)
+        const maxTurns = 5;
 
         if (gameEnded) {
             setIsGameOver(true);
             try {
-                fetch(`/api/games/${id}`, {
+                await fetch(`/api/games/${id}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: 'update', updates: { status: 'finished' } })
@@ -1000,7 +1014,7 @@ export default function GameBoardPage() {
             if (game && game.id && !game.isTest) {
                 const tiedIds = finalWinners.map(w => w.id);
                 try {
-                    fetch(`/api/games/${id}`, {
+                    await fetch(`/api/games/${id}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ 
@@ -1009,18 +1023,20 @@ export default function GameBoardPage() {
                                 gameState: { 
                                     ...game.gameState, 
                                     isTieBreaker: true,
-                                    activePlayerIds: tiedIds
+                                    activePlayerIds: tiedIds,
+                                    // Also sync the turn/phase here
+                                    currentPhase: newPhase,
+                                    turn: newTurn
                                 } 
                             } 
                         })
                     });
-                    addLog(`The game continues! Tie-breaker involves: ${finalWinners.map(w => w.name).join(', ')}`);
-                } catch (e) { console.error("Failed to sync tie-breaker state", e); }
+                } catch (e) { console.error("Tie-breaker sync error", e); }
             }
             return;
         }
 
-        // FINAL SYNC before moving or waiting for next phase
+        // --- SUBMIT TRANSITION TO SERVER ---
         if (game && game.id && !game.isTest) {
             try {
                 await fetch(`/api/games/${id}`, {
@@ -1029,7 +1045,10 @@ export default function GameBoardPage() {
                     body: JSON.stringify({
                         action: 'sync-turn',
                         citizenId: localPlayerId,
-                        resources: resources // PERSISTENCE FIX: Final resources for this phase
+                        resources: resources,
+                        // Auth state
+                        currentPhase: newPhase,
+                        turn: newTurn
                     })
                 });
             } catch (e) {
@@ -1322,7 +1341,8 @@ export default function GameBoardPage() {
         if (result.successfulBids && result.successfulBids.length > 0) {
             result.successfulBids.forEach(used => {
                 if (used.bid === 'product') {
-                    const actor = placedActors.find(a => a.actorId === used.actorId);
+                    // Fix: Check both actorId and playerId (for local player sync)
+                    const actor = placedActors.find(a => a.actorId === used.actorId || (a.playerId === localPlayerId && used.actorId === localPlayerId));
                     if (actor) {
                         const actorType = actor.actorType?.toLowerCase();
                         const earnedResource = getActorRewardType(actorType, actor.locId);
@@ -1414,7 +1434,11 @@ export default function GameBoardPage() {
         } else if (result.shareRewards && result.isDraw) {
             const participants = [currentConflict?.playerActor, ...(currentConflict?.opponents || [])].filter(Boolean);
             participants.forEach(actor => {
-                if (result.survivorIds.includes(actor.actorId || actor.id)) {
+                // Fix: Check both actorId and playerId (local player ID is used in result.survivorIds)
+                const isSurvivor = result.survivorIds.includes(actor.actorId || actor.id) || 
+                                  (actor.playerId === localPlayerId && result.survivorIds.includes(localPlayerId));
+                
+                if (isSurvivor) {
                     const actorType = actor.actorType?.toLowerCase();
                     const earnedResource = getActorRewardType(actorType, realLocId || '');
                     if (earnedResource) {
@@ -2814,7 +2838,7 @@ export default function GameBoardPage() {
                                                 </div>
                                                 <div className="flex items-center gap-3">
                                                     <span className="text-white font-black text-xl">{res.targetVal.toUpperCase()}</span>
-                                                    <Image src={res.targetVal === 'knowledge' ? '/intangibles/resource_wisdom.png' : res.targetVal === 'art' ? '/intangibles/resource_Art.png' : `/intangibles/resource_${res.targetVal}.png`} width={32} height={32} alt={res.targetVal} />
+                                                    <Image src={`/intangibles/resource_${res.targetVal}.png`} width={32} height={32} alt={res.targetVal} />
                                                 </div>
                                             </div>
                                             <div className="text-center text-white/20 text-[10px] uppercase tracking-widest font-bold">
@@ -2833,6 +2857,8 @@ export default function GameBoardPage() {
                     <GameHeader
                         turn={turn}
                         phase={phase}
+                        eventDeckCount={game?.gameState?.eventDeck?.length || 0}
+                        actionDeckCount={game?.gameState?.actionDeck?.length || 0}
                         phaseName={
                             phase === 1 ? "EVENT STAGE" :
                                 phase === 2 ? "DISTRIBUTION" :
@@ -2978,15 +3004,21 @@ export default function GameBoardPage() {
                                 <div className="flex flex-col items-center gap-10 p-16 border-[3px] border-[#d4af37]/50 bg-gradient-to-b from-[#1a1a24] to-[#0d0d12] rounded-[3rem] shadow-[0_0_150px_rgba(212,175,55,0.2)]">
                                     <div className="text-center relative">
                                         <h1 className={`text-8xl font-black uppercase tracking-[0.2em] animate-in slide-in-from-bottom-5 duration-700 ${playerWon ? 'text-[#d4af37] drop-shadow-[0_0_40px_rgba(212,175,55,0.8)]' : 'text-red-500 drop-shadow-[0_0_40px_rgba(255,0,0,0.8)]'}`}>
-                                            {isTieBreakerScreen ? "POTENTIAL WINNER" : (playerWon ? 'VICTORY' : 'DEFEAT')}
+                                            {isTieBreakerScreen 
+                                                ? (localPlayerResults?.isTied ? "POTENTIAL WINNER" : "DEFEAT") 
+                                                : (playerWon ? 'VICTORY' : 'DEFEAT')}
                                         </h1>
                                         <p className="text-white/50 text-xl font-rajdhani uppercase tracking-[0.4em] mt-4">
-                                            {isTieBreakerScreen ? "TIE DETECTED — SURVIVAL CONTINUES" : "Simulation Concluded"}
+                                            {isTieBreakerScreen 
+                                                ? (localPlayerResults?.isTied 
+                                                    ? "TIE DETECTED — SURVIVAL CONTINUES" 
+                                                    : "YOU HAVE LOST. GOOD LUCK NEXT TIME!") 
+                                                : "Simulation Concluded"}
                                         </p>
                                     </div>
 
                                     <div className="flex gap-16 mt-8">
-                                        {playersWithVP.sort((a, b) => b.finalVP - a.finalVP).map((p, idx) => {
+                                        {playersWithVP.sort((a: any, b: any) => b.finalVP - a.finalVP).map((p: any, idx: number) => {
                                             const isWinner = p.finalVP === maxVP;
                                             return (
                                                 <div key={p.id} className={`relative flex flex-col items-center gap-6 p-8 rounded-3xl border-2 transition-all duration-700 animate-in zoom-in-95 delay-${idx * 200} ${isWinner ? 'border-[#d4af37] bg-[#d4af37]/10 shadow-[0_0_50px_rgba(212,175,55,0.5)] scale-110 z-10' : 'border-white/10 bg-black/40 opacity-70 scale-95'}`}>
@@ -3023,19 +3055,22 @@ export default function GameBoardPage() {
                                         ) : (
                                             <>
                                                 {localPlayerResults?.isTied ? (
-                                                    <button 
-                                                        disabled={isWaitingForTieBreaker}
-                                                        onClick={handleContinueTieBreaker}
-                                                        className={`px-24 py-6 text-2xl font-black rounded-2xl uppercase tracking-[0.2em] transition-all transform hover:scale-105 active:scale-95 shadow-[0_20px_40px_rgba(212,175,55,0.3)] ${
-                                                            isWaitingForTieBreaker ? 'bg-white/10 text-white/40 cursor-wait' : 'bg-[#d4af37] text-black hover:bg-[#ffe066]'
-                                                        }`}
-                                                    >
-                                                        {isWaitingForTieBreaker ? 'Waiting for Others...' : 'Continue'}
-                                                    </button>
+                                                    <div className="flex flex-col items-center gap-4">
+                                                        <button 
+                                                            disabled={isWaitingForTieBreaker}
+                                                            onClick={handleContinueTieBreaker}
+                                                            className={`px-24 py-6 text-2xl font-black rounded-2xl uppercase tracking-[0.2em] transition-all transform hover:scale-105 active:scale-95 shadow-[0_20px_40px_rgba(212,175,55,0.3)] ${
+                                                                isWaitingForTieBreaker ? 'bg-white/10 text-white/40 cursor-wait' : 'bg-[#d4af37] text-black hover:bg-[#ffe066]'
+                                                            }`}
+                                                        >
+                                                            {isWaitingForTieBreaker ? "Waiting..." : "Let's Go!"}
+                                                        </button>
+                                                        {isWaitingForTieBreaker && <p className="text-[#d4af37] animate-pulse font-rajdhani uppercase tracking-widest shadow-black drop-shadow-md">Waiting for other survivors...</p>}
+                                                    </div>
                                                 ) : (
                                                     <button 
                                                         onClick={() => router.push('/')}
-                                                        className="px-16 py-5 bg-red-500/20 text-red-500 border-2 border-red-500/50 text-2xl font-black rounded-2xl uppercase tracking-[0.2em] hover:bg-red-500 hover:text-white transition-all transform hover:scale-105 active:scale-95"
+                                                        className="px-16 py-5 bg-red-600/10 border-2 border-red-600/50 text-red-500 text-2xl font-black rounded-2xl uppercase tracking-[0.2em] hover:bg-red-600/20 transition-all transform hover:scale-105 active:scale-95"
                                                     >
                                                         Good Game
                                                     </button>

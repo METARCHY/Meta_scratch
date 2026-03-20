@@ -71,14 +71,20 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
                 state.discardPile = body.discardPile;
             }
 
-            // Check if all joined players are ready
-            const readyCount = Object.keys(state.playerReady).length;
-            if (readyCount > 0 && readyCount >= game.players.length) {
+            if (body.currentPhase !== undefined) state.currentPhase = body.currentPhase;
+            if (body.turn !== undefined) state.turn = body.turn;
+
+            // Consensus check: only required for active players (handles tie-breaker elimination)
+            const activePlayerIds = state.activePlayerIds || game.players.map((p: any) => p.citizenId || p.address || p.id);
+            const readyPlayers = Object.keys(state.playerReady).filter(id => activePlayerIds.includes(id));
+            const readyCount = readyPlayers.length;
+
+            if (readyCount > 0 && readyCount >= activePlayerIds.length) {
                 state.phaseTicker += 1;
                 state.playerReady = {};
                 // BUG FIX: Clear board state (stagedActors) when moving to next phase
                 state.stagedActors = {};
-                console.log(`[API] Phase ${state.phaseTicker} consensus reached. Board cleared.`);
+                console.log(`[API] Phase ${state.phaseTicker} consensus reached. Phase: ${state.currentPhase}, Turn: ${state.turn}`);
             }
 
             const updateResult = await gameService.update(params.id, { gameState: state });

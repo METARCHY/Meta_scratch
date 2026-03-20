@@ -113,17 +113,11 @@ export const handleNextPhase = (
         if (nextPhase === 1) addLog(`PHASE 1 BEGINS`);
     }
 
-    const maxTurns = (() => {
-        if (isTest) return 5;
-        const playerCount = dynamicPlayers.length;
-        if (playerCount === 2 || playerCount === 3) return 5;
-        if (playerCount === 4) return 6;
-        return 5;
-    })();
+    const maxTurns = 5; // Standardized to 5 turns for all game modes
 
-    // --- 2. EVALUATE VICTORY (End of Phase 4 only) ---
+    // --- 2. EVALUATE VICTORY (End of Phase 4 or 5 only) ---
 
-    if (phase === 4) {
+    if (phase === 4 || phase === 5) {
         // If it's the last turn (default 5 or maxTurns), or if an extra tie-breaker turn just ended
         if (turn >= maxTurns) {
             addLog(`--- TURN ${turn} CONCLUDED: EVALUATING FINAL RESULTS ---`);
@@ -140,12 +134,17 @@ export const handleNextPhase = (
 
             if (potentialWinners.length === 1) {
                 addLog(`GAME FINISHED: ${potentialWinners[0].name.toUpperCase()} WINS WITH ${topVP} VP!`);
-                return { newPhase: nextPhase, newTurn: nextTurn, isGameOver: true, winners: potentialWinners };
+                // Standard: Game ends immediately after Phase 4/5 if there's a single winner
+                return { newPhase: phase, newTurn: turn, isGameOver: true, winners: potentialWinners };
             } else {
+                // If it's a tie at the end of Phase 5, we move to next turn
+                const tiePhase = phase === 4 ? nextPhase : 1;
+                const tieTurn = phase === 4 ? nextTurn : turn + 1;
+
                 addLog(`TIE DETECTED: ${potentialWinners.length} PLAYERS HAVE ${topVP} VP!`);
-                addLog(`COMMENCING TIE-BREAKER: Turn ${turn + 1} will be the extra deciding turn.`);
-                // Game proceeds to Phase 5, then Turn X+1
-                return { newPhase: nextPhase, newTurn: nextTurn, isGameOver: false, winners: potentialWinners };
+                addLog(`COMMENCING TIE-BREAKER: Turn ${tieTurn} will be the extra deciding turn.`);
+                // Tie: Proceed to next phase/turn
+                return { newPhase: tiePhase, newTurn: tieTurn, isGameOver: false, winners: potentialWinners };
             }
         }
     }

@@ -7,6 +7,7 @@ import Image from 'next/image';
 // Types
 import { ConflictResult } from '@/lib/modules/core/types';
 import { resolveConflictLogic } from '@/lib/modules/conflict/conflictResolver';
+import { calculateReward } from '@/lib/modules/resources/resourceManager';
 
 interface ConflictResolutionViewProps {
     game: any;
@@ -70,6 +71,8 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                     const isSurvivor = result?.survivorIds.includes(id);
                     const wasSavedByBid = result?.successfulBids?.some(b => b.actorId === id && b.bid === 'electricity');
                     
+                    const pHasRecycling = result?.successfulBids?.some(b => b.actorId === id && b.bid === 'recycling');
+                    
                     // If they were a participant but didn't win and aren't survivors, they are losers
                     const isExitedEarly = !isWinner && !isSurvivor;
 
@@ -97,7 +100,7 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                         }
                     } else {
                         // Regular Outcome Mode
-                        if (isWinner) {
+                        if (isWinner || (isSharer && pHasRecycling)) {
                             status = "WIN";
                             statusColor = "text-[#d4af37]";
                             const isRobot = participant.actorType?.toLowerCase() === 'robot';
@@ -119,15 +122,17 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                             statusColor = "text-blue-400";
                             
                             if (isSharer) {
-                                const isRobot = participant.actorType?.toLowerCase() === 'robot';
                                 const actorType = participant.actorType?.toLowerCase();
                                 let resName = conflict.resourceType || '';
                                 if (actorType === 'politician') resName = 'power';
                                 else if (actorType === 'scientist') resName = 'knowledge';
                                 else if (actorType === 'artist') resName = 'art';
                                 
-                                const bonus = rewardAccumulator[id] || 0;
-                                const total = 1 + bonus;
+                                const isRobot = actorType === 'robot';
+                                const bids = (result?.successfulBids || []);
+                                // Use the same calculateReward logic as the state update
+                                const total = calculateReward(actorType as any, false, true, bids, id);
+                                
                                 const label = isRobot ? (total === 1 ? 'Resource' : 'Resources') : (resName === 'action_card' ? 'Action Card' : (total === 1 ? 'Value' : 'Values'));
                                 const capitalizedResName = resName === 'action_card' ? '' : resName.charAt(0).toUpperCase() + resName.slice(1);
                                 rewardText = resName === 'action_card' ? `${total} Action Card` : `${total} ${label}${capitalizedResName ? ` (${capitalizedResName})` : ''}`;
@@ -625,16 +630,18 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                                     const isWinner = result?.winnerId === localPlayerId;
                                     const isDrawTrue = result?.isDraw;
                                     const isRestart = result?.restart;
+                                    
+                                    const playerHasRecycling = result?.successfulBids?.some(b => b.actorId === localPlayerId && b.bid === 'recycling');
 
                                     let header = "DRAW";
                                     let textColor = "text-blue-400";
                                     let subtext = "";
 
-                                    if (isWinner) {
+                                    if (isWinner || (isDrawTrue && playerHasRecycling && result?.shareRewards)) {
                                         const isActionCard = conflict.resourceType === 'action_card';
                                         header = isActionCard ? "ACTION CARD SECURED" : (conflict.opponents.length === 0 ? "SECURED" : "WIN");
                                         textColor = "text-[#d4af37]";
-                                        subtext = conflict.opponents.length === 0 ? "Mining operations secured without opposition." : "Your arguments prevailed over the opposition.";
+                                        subtext = conflict.opponents.length === 0 ? "Mining operations secured without opposition." : (playerHasRecycling ? "Recycling Bid: Argument elevated to WIN!" : "Your arguments prevailed over the opposition.");
                                     } else if (isLoser) {
                                         header = "LOSE";
                                         textColor = "text-red-500";
@@ -708,11 +715,9 @@ export default function ConflictResolutionView({ game, conflict, isResolved, has
                                                     </div>
                                                     <div className="absolute -bottom-2 right-0 bg-[#d4af37] text-black font-black text-xl px-2 py-0.5 rounded-md border-2 border-black shadow-lg shadow-[#d4af37]/50">
                                                         +{(() => {
-                                                            if (result?.isDraw && result?.shareRewards) return 1;
-                                                            const isRobot = conflict.playerActor?.actorType?.toLowerCase() === 'robot';
-                                                            const baseReward = isRobot ? 3 : 1;
-                                                            const bonus = rewardAccumulator[localPlayerId] || 0;
-                                                            return baseReward + bonus;
+                                                            const actorType = conflict.playerActor?.actorType?.toLowerCase();
+                                                            const bids = (result?.successfulBids || []);
+                                                            return calculateReward(actorType as any, result?.winnerId === localPlayerId, !!(result?.isDraw && result?.shareRewards), bids, localPlayerId);
                                                         })()}
                                                     </div>
                                                 </div>

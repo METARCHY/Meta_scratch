@@ -59,8 +59,9 @@ export function calculateReward(
 ): number {
     const type = actorType?.toLowerCase() || '';
     const hasProductBid = successfulBids.some(b => b.actorId === actorId && b.bid === 'product');
+    const hasRecyclingBid = successfulBids.some(b => b.actorId === actorId && b.bid === 'recycling');
 
-    if (isWinner) {
+    if (isWinner || (isTruce && hasRecyclingBid)) {
         const base = type === 'robot' ? 3 : 1;
         return hasProductBid ? base + 1 : base;
     }
